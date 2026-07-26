@@ -26,7 +26,7 @@ Files this spec creates, and their contract:
 | `src/rag_qa/__init__.py` | Exposes `__version__` |
 | `src/rag_qa/main.py` | FastAPI app; `GET /healthz` → `200 {"status": "ok"}` |
 | `tests/test_scaffold.py` | Tests derived from §Acceptance criteria |
-| `.env.example` | Keys: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `DATABASE_URL`, `LOG_LEVEL` — values empty or local-only defaults |
+| `.env.example` | Keys: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `DATABASE_URL`, `LOG_LEVEL` — values empty or local-only defaults. *(Amended by SPEC-006, 2026-07-26: `RAG_QA_API_KEY` and `RAG_QA_ADMIN_API_KEY` added — the API now refuses to start without a key, so an example that omits them would send a first-time reader into a startup failure.)* |
 | `LICENSE` | MIT |
 | `.gitignore` | Excludes `.env`, `.venv/`, caches, build artifacts |
 | `.pre-commit-config.yaml` | Hooks: ruff check (`--fix`), ruff format, trailing-whitespace, end-of-file-fixer. **Pyright is CI-only** (too slow for commit hook) |
@@ -62,7 +62,7 @@ Written **before** implementation, in `tests/test_scaffold.py`:
 
 - `test_healthz` — ASGI-level: `GET /healthz` → 200, `{"status": "ok"}` (backs AC-2's endpoint contract without Docker)
 - `test_package_version` — `rag_qa.__version__` exists (backs AC-1: package imports)
-- `test_env_example_keys` — `.env.example` contains exactly the four required keys, no non-empty secret values
+- `test_env_example_keys` — `.env.example` contains exactly the required keys, no non-empty secret values (four at SPEC-001; six after SPEC-006's auth keys)
 - `test_compose_contract` — parse `docker-compose.yml`: both services present, postgres image is `pgvector/pgvector:pg16`, both define healthchecks, api depends on postgres `service_healthy`
 - `test_ci_step_order` — parse `ci.yml`: steps named Lint / Type-check / Test appear in that order
 - `test_license_mit` — `LICENSE` first line contains "MIT License"

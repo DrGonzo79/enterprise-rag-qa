@@ -58,6 +58,11 @@ class Generator:
         self._session_factory = session_factory
         self._max_tokens = max_tokens
 
+    @property
+    def identity(self) -> str:
+        """provider:model, from the client — never a constant (KD-1)."""
+        return self._client.identity
+
     # --- non-streaming --------------------------------------------------------
 
     async def answer(self, question: str, chunks: Sequence[RetrievedChunk]) -> Answer:

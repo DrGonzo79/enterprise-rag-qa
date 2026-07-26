@@ -34,9 +34,13 @@ def test_env_example_keys() -> None:
         "OPENAI_API_KEY",
         "DATABASE_URL",
         "LOG_LEVEL",
+        # SPEC-006: the API refuses to start without a key, so an example that
+        # omitted these would send a first-time reader into a startup failure.
+        "RAG_QA_API_KEY",
+        "RAG_QA_ADMIN_API_KEY",
     }
-    assert entries["ANTHROPIC_API_KEY"] == ""
-    assert entries["OPENAI_API_KEY"] == ""
+    for secret in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "RAG_QA_API_KEY", "RAG_QA_ADMIN_API_KEY"):
+        assert entries[secret] == "", secret
 
 
 def test_compose_contract() -> None:

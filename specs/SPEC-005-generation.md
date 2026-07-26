@@ -1,6 +1,6 @@
 # SPEC-005 — Answer Generation
 
-**Status:** Approved — 2026-07-26 (with review amendments: verdict/thinking coupling recorded as Key decision 7; default model changed to `claude-sonnet-5` with the Opus-vs-Sonnet comparison handed to SPEC-007 as a measurement; pricing verified against the published documentation rather than fixed in prose; binding SPEC-007 note separating citation precision from groundedness; `answer_text` retention recorded as a demo-only choice; AC-7a added for verdict-token buffering in streaming). **Second review, 2026-07-26:** new Key decision 16 — cost recomputation resolves the rate from the request's own `created_at`, never the current date, with AC-9a asserting a recomputation across the 2026-09-01 boundary; Key decision 10 amended — no OpenAI rate row ships, so the README quickstart states the constructor failure and the error message names the *provider's own* pricing page.
+**Status:** Approved — 2026-07-26 (with review amendments: verdict/thinking coupling recorded as Key decision 7; default model changed to `claude-sonnet-5` with the Opus-vs-Sonnet comparison handed to SPEC-007 as a measurement; pricing verified against the published documentation rather than fixed in prose; binding SPEC-007 note separating citation precision from groundedness; `answer_text` retention recorded as a demo-only choice; AC-7a added for verdict-token buffering in streaming). **Second review, 2026-07-26:** new Key decision 16 — cost recomputation resolves the rate from the request's own `created_at`, never the current date, with AC-9a asserting a recomputation across the 2026-09-01 boundary; Key decision 10 amended — no OpenAI rate row ships, so the README quickstart states the constructor failure and the error message names the *provider's own* pricing page. **Amended 2026-07-26 by SPEC-006:** AC-11's `POST /ask` is superseded by `POST /query`; `rag_qa/generation/api.py` is removed and the HTTP layer moves to SPEC-006.
 **Date:** 2026-07-26
 **Depends on:** SPEC-004
 
@@ -43,7 +43,8 @@ src/rag_qa/generation/
     pricing.py        # per-identity token pricing; compute_cost (live) +
                       #   recompute_cost (from query_log.created_at — KD-16)
     service.py        # Generator.answer() / .stream_answer(), query_log write
-    api.py            # POST /ask — retrieve + answer orchestration
+    # api.py          # REMOVED by SPEC-006 — POST /ask became POST /query and
+    #                 #   the HTTP layer moved to rag_qa/api/ (AC-11, amended)
 alembic/versions/0004_*.py   # query_log: answer_text, verdict, prompt_version
 ```
 
@@ -172,14 +173,14 @@ AnswerComplete(answer)  # LAST — carries usage, cost, latency
 
 Emitting the verdict first is a direct consequence of the verdict-token design: a client can render "no supporting evidence found" immediately instead of streaming a paragraph that turns out to be a refusal. `AnswerComplete` is the only event carrying usage, because the provider only reports it at the end of the stream.
 
-### `POST /ask`
+### HTTP surface — moved to SPEC-006
 
 ```
-{"question": "...", "k": 8, "filters": {...}, "stream": false}
+POST /query   {"question": "...", "k": 8, "filters": {...}, "stream": false}
 → {"answer": "...", "verdict": "answered", "citations": [...], "usage": {...}}
 ```
 
-Orchestration is `retrieve()` → `answer()` → `query_log` write. With `stream: true`, `StreamingResponse` over the event sequence above, server-sent events. Retrieval errors (`EmbedderMismatchError`, `EmptyCorpusError`) surface as 503 with the message — a corpus/embedder mismatch is an operational fault, not a bad request.
+Originally `POST /ask`, owned here. **SPEC-006 owns the HTTP layer and renamed it to `POST /query` with no alias** (SPEC-006 KD-2); `rag_qa/generation/api.py` is removed. The orchestration is unchanged — `retrieve()` → `answer()` → `query_log` write, `StreamingResponse` over the event sequence above for `stream: true`, and retrieval errors (`EmbedderMismatchError`, `EmptyCorpusError`) surfacing as 503 because a corpus/embedder mismatch is an operational fault rather than a bad request.
 
 ### Migration `0004` — `query_log`
 
@@ -265,12 +266,12 @@ Deliberately **not** added: `citation_count` (derivable by re-parsing `answer_te
 
 - **Cross-spec note (binding on SPEC-007) — Opus 5 vs. Sonnet 5 on the golden set, recorded as a measured finding** *(added after review)*. Key decision 15 defaults to `claude-sonnet-5` on cost plus an argument about task shape, **not on evidence**. SPEC-007 runs the golden set against both `anthropic:claude-sonnet-5` and `anthropic:claude-opus-5` — same prompt version, same retrieved chunks, same rubric — and records answer correctness, refusal correctness (both directions: wrongly answering an unanswerable question, and wrongly refusing an answerable one), and citation precision per model, alongside measured cost and latency per question. The output is a recorded comparison in the eval artifacts, not a verbal impression. **Until that runs, the Sonnet 5 default is an assumption and must be described as one** — including in the README.
 - **AC-10 (generator identity)** — `Answer.generator_identity` and the `query_log` row come from `client.identity`, never a module constant: asserted by constructing `AnthropicClient(model="claude-sonnet-5")` and observing `anthropic:claude-sonnet-5` end-to-end. A fake client with a distinct identity is likewise recorded verbatim.
-- **AC-11 (`/ask`)** — `POST /ask` returns 200 with answer, verdict, and citations for a normal question; `stream: true` returns an event stream whose events match AC-7's ordering; `EmbedderMismatchError` and `EmptyCorpusError` from retrieval surface as 503 naming the cause; an empty question is 422.
+- **AC-11 (HTTP surface) — superseded by SPEC-006** *(amended 2026-07-26, in SPEC-006's implementation commit)*. This spec originally owned `POST /ask` in `rag_qa/generation/api.py`. **SPEC-006 owns the HTTP layer and renames the endpoint to `POST /query`**, with no alias: nothing outside this repository depended on the path, and two names for one operation is carrying cost, not compatibility (SPEC-006 KD-2). `rag_qa/generation/api.py` is removed and its coverage moves to `tests/test_api_*.py`. **What this spec still requires, now asserted there:** the endpoint returns 200 with answer, verdict, and citations for a normal question; `stream: true` returns an event stream whose events match AC-7's ordering; `EmbedderMismatchError` and `EmptyCorpusError` surface as 503 naming the cause; and a blank question is 422. SPEC-006 AC-4 additionally pins the rule this spec's design implies but never stated: **every verdict returns 200**, because refusal is a scored capability and a 4xx would encode it as a failure.
 - **AC-12 (prompt is versioned and inspectable)** — `PROMPT_VERSION` is non-empty and appears on every logged row; changing `SYSTEM_PROMPT` without changing `PROMPT_VERSION` fails a test that pins the prompt's sha256 against its declared version. This makes prompt drift a build failure rather than an archaeology problem.
 
 ## Test plan
 
-`tests/test_generation_prompt.py`, `test_generation_citations.py`, `test_generation_clients.py`, `test_generation_service.py`, `test_generation_api.py` — async where DB-touching, reusing SPEC-002's binding fixture pattern and SPEC-004's committed-and-cleaned-by-id seeding where real chunks are needed.
+`tests/test_generation_prompt.py`, `test_generation_citations.py`, `test_generation_clients.py`, `test_generation_service.py` (plus `tests/test_api_*.py`, which SPEC-006 owns and where `test_generation_api.py`'s coverage moved) — async where DB-touching, reusing SPEC-002's binding fixture pattern and SPEC-004's committed-and-cleaned-by-id seeding where real chunks are needed.
 
 **No network in any tier.** Unlike SPEC-004's quality tests, generation has no measurement that requires a live provider at this stage — correctness here is about prompt shape, parsing, verdicts, and logging, all of which are better tested against a controllable fake. Answer *quality* is SPEC-007's job and is where live calls belong.
 
@@ -278,6 +279,6 @@ Deliberately **not** added: `citation_count` (derivable by re-parsing `answer_te
 - **Citation parser tests are pure** (AC-5) — no DB, no client. Property-style coverage of the marker grammar: markers at string start/end, adjacent markers `[1][2]`, a bare `[` at end of stream, `[0]`, `[999]`, and a marker straddling every possible split point of a short response.
 - **Provider adapters (AC-2, AC-3)** are tested against captured request payloads and synthesized provider-shaped responses — Anthropic's `input_tokens`/`output_tokens` and `stop_reason` values, OpenAI's `prompt_tokens`/`completion_tokens` — asserting both normalize to the same `LLMResult`. The Anthropic refusal path (AC-6c) is exercised with a `stop_reason: "refusal"` response carrying **empty content**, which is what makes an unguarded `content[0]` read raise.
 - **Service + `query_log` tests** (AC-8, AC-9, AC-9a, AC-10) run against the dockerized Postgres. Migration 0004 follows SPEC-002's scratch-database pattern, seeding a pre-migration `query_log` row to prove the new not-null columns are added without data loss. AC-9a's boundary cases need no clock manipulation and no frozen time: `recompute_cost` is a pure function of `created_at`, so rows are simply written with the timestamps under test — which is itself the property being asserted.
-- **API tests** (AC-11) use `httpx.ASGITransport` against the FastAPI app with a stubbed retriever and fake client — no database, no provider.
+- **API tests** (AC-11, now SPEC-006's) use `httpx.ASGITransport` against an app built by `create_app()` with a stubbed retriever and fake client — no database, no provider.
 
 Tests are written from these ACs and committed with the implementation, in the same commit series referencing SPEC-005.

@@ -64,6 +64,19 @@ Ingestion → chunking → embedding → Postgres (pgvector + tsvector)
 Query → hybrid retrieval (vector + full-text, RRF) → Claude → cited answer
 Every request logged with latency, token counts, and cost.
 
+**HTTP surface:** `POST /query` (JSON or server-sent events), `POST /ingest`
+(admin key, dry-run by default), `GET /health` (readiness) and `GET /healthz`
+(liveness — deliberately dependency-free, so a database blip never restarts a
+healthy container), `GET /metrics` (Prometheus, admin key). Interactive docs at
+`/docs`. **HTTP status describes the transport; the `verdict` field describes
+the outcome** — a refusal is a successful request, because refusing correctly is
+a scored capability rather than a failure.
+
+The API requires `RAG_QA_API_KEY` and refuses to start without one (set
+`RAG_QA_ALLOW_ANONYMOUS=1` to opt out deliberately for local runs). A service
+whose auth silently disables itself when a variable is unset looks protected
+without being protected.
+
 **Stack:** Python 3.12 · FastAPI · Postgres 16 + pgvector · Anthropic Claude
 (model-agnostic adapter) · Docker · GitHub Actions · Azure Container Apps + Bicep
 

@@ -1,0 +1,194 @@
+"""SSE framing and the buffered verdict token (SPEC-006 AC-5).
+
+The verdict token is buffered server-side of this boundary (SPEC-005 AC-7a), so
+it must never appear on the wire in any form — including as a partial, which is
+the realistic failure when a provider chunk boundary lands inside `ANSWERED`.
+"""
+
+import asyncio
+from contextlib import asynccontextmanager
+
+import pytest
+
+from api_harness import StubRetriever, build_app, data_payloads, sse_frames
+from rag_qa.generation.clients.base import StopKind, TextChunk, Usage
+from test_generation_service import FakeLLMClient
+
+BODY = "Providers must comply [1] with Article 1."
+VERDICT_TOKENS = ("ANSWERED", "INSUFFICIENT_EVIDENCE")
+
+
+def splits(response: str) -> list[list[str]]:
+    """Every split point of the response, one two-chunk stream each."""
+    return [[response[:i], response[i:]] for i in range(1, len(response))]
+
+
+async def stream(app, payload=None):  # type: ignore[no-untyped-def]
+    return await sse_frames(app, payload or {"question": "What applies?", "stream": True})
+
+
+# --- framing ------------------------------------------------------------------
+
+
+async def test_headers_and_frame_shape() -> None:
+    app = build_app(client=FakeLLMClient(f"ANSWERED\n{BODY}"))
+    response, frames = await stream(app)
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert response.headers["cache-control"] == "no-cache"
+    # A buffering proxy silently defeats streaming.
+    assert response.headers["x-accel-buffering"] == "no"
+
+    for frame in frames:
+        assert frame.startswith("data: ") or frame.startswith(":"), frame
+        # SSE terminates a field at \n: a raw newline would split one logical
+        # event across two frames. JSON encoding makes that impossible.
+        assert "\n" not in frame
+
+
+async def test_event_order_and_terminal_complete() -> None:
+    app = build_app(client=FakeLLMClient(f"ANSWERED\n{BODY}"))
+    _, frames = await stream(app)
+    events = data_payloads(frames)
+    kinds = [event["type"] for event in events]
+
+    assert kinds[0] == "verdict"
+    assert kinds[-1] == "complete"
+    assert "citation" in kinds
+    assert events[0]["verdict"] == "answered"
+    assert events[-1]["usage"]["completion_tokens"] == 80
+    assert events[-1]["usage"]["generator_identity"] == "anthropic:claude-sonnet-5"
+
+    citation = next(event for event in events if event["type"] == "citation")
+    assert citation["section_path"]  # section_path in BOTH modes
+
+
+async def test_multiline_answer_stays_one_frame_per_event() -> None:
+    """The framing hazard JSON encoding exists to prevent."""
+    app = build_app(client=FakeLLMClient("ANSWERED\nFirst line [1].\n\nSecond paragraph."))
+    _, frames = await stream(app)
+    text = "".join(e["text"] for e in data_payloads(frames) if e["type"] == "text")
+    assert text == "First line [1].\n\nSecond paragraph."
+
+
+# --- the verdict token never crosses the boundary (AC-5) ----------------------
+
+
+@pytest.mark.parametrize("slices", splits(f"ANSWERED\n{BODY}"), ids=lambda s: f"split@{len(s[0])}")
+async def test_verdict_never_reaches_the_wire_at_any_split_point(slices: list[str]) -> None:
+    app = build_app(client=FakeLLMClient(stream_slices=slices))
+    _, frames = await stream(app)
+    events = data_payloads(frames)
+
+    text = "".join(event["text"] for event in events if event["type"] == "text")
+    # Exact equality catches a leak of ANY length; a "no full token" check does not.
+    assert text == BODY
+    for frame in frames:
+        for token in VERDICT_TOKENS:
+            assert token not in frame
+
+
+async def test_body_starting_with_the_verdicts_own_letter() -> None:
+    """Where a prefix-matching implementation false-positives: 'A' is both the
+    first letter of ANSWERED and an ordinary first letter of prose."""
+    body = "Answering requires Article 6 [1]."
+    app = build_app(
+        client=FakeLLMClient(stream_slices=["ANSWE", "RED\nAnswering ", "requires Article 6 [1]."])
+    )
+    _, frames = await stream(app)
+    text = "".join(e["text"] for e in data_payloads(frames) if e["type"] == "text")
+    assert text == body
+    assert "ANSWERED" not in "".join(frames)
+
+
+async def test_first_chunk_containing_newline_and_body_together() -> None:
+    app = build_app(client=FakeLLMClient(stream_slices=[f"ANSWERED\n{BODY}"]))
+    _, frames = await stream(app)
+    events = data_payloads(frames)
+    assert events[0] == {"type": "verdict", "verdict": "answered"}
+    assert "".join(e["text"] for e in events if e["type"] == "text") == BODY
+
+
+async def test_verdict_line_with_trailing_spaces() -> None:
+    app = build_app(client=FakeLLMClient(f"ANSWERED   \n{BODY}"))
+    _, frames = await stream(app)
+    events = data_payloads(frames)
+    assert events[0]["verdict"] == "answered"
+    assert "".join(e["text"] for e in events if e["type"] == "text") == BODY
+
+
+async def test_stream_ending_mid_verdict_yields_error_and_zero_text_frames() -> None:
+    app = build_app(client=FakeLLMClient(stream_slices=["ANSWE"]))
+    _, frames = await stream(app)
+    events = data_payloads(frames)
+    assert events[0] == {"type": "verdict", "verdict": "error"}
+    assert [event for event in events if event["type"] == "text"] == []
+    assert events[-1]["type"] == "complete"
+
+
+# --- heartbeats and in-band failure ------------------------------------------
+
+
+class SlowStreamClient(FakeLLMClient):
+    """Pauses between slices so the heartbeat path is reachable deterministically."""
+
+    def __init__(self, slices: list[str], pause: float) -> None:
+        super().__init__(stream_slices=slices)
+        self._pause = pause
+
+    @asynccontextmanager
+    async def stream(self, system: str, user: str, max_tokens: int):  # type: ignore[no-untyped-def]
+        self.calls.append((system, user, max_tokens))
+        slices, pause = list(self._stream_slices or []), self._pause
+
+        async def events():  # type: ignore[no-untyped-def]
+            for piece in slices:
+                await asyncio.sleep(pause)
+                yield TextChunk(piece)
+            yield Usage(1200, 80, StopKind.NORMAL)
+
+        yield events()
+
+
+class ExplodingStreamClient(FakeLLMClient):
+    """Yields a valid prefix, then fails — the mid-stream failure case."""
+
+    @asynccontextmanager
+    async def stream(self, system: str, user: str, max_tokens: int):  # type: ignore[no-untyped-def]
+        self.calls.append((system, user, max_tokens))
+
+        async def events():  # type: ignore[no-untyped-def]
+            yield TextChunk("ANSWERED\nPartial answer ")
+            raise ConnectionError("provider dropped the connection")
+
+        yield events()
+
+
+async def test_idle_stream_emits_a_comment_frame() -> None:
+    """Time-to-first-frame is bounded below by the model's first newline, and
+    thinking runs before it — so a healthy stream can be silent for seconds."""
+    app = build_app(
+        StubRetriever(),
+        SlowStreamClient([f"ANSWERED\n{BODY}"], pause=0.08),
+        sse_heartbeat_seconds=0.01,
+    )
+    _, frames = await stream(app)
+    assert any(frame.startswith(":") for frame in frames)
+    # Heartbeats do not disturb the event sequence.
+    events = data_payloads(frames)
+    assert events[0]["type"] == "verdict"
+    assert events[-1]["type"] == "complete"
+
+
+async def test_failure_after_the_first_frame_is_an_in_band_error_event() -> None:
+    """Headers already went out with a 200; the status can no longer change, so
+    the failure has to be in-band."""
+    app = build_app(client=ExplodingStreamClient())
+    response, frames = await stream(app)
+    events = data_payloads(frames)
+
+    assert response.status_code == 200  # cannot be retracted mid-stream
+    assert events[0]["type"] == "verdict"
+    assert events[-1]["type"] == "error"
+    assert [event for event in events if event["type"] == "complete"] == []

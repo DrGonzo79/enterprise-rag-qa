@@ -317,6 +317,46 @@ def test_explicit_daily_override_is_capped_at_twice_the_derived_ceiling() -> Non
     assert effective is not None and Decimal("20.00") / effective > 15
 
 
+def test_the_cap_boundary_is_inclusive() -> None:
+    """Exactly 2x derived is honored; a cent above it is capped.
+
+    Pinned explicitly because `min()` makes the boundary invisible in the code —
+    a reader cannot tell from `min(daily, 2 * derived)` whether the operator who
+    typed the cap value exactly gets what they typed, and that is precisely the
+    value someone reading the documentation will type.
+    """
+    at = datetime(2026, 7, 26, tzinfo=UTC)  # 31 days: derived $0.64, cap $1.28
+    exact = SpendGuard(None, daily_limit_usd=Decimal("1.28"), monthly_limit_usd=Decimal("20.00"))
+    assert exact.daily_limit_for(at) == Decimal("1.28")
+    # ...and it is reported as an honored burst, not as a capped value.
+    assert "capped" not in exact._daily_shape(at)[1]
+
+    over = SpendGuard(None, daily_limit_usd=Decimal("1.29"), monthly_limit_usd=Decimal("20.00"))
+    assert over.daily_limit_for(at) == Decimal("1.28")
+    assert "capped" in over._daily_shape(at)[1]
+
+
+def test_the_warning_boundary_is_exclusive_of_derived() -> None:
+    """At exactly the derived ceiling there is nothing to warn about — the
+    override and the derivation agree. A cent above it, the operator has chosen
+    to spend the month faster than uniformly and should be told so."""
+    monthly = Decimal("20.00")
+    derived = derive_daily_limit(monthly, datetime.now(UTC))
+    for override, expected_records in ((derived, 0), (derived + CENT, 1)):
+        records: list[logging.LogRecord] = []
+        handler = logging.Handler()
+        handler.emit = records.append  # type: ignore[method-assign]
+        deps_logger = logging.getLogger("rag_qa.api.deps")
+        deps_logger.addHandler(handler)
+        try:
+            settings(daily_budget_usd=override, monthly_budget_usd=monthly).require_serving(
+                needs_providers=False
+            )
+        finally:
+            deps_logger.removeHandler(handler)
+        assert len(records) == expected_records, f"override ${override} vs derived ${derived}"
+
+
 def test_the_cap_moves_with_the_month_length() -> None:
     """Derived is per-month, so the cap is too — February's is higher because
     its days are fewer, not because the budget changed."""
@@ -339,7 +379,7 @@ def test_override_above_derived_warns_at_startup_naming_both_numbers(
     assert fields["cap_usd"] == "1.28"
     assert fields["effective_usd"] == "1.28"
     assert fields["monthly_usd"] == "20.00"
-    assert fields["days_to_drain_month"] >= 15
+    assert fields["min_days_to_drain_month"] >= 15
 
 
 def test_no_warning_when_the_override_is_at_or_below_derived(

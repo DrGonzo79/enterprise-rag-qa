@@ -152,7 +152,10 @@ class Settings:
                 "cap_usd": str(cap),
                 "effective_usd": str(effective),
                 "monthly_usd": str(self.monthly_budget_usd),
-                "days_to_drain_month": int(self.monthly_budget_usd / effective),
+                # A worst-case bound, not a forecast: it assumes every day spends the
+                # full ceiling. Exact arithmetic on two configured numbers, with no
+                # per-question cost estimate anywhere in it.
+                "min_days_to_drain_month": int(self.monthly_budget_usd / effective),
             },
         )
 

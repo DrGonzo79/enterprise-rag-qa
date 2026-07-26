@@ -92,6 +92,13 @@ class QueryLog(Base):
     retrieved_chunk_ids: Mapped[list[uuid.UUID]] = mapped_column(
         ARRAY(UUID(as_uuid=True)), nullable=False
     )
+    # SPEC-005 migration 0004. verdict: refusal is a scored capability and must
+    # not be recovered by string-matching answer text. answer_text: without it the
+    # log records numbers about text nobody kept. prompt_version: attributes a
+    # logged answer to the prompt that produced it.
+    answer_text: Mapped[str] = mapped_column(Text, nullable=False)
+    verdict: Mapped[str] = mapped_column(Text, nullable=False)
+    prompt_version: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=sql_text("now()")
     )

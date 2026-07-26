@@ -19,6 +19,7 @@ dependencies = [
     "pysbd>=0.3.4",
     "openai>=2.48.0",
     "python-dotenv>=1.2.2",
+    "anthropic>=0.120.0",
 ]
 
 [dependency-groups]

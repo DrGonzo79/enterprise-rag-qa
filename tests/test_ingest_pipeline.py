@@ -21,6 +21,12 @@ from test_ingest_embedder import FakeEmbeddingClient
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
+_CHUNK_IDS = (
+    "SELECT c.id FROM chunks c JOIN documents d ON d.id = c.document_id "
+    "WHERE d.source_uri NOT LIKE 'synthetic://%'"
+)
+_HASHES = "SELECT content_hash FROM documents WHERE source_uri NOT LIKE 'synthetic://%'"
+
 
 class FakeVectorClient(FakeEmbeddingClient):
     """1536-dim vectors so rows satisfy the pgvector column."""
@@ -62,9 +68,23 @@ def _provider(session: AsyncSession):
     return provide
 
 
+# Scoped to the documents under test: other suites commit fixture rows into the
+# same database, and a global count would make this assertion order-dependent.
+_NOT_FIXTURE = "source_uri NOT LIKE 'synthetic://%'"
+
+
 async def _counts(session: AsyncSession) -> tuple[int, int]:
-    docs = (await session.execute(text("SELECT count(*) FROM documents"))).scalar_one()
-    chunks = (await session.execute(text("SELECT count(*) FROM chunks"))).scalar_one()
+    docs = (
+        await session.execute(text(f"SELECT count(*) FROM documents WHERE {_NOT_FIXTURE}"))
+    ).scalar_one()
+    chunks = (
+        await session.execute(
+            text(
+                "SELECT count(*) FROM chunks c JOIN documents d ON d.id = c.document_id "
+                f"WHERE d.{_NOT_FIXTURE}"
+            )
+        )
+    ).scalar_one()
     return docs, chunks
 
 
@@ -102,16 +122,16 @@ async def test_config_change_replaces_chunks(session: AsyncSession, synth_corpus
         paths, config_a, dry_run=False, session_provider=_provider(session), embedding_client=client
     )
     docs_a, _ = await _counts(session)
-    ids_a = {row[0] for row in await session.execute(text("SELECT id FROM chunks"))}
-    hashes_a = {row[0] for row in await session.execute(text("SELECT content_hash FROM documents"))}
+    ids_a = {row[0] for row in await session.execute(text(_CHUNK_IDS))}
+    hashes_a = {row[0] for row in await session.execute(text(_HASHES))}
 
     result = await ingest_paths(
         paths, config_b, dry_run=False, session_provider=_provider(session), embedding_client=client
     )
     assert {r.verdict for r in result.documents} == {"replace"}
     docs_b, _ = await _counts(session)
-    ids_b = {row[0] for row in await session.execute(text("SELECT id FROM chunks"))}
-    hashes_b = {row[0] for row in await session.execute(text("SELECT content_hash FROM documents"))}
+    ids_b = {row[0] for row in await session.execute(text(_CHUNK_IDS))}
+    hashes_b = {row[0] for row in await session.execute(text(_HASHES))}
 
     assert docs_b == docs_a  # document count unchanged
     assert ids_a.isdisjoint(ids_b)  # all chunk ids replaced

@@ -434,7 +434,8 @@ async def test_migration_0003_qualifies_identities_and_backfills_doc_type() -> N
     assert doc_type == "standard"  # backfilled from the NIST source_uri
     assert not_null == "NO"
 
-    await asyncio.to_thread(_alembic, scratch_url, "downgrade", "-1")
+    # Target the revision, not a step count: head moved to 0004 with SPEC-005.
+    await asyncio.to_thread(_alembic, scratch_url, "downgrade", "0002")
 
     conn = await asyncpg.connect(raw_url)
     try:

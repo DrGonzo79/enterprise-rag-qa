@@ -1,12 +1,13 @@
 # SPEC-003 — Corpus Ingestion Pipeline
 
-**Status:** Approved — 2026-07-25 (with review amendments: dropped-table manifest, EDGAR-scoped table rule, hash covers all chunk-affecting parameters)
+**Status:** Approved — 2026-07-25 (with review amendments: dropped-table manifest, EDGAR-scoped table rule, hash covers all chunk-affecting parameters).
+**Amendment — 2026-07-26, corpus expansion: DRAFT, awaiting architect review.** Expands the corpus **until recall@8 de-saturates, measured one rung at a time — no chunk-count target** (SPEC-004 Key decision 12a). Rung 1 is seven confusability-chosen documents (~646 chunks); Rungs 2–3 are prepared but unauthorized and fetched only on evidence. Existing loaders only; EDGAR stays pinned. **Nothing is fetched until this amendment is approved and Rung 1's probe results are reviewed.** Sections carrying amendment content are marked *(amendment 2026-07-26)*.
 **Date:** 2026-07-25
 **Depends on:** SPEC-002
 
 ## Purpose
 
-Turn the three corpus documents into embedded, retrievable chunks in the SPEC-002 schema: format-specific loaders → shared normalization → heading-aware chunking → batched embedding → idempotent upsert keyed on `documents.content_hash`. One CLI (`python -m rag_qa.ingest`), async internally behind a sync `asyncio.run` entrypoint (SPEC-002 Key decision 5).
+Turn the corpus documents — three at first approval, expanding by measured rungs under the 2026-07-26 amendment — into embedded, retrievable chunks in the SPEC-002 schema: format-specific loaders → shared normalization → heading-aware chunking → batched embedding → idempotent upsert keyed on `documents.content_hash`. One CLI (`python -m rag_qa.ingest`), async internally behind a sync `asyncio.run` entrypoint (SPEC-002 Key decision 5).
 
 ### What the source documents actually look like (measured 2026-07-25, files in `corpus/`)
 
@@ -17,6 +18,8 @@ Turn the three corpus documents into embedded, retrievable chunks in the SPEC-00
 | Hazards | Running header `NIST AI 100-1 AI RMF 1.0` on 43/48 pages; line-break hyphenation ("bene-\nfits"); front matter (TOC, lists of figures); Part 2 category tables extract as linear text (acceptably) | 851 `<table>` elements that are **layout tables** for numbered points (a)/(b) — not data; footnotes (`oj-note`); `art_3` (definitions) is 18K chars, far over any chunk budget | 1,402 inline-XBRL tags interleaved with prose; hidden `ix:header` with 19K chars of metadata; **Windows-1252 encoding** (0x92 smart quotes; `file` misreports ASCII); 64 tables holding ~8% of text — financial statements are dense tables, narrative dominates everywhere else |
 | Fetch | Plain HTTPS, no auth | **AWS WAF JavaScript challenge** — plain `curl`/httpx gets HTTP 202 + challenge page, 0 bytes. Verified today; a real browser passes | Requires descriptive `User-Agent` with contact info (already noted in `corpus/README.md`) |
 
+*(Amendment 2026-07-26: the table above describes the original three documents. The corpus expands one measured rung at a time until recall@8 de-saturates — see **Corpus expansion** under Interface — because 358 chunks cannot support a falsifiable retrieval metric. No target size is set; Rung 1 adds seven documents and may be the only rung. The expansion adds no formats and no filings: EUR-Lex HTML and bookmarked NIST PDFs only.)*
+
 **Difficulty ranking: 10-K ≫ NIST PDF > EU AI Act.** The EU Act is the *easiest* despite its size — EUR-Lex ships stable semantic ids per article/recital. The PDF is middling: bookmarks give the hierarchy; the work is text cleanup. The 10-K is hardest: heading detection is style-sniffing that is issuer-specific, XBRL noise is interleaved with sentences, and its tables are the only *data* tables in the corpus.
 
 **Scope recommendation (decision 10, flagged per review request):** keep all three documents, but (a) pin the EDGAR loader to this one filing rather than "any 10-K", and (b) drop predominantly-numeric tables from chunking entirely in v1 — no table parser. If forced to cut a document later, cut the 10-K first; never the other two.
@@ -24,7 +27,9 @@ Turn the three corpus documents into embedded, retrievable chunks in the SPEC-00
 ## Non-goals
 
 - Retrieval, RRF fusion, ranking (later spec)
-- A general-purpose EDGAR parser — the loader targets `nvda-10k-2026.htm` specifically; a second filing is a spec amendment
+- A general-purpose EDGAR parser — the loader targets `nvda-10k-2026.htm` specifically; a second filing is a spec amendment. **Reaffirmed by the 2026-07-26 amendment:** the corpus expansion adds *no* filings and does not touch `edgar_10k.py`
+- **New parsing logic of any kind (amendment 2026-07-26)** — the expansion is restricted to formats the existing `eurlex_html` and `nist_pdf` loaders already handle. A candidate document that does not parse under an existing loader is dropped from the set, never accommodated with new heuristics
+- **Non-English corpora, and EU acts in non-OJ-HTML renderings (amendment 2026-07-26)** — PDF renderings of EUR-Lex acts are out of scope even though `nist_pdf` exists; that loader is outline-driven and EUR-Lex PDFs are not bookmarked the same way
 - Financial-statement table extraction or table QA — numeric tables are excluded from chunks (decision 10); revisiting this is its own spec
 - OCR / scanned-PDF handling — the NIST PDF has a text layer
 - Incremental / partial re-ingestion — the unit of idempotency is the whole document (matches `content_hash` semantics)
@@ -35,7 +40,8 @@ Turn the three corpus documents into embedded, retrievable chunks in the SPEC-00
 ### Modules
 
 ```
-scripts/fetch_corpus.py            # download the three sources into corpus/
+scripts/fetch_corpus.py            # download corpus sources; resumable (amendment 2026-07-26)
+corpus/corpus.toml                 # per-document metadata registry (amendment 2026-07-26)
 src/rag_qa/ingest/
     __main__.py                    # python -m rag_qa.ingest → cli()
     types.py                       # Section, ChunkDraft dataclasses; IngestConfig
@@ -138,9 +144,127 @@ Entrypoint is a plain sync function calling `asyncio.run(main())` (SPEC-002 deci
 - EUR-Lex: try direct GET; on the verified WAF response (HTTP 202 / challenge body), fall back to the Cellar content-negotiation endpoint (`publications.europa.eu/resource/celex/32024R1689`, `Accept: text/html`, `Accept-Language: en`); if that also fails, print the manual-download instruction and exit non-zero. **Open risk, verified today:** plain-HTTP fetch of EUR-Lex is not guaranteed; the committed corpus workflow must tolerate a manually downloaded file.
 - Each fetch validates minimum size (> 100 KB) so a challenge page can never silently pass as corpus (today's failure mode: a 0-byte `eu-ai-act-2024-1689.html`).
 
+### Corpus expansion *(amendment 2026-07-26)*
+
+**Why:** at 358 chunks, top-8 is 2.2% of the corpus and every relevant chunk reaches it by either retrieval method — recall@3 and recall@8 are pinned at 1.000, and the k=1 comparison decides only 7 of 26 questions (SPEC-004 KD-12/12a). Retrieval metrics are therefore unfalsifiable, and SPEC-007's improvement loop would have no headroom. This is arithmetic about corpus size, not a defect in fusion, chunking, or embedding.
+
+**Target: expand until recall@8 de-saturates, measured. There is no chunk-count target** *(restated after review, 2026-07-26)*.
+
+An earlier draft of this amendment set a target of ~3,300 chunks with a floor of 3,000, and then selected Tier 3 to reach it. That is the same defect this project removed from SPEC-004 AC-6: **a threshold guessed before measurement, with work chosen to satisfy the guess.** It is worse here, because the draft's own reasoning says composition rather than volume does the work — competitor density rising from ~0–3 to 30–60 per query comes from the confusability-chosen Tier 1 documents, not from bulk. A number derived from bulk therefore contradicted the mechanism it was supposed to serve.
+
+Restated: **the tiers are a prepared ladder, not a commitment.** Each rung is fetched, ingested, and measured before the next is considered; the ladder stops as soon as the measurement says the metric works. Chunk counts appear below only as *fetch-planning estimates* — what a rung will cost to fetch and ingest — never as goals.
+
+**Falsifiable hypothesis, which Tier 1 tests directly:** competitor density, not corpus size, drives de-saturation. If true, **Tier 1 alone (~646 new chunks, ~1,004 total, 2.8× current) de-saturates recall@8 and Tiers 2–3 are never fetched.** If Tier 1 leaves recall@8 pinned at 1.000, the hypothesis is wrong or incomplete and the ladder continues — which is itself a finding worth recording, because it would mean raw scale matters more than this spec assumes.
+
+**Stop condition (AC-10) — `recall@8 < 1.000` PERMITS stopping, it does not MANDATE it** *(clarified, second review)*. The literal condition is **necessary but not sufficient**: recall@8 = 0.99 on a 26-question set is a single miss and no usable headroom, and a rule that mandated stopping there would have swapped one guessed threshold for a technicality. The asymmetry is deliberate:
+
+- **recall@8 = 1.000 exactly → escalation is mandatory.** Zero headroom is not a judgment call; the metric cannot move up.
+- **recall@8 < 1.000 → stopping is permitted**, and requires a recorded judgment that the headroom is usable for the improvement loop. Escalating instead is equally permitted and requires the same recording. **Both directions are decisions made with the distribution in hand, and both are recorded with the numbers they rest on.**
+
+No minimum recall value, chunk count, or document count is specified anywhere in this amendment, and none may be added retroactively to justify a rung already fetched. The discretion this leaves is bounded not by a number but by two rules: the judgment must be recorded with its evidence, and it must be argued in terms of the tuning metric below — never in terms of decided-question counts.
+
+**Headroom must exist in the metric SPEC-007 tunes against, not merely in recall@8** *(clarified, second review)*. SPEC-004 declares that metric — **primary `recall@8`, diagnostic `MRR@8`** — and the reasoning for binding the headroom requirement to the primary is there. The practical consequence for this ladder: **MRR@8 headroom while recall@8 is saturated does not make the corpus adequate**, because rank-shuffling inside an already-complete top-8 changes context efficiency, not what evidence the generator can reach. If SPEC-007 adopts a different primary metric, it re-runs this de-saturation check against that metric.
+
+**Saturation and statistical power are different problems, and the corpus is the wrong lever for the second.**
+
+- **Saturation is a corpus property.** recall@8 pinned at 1.000 means too few plausible competitors. More corpus fixes it. This is what the ladder addresses.
+- **Statistical power is an eval-set property.** Only 7 of 26 questions were *decided* (exactly one method ranking the target first). A two-sided sign test needs **≥ 6 decided questions** to reach p < 0.05 even when the result is unanimous (2 × 0.5⁶ = 0.031; five pairs give 0.063) — and more than that when the split is not unanimous, which is the realistic case.
+- **Correction (second review, 2026-07-26).** An earlier draft justified keeping decided-counts out of the stop condition by asserting that more corpus does *not* raise the decision rate. **That claim was probably false and is withdrawn:** a harder corpus makes the two methods disagree more often, so the decision rate very likely *rises* with corpus size — which is why the observed rate must be re-measured at the final corpus state rather than assumed (SPEC-004's retrieval-only eval-set note).
+- **The bar stands, on the correct grounds: corpus is sized for realism and headroom; question sets are sized for power.** Growing the corpus to make a secondary question answerable **optimizes the wrong artifact** — it changes the system under test in order to make a measurement *about* that system easier, and what you end up with is the corpus that suited the experiment rather than the one that reflects the retrieval problem the product actually faces. That the lever might work is not a reason to pull it. **If decided-counts are short, add questions, not documents.**
+
+**Fetch-planning estimates only.** Cost per rung, at ~570 tokens/chunk and $0.02/1 M (`EMBEDDING_USD_PER_MTOK`): **Tier 1 ≈ 646 chunks ≈ $0.007**; Tier 2 ≈ 1,208 ≈ $0.014; Tier 3 ≈ 1,089 ≈ $0.012. Embedding cost is negligible at every rung and is not a reason to prefer any rung. **The costs that matter are fetch fragility (EUR-Lex WAF), PDF parse wall-clock, and review time** — all of which scale with documents fetched, which is the actual argument for stopping early. Estimates are calibrated on measured data (**NIST-style PDFs ≈ 0.8 chunks/page** — AI RMF: 48 pages → 38 chunks, exact; **~2,900 text chars / ~570 tokens per chunk** across all three current documents) and carry roughly ±40% uncertainty. Nothing in AC-10 depends on them being right.
+
+#### The prepared ladder — fetch one rung, measure, then decide
+
+**Rung 1 (Tier 1) — the only rung currently authorized to fetch.** Seven documents chosen purely for confusability with the existing corpus; they exist to be *mistaken* for it. This rung tests the hypothesis on its own.
+
+| Document | Loader | Est. chunks | Why it competes |
+|---|---|---:|---|
+| NIST CSF 2.0 (CSWP 29) | nist_pdf | ~26 | Its **GOVERN** function collides by name with AI RMF Core's Govern — same word, different framework |
+| NIST AI 600-1 (Generative AI Profile) | nist_pdf | ~51 | Literally an AI RMF *profile*; competes with "AI RMF Profiles" directly |
+| NIST SP 800-37r2 (Risk Management Framework) | nist_pdf | ~146 | "Risk Management Framework" name collision with AI RMF |
+| NIST SP 1270 (Bias in AI) | nist_pdf | ~69 | Competes with AI RMF "Fair – with Harmful Bias Managed" |
+| GDPR — Reg. (EU) 2016/679 (`32016R0679`) | eurlex_html | ~120 | Art. 22 automated decision-making; DPIA vs. the AI Act's FRIA (Art. 27) |
+| Machinery Reg. (EU) 2023/1230 (`32023R1230`) | eurlex_html | ~120 | Cross-referenced by AI Act Annex I; near-identical CE-marking/conformity vocabulary |
+| Cyber Resilience Act — Reg. (EU) 2024/2847 (`32024R2847`) | eurlex_html | ~114 | Product cybersecurity + conformity assessment; competes with AI Act Art. 15 and Ch. III §5 |
+
+**Rung 2 (Tier 2) — prepared, NOT authorized.** Fetched only if Rung 1 leaves recall@8 at 1.000, and only after that measurement is reviewed. Bulk with strong thematic overlap.
+
+| Document | Loader | Est. chunks | Why it competes |
+|---|---|---:|---|
+| NIST SP 800-53r5 (Security & Privacy Controls) | nist_pdf | ~394 | Control-family governance language; highly self-similar internally |
+| NIST SP 800-161r1 (C-SCRM) | nist_pdf | ~261 | Supply-chain risk; overlaps AI Act value-chain obligations (Art. 25) |
+| NIST AI 100-2e2023 (Adversarial ML taxonomy) | nist_pdf | ~85 | Robustness/security of AI systems; overlaps AI Act Art. 15 |
+| Medical Devices Reg. (EU) 2017/745 (`32017R0745`) | eurlex_html | ~240 | Sectoral conformity assessment + notified bodies, an AI Act Annex I law |
+| DSA — Reg. (EU) 2022/2065 (`32022R2065`) | eurlex_html | ~138 | Systemic-risk assessment and auditing; competes with AI Act Ch. V |
+| NIS2 — Dir. (EU) 2022/2555 (`32022L2555`) | eurlex_html | ~90 | Cybersecurity risk-management measures |
+
+**Rung 3 (Tier 3) — prepared, NOT authorized, and no longer justified by a target.** These documents were originally selected to reach a 3,000-chunk floor that no longer exists. They are retained as available near-miss material for a third rung, but **the case for any of them is now "Rung 2 did not de-saturate", not "we need the volume."** If the ladder ever reaches here, re-review the selection on confusability grounds rather than fetching the list as drafted.
+
+| Document | Loader | Est. chunks |
+|---|---|---:|
+| NIST SP 800-53Ar5 (Assessment Procedures) | nist_pdf | ~590 |
+| NIST SP 800-30r1 (Risk Assessments) | nist_pdf | ~76 |
+| NIST SP 800-171r3 (CUI in Nonfederal Systems) | nist_pdf | ~99 |
+| NIST Privacy Framework 1.0 (CSWP 10) | nist_pdf | ~34 |
+| Data Act — Reg. (EU) 2023/2854 (`32023R2854`) | eurlex_html | ~97 |
+| Data Governance Act — Reg. (EU) 2022/868 (`32022R0868`) | eurlex_html | ~55 |
+| GPSR — Reg. (EU) 2023/988 (`32023R0988`) | eurlex_html | ~69 |
+| Market Surveillance — Reg. (EU) 2019/1020 (`32019R1020`) | eurlex_html | ~69 |
+
+**Cumulative corpus size per rung, for fetch planning only:** after Rung 1 ≈ 1,004 chunks (10 documents) · after Rung 2 ≈ 2,212 (16 documents) · after Rung 3 ≈ 3,301 (24 documents). **These are not targets and no rung is justified by reaching one.** The expected outcome is that the ladder stops at Rung 1.
+
+**CELEX ids and NIST document numbers above are unverified** — they are the identifiers to resolve at fetch time, not confirmed URLs. Verification is part of AC-12, before any fetching.
+
+#### Baseline artifacts: one per corpus state, never overwritten *(amendment 2026-07-26)*
+
+The before/after across rungs is the finding this amendment produces; a single mutable `retrieval_baseline.json` would destroy it on the first re-measure. Each measured corpus state writes an **immutable labeled artifact** under `evals/baselines/`:
+
+```
+evals/baselines/baseline-358-chunks.json     # pre-expansion, captured BEFORE anything is fetched
+evals/baselines/baseline-1004-chunks.json    # after Rung 1
+evals/baselines/baseline-2212-chunks.json    # after Rung 2, if reached
+```
+
+- **Named by measured chunk count**, so the file name states the corpus state it describes and cannot drift from it.
+- **Each artifact self-describes its corpus:** document count, per-document chunk counts, the rung label, the git sha of the ingesting commit, the date, and the embedder identity — a number without its corpus state is not interpretable, and this is the file someone reads six months later.
+- **Contents unchanged in kind** from SPEC-004 AC-6: recall@{1,3,8} per subset for both methods, MRR@8, discordant-pair counts, diversity distribution, stage-latency split, per-case ranks.
+- **Immutable once written.** A re-measurement of the *same* corpus state overwrites its own file; a *different* corpus state never does.
+- **`evals/retrieval_baseline.json` is retained as a copy of the most recent run** so SPEC-004's existing ACs and test wiring keep working, but it is explicitly *not* the record of any prior state.
+- **Sequencing (binding): `baseline-358-chunks.json` is committed before the first fetch.** The pre-expansion measurement cannot be reconstructed after the corpus changes.
+
+#### Cross-spec note (binding on SPEC-007): a multi-document corpus changes golden-set authoring *(amendment 2026-07-26)*
+
+The 50-question golden set must be authored against these consequences, not retrofitted to them. **Scope note (second review):** the golden set stays scoped to answer correctness, groundedness, and refusal — the capabilities that need a human-verified *answer*. Retrieval significance is settled by the separate, cheaper **retrieval-only eval set** specified in SPEC-004 AC-6a's companion note, which needs only a human-verified *section label*. The three consequences below apply to the golden set; consequence 1 applies to both.
+
+1. **Multi-source questions become possible, and must be deliberate.** With overlapping regulatory material, "what conformity assessment applies to a high-risk AI system that is also a medical device" legitimately draws on the AI Act *and* the MDR. SPEC-004's smoke set labels one `expected_section_prefix` per question, which cannot express this. **SPEC-007 must decide, before authoring:** whether a question carries a set of acceptable sections, and whether a hit means *any* expected section retrieved or *all* of them. Those are different metrics measuring different capabilities, and the choice cannot be made after the questions exist without re-labeling all of them.
+2. **Unanswerable questions get harder to author well, and refusal is a scored capability.** With three documents, constructing a question the corpus genuinely cannot answer was easy. With overlapping compliance material the corpus plausibly covers far more ground, so a question *intended* as unanswerable may be answerable from a document the author did not have in mind. **Unanswerability must be verified against the whole corpus by retrieval**, not asserted from the authoring document's contents. This extends the existing binding note on dropped tables: refusal labels are claims about the corpus, and they must be tested like any other claim.
+3. **Refusal labels rot when the corpus grows a rung.** A question correctly labeled unanswerable at Rung 1 may become answerable at Rung 2. **Every golden-set question records the corpus state it was validated against** (the `baseline-<N>-chunks` label), and unanswerable labels are re-validated whenever the corpus changes. A silently stale refusal label scores a correct answer as a failure — or worse, scores a hallucination as a correct refusal.
+
+#### The one unavoidable code change: per-document metadata *(amendment 2026-07-26)*
+
+This is **not** new parsing logic, but it is not zero work, and the constraint "existing loaders only" cannot be met without it. `eurlex_html.py` and `nist_pdf.py` currently hardcode their document identity as module constants — `SOURCE_URI`, `TITLE`, `DOC_LABEL`, and (PDF only) `FIRST_BODY_SECTION = "Executive Summary"`, which drives front-matter discard. One document per loader is baked in.
+
+Minimum change, and the amendment's entire code scope:
+
+- **`corpus/corpus.toml`** — a registry mapping each corpus filename to `{loader, source_uri, title, doc_label, doc_type, first_body_section?}`. Data, reviewable in one place, no logic.
+- **`load_eurlex_html(path, meta)` / `load_nist_pdf(path, meta)`** — take metadata instead of reading module constants. Parsing logic is untouched.
+- **`route_loader`** — resolves by registry entry rather than by content sniff for known files, falling back to the existing sniff.
+- **`edgar_10k.py` is not modified.** It keeps its pinned constants; the registry simply names it for the one filing.
+
+**`doc_type` mapping (SPEC-004 filter categories, kept at three):** every EU legal act → `regulation` (including the NIS2 *Directive* — the filter's purpose is "regulatory text vs. framework guidance vs. filing", and splitting directives from regulations would add a category no query distinguishes); every NIST publication → `standard`; the 10-K stays `filing`.
+
+#### Fetch and the EUR-Lex WAF *(amendment 2026-07-26)*
+
+The existing `fetch_corpus.py` behavior extends unchanged in kind, now per document:
+
+- **NIST** — direct GET from `nvlpubs.nist.gov`. No auth, no challenge observed.
+- **EUR-Lex** — the verified WAF JavaScript challenge (HTTP 202 + challenge body, 0 bytes of content) applies to *every* EUR-Lex document, not just the AI Act. Try direct GET; on the challenge response fall back to the Cellar content-negotiation endpoint `publications.europa.eu/resource/celex/{CELEX}` with `Accept: text/html`, `Accept-Language: en`. If both fail, print the manual-download instruction naming the CELEX id and exit non-zero. **With 11 EUR-Lex documents the WAF is now a bulk-fetch risk, not a single-file annoyance:** fetching must be resumable (skip files already present and passing the size guard) so a partial failure does not force refetching everything.
+- **The > 100 KB size guard applies per file**, unchanged — it is what stops a challenge page from silently entering the corpus, and it is why today's failure mode (a 0-byte `eu-ai-act-2024-1689.html`) was caught. Documents legitimately smaller than 100 KB — CSF 2.0 and the Privacy Framework are plausible at ~26–34 chunks — need a per-document minimum in the registry rather than a global constant, or the guard produces false failures.
+
 ### New dependencies
 
-`pypdf`, `beautifulsoup4`, `lxml`, `pysbd`, `openai` (embeddings only; generation adapter is a later spec). All runtime deps of the ingestion path. *(`tenacity` was planned and dropped — see Embedding.)*
+`pypdf`, `beautifulsoup4`, `lxml`, `pysbd`, `openai` (embeddings only; generation adapter is a later spec). All runtime deps of the ingestion path. *(`tenacity` was planned and dropped — see Embedding.)* **The 2026-07-26 corpus amendment adds no dependencies** — that is a deliberate constraint on the document set, not a coincidence.
 
 ## Key decisions
 
@@ -156,6 +280,15 @@ Entrypoint is a plain sync function calling `asyncio.run(main())` (SPEC-002 deci
 10. **Scope: keep all three documents; pin EDGAR loader to this filing; no table parsing in v1.** Dropped tables are not silent: each is recorded in the ingestion manifest (see Pipeline) so downstream specs can treat the content as knowingly out of corpus. Ranking and evidence in Purpose. The 10-K stays because the corpus was chosen for structural variety (corpus/README.md) and its *narrative* (Items 1, 1A, 7) parses fine — it is the tables that are expensive, so the tables are what gets cut, not the document. Deferred, each requiring a future spec: generic multi-issuer EDGAR support; financial-table QA. If a document must be cut under schedule pressure: 10-K first, per the scope-cut ladder's spirit; NIST and EU Act are never cut (they anchor the compliance-QA premise).
 11. **Numeric-table drop rule is EDGAR-only** (review amendment). Applying it corpus-wide risked silently deleting EU AI Act point lists whose citation density ("No 300/2008", "Article 6(2)") can push digit ratios over the threshold. `eurlex_html` and `nist_pdf` never drop content on numeric grounds; AC-3 asserts zero EU AI Act tables dropped.
 12. **Known retrieval side-effect to measure, not solve here** (review note): prefixing breadcrumbs into chunk text raises intra-section similarity, so top-k retrieval may return several chunks from the same article/Item. The eval harness (SPEC-007+) should measure result diversity (e.g., distinct-section rate in top-k) before any de-duplication or MMR-style fix is considered. Report observed clustering after the first real ingest.
+13. **The corpus expands until recall@8 de-saturates, measured one rung at a time — there is no chunk-count target** *(amendment 2026-07-26; restated after review)*. **The rejected alternative is this spec's own first draft**, which set ~3,300 chunks with a 3,000 floor and then chose Tier 3 to reach it. That reproduced the defect removed from SPEC-004 AC-6 — a threshold guessed before measurement, with work selected to satisfy the guess — and it contradicted this spec's own mechanism, since competitor density comes from Tier 1's confusability, not from bulk. **Corrected: fetch Rung 1, measure, stop if recall@8 < 1.000; escalate only on evidence.** Chunk counts survive only as fetch-planning estimates. Two further rejected alternatives, both still rejected: *synthesizing or duplicating text* to inflate the corpus (moves the count, teaches the retriever nothing, and makes every downstream metric an artifact); *shrinking k until recall stops saturating* (k=8 is a product decision driven by the generation context window, not a metric-tuning knob). **The stop condition is a corpus property only** — decided-question counts are fixed by eval-set size, not corpus size, and must never be used to justify another rung.
+
+14. **Near-miss composition over raw size** *(amendment 2026-07-26)*. The documents are selected for *semantic competition* with the existing corpus, not for volume or topical breadth — name collisions (NIST CSF's GOVERN vs. AI RMF's Govern; SP 800-37's "Risk Management Framework" vs. "AI RMF"), shared legal machinery (CE marking, notified bodies, harmonised standards across the AI Act, Machinery, CRA, MDR, GPSR), and overlapping obligations (GDPR Art. 22 automated decisions vs. AI Act Art. 6/27). **This deliberately makes the eval set harder to score well on**, which is the point: a retrieval metric that cannot go down cannot demonstrate an improvement either. Expect measured recall to *drop* at each rung — that is success, not regression, and each rung's labeled baseline artifact must be read in that light. **A rung that leaves recall unchanged has added volume without difficulty**, which is the failure this decision guards against and a reason to re-examine the document selection rather than to fetch the next rung.
+
+15. **Per-document metadata is data, not code — and it is the amendment's whole code surface** *(amendment 2026-07-26)*. Loaders currently hardcode document identity; a registry (`corpus/corpus.toml`) supplies it instead. **Flagged honestly: this does mean touching `eurlex_html.py` and `nist_pdf.py`**, so "existing loaders only" means *no new parsing logic*, not *no diff*. The boundary is explicit — a change that adds heading heuristics, a new structure signal, or a format branch is out of scope and the offending document is dropped instead. `edgar_10k.py` is not touched at all (decision 10 stands).
+
+16. **Two structural risks that can invalidate parts of the document set; both are verified per rung, before that rung is fetched** *(amendment 2026-07-26)*.
+   - **EUR-Lex HTML format drift across years.** `eurlex_html` was written against the AI Act's 2024 OJ rendering (`eli-subdivision` ids `rct_*`/`art_*`, `oj-ti-art`, `oj-sti-art`, `oj-ti-section-*`). EUR-Lex's markup has changed over the years, and the older proposed acts — **GDPR (2016), MDR (2017), Reg. 2019/1020** — are the ones most likely to render differently. Mitigation: probe **one old (GDPR) and one recent (CRA)** document through the loader *before* fetching the rest. If old-format documents do not parse, the EUR-Lex set contracts to 2022-and-later acts (DSA, NIS2, DGA, Data Act, Machinery, CRA, GPSR ≈ 683 chunks) and the shortfall is made up from NIST, which is format-stable. **Do not fix this with parsing logic** (non-goal above).
+   - **Not every NIST PDF carries a bookmark outline.** `nist_pdf` is outline-driven; a PDF without one yields no sections. Mitigation: check the outline of each candidate PDF at fetch time and drop any that lack one. Large control catalogs (SP 800-53r5, SP 800-53Ar5) are the highest-value and highest-risk entries here — they are also where a *malformed* outline (hundreds of flat control-id bookmarks) could produce thousands of tiny sections rather than none, so the check is "has a usable hierarchy", not merely "has bookmarks".
 
 ## Acceptance criteria
 
@@ -168,6 +301,17 @@ Entrypoint is a plain sync function calling `asyncio.run(main())` (SPEC-002 deci
 - **AC-7 (migration)** — `alembic upgrade head` from 0001 adds `chunks.section_path`; `downgrade -1` removes it; both exit 0.
 - **AC-8 (entrypoint & dry-run)** — `uv run python -m rag_qa.ingest corpus/ --dry-run` exits 0 with no `DATABASE_URL` set and no API key set, printing per-file chunk/token counts and estimated embedding cost; the module entrypoint is sync and its body is a single `asyncio.run(...)` call (SPEC-002 decision 5).
 - **AC-9 (manifest)** — after a run (including `--dry-run`), `corpus/ingest-manifest.json` exists and contains one record per dropped table with `document`, `item`, `table_index`, `digit_ratio`, `cell_count`, `reason`, plus per-document verdicts; on the synthetic EDGAR fixture the numeric table appears in the manifest and the narrative table does not. `corpus/ingest-manifest.json` is git-ignored.
+- **AC-10 (de-saturation — the ladder's stop condition)** *(amendment 2026-07-26; restated after first review, clarified after second)* — after **each rung** is ingested, SPEC-004's `tests/test_retrieval_quality.py` is re-run and that rung's labeled baseline artifact written. The verdict, in the **primary tuning metric declared in SPEC-004 (`recall@8`)**:
+  - **recall@8 = 1.000 for both methods → escalate. Mandatory**, not a judgment call: the metric is at its ceiling and cannot demonstrate an improvement.
+  - **recall@8 < 1.000 → stopping is PERMITTED, not mandated.** The bare inequality is necessary but not sufficient — 0.99 is one miss in 26 with no usable headroom. Stopping requires a recorded judgment that the headroom is usable for the improvement loop; escalating requires the same. **Objectively testable part: the artifact and the recorded decision-with-numbers exist for every rung.** The judgment itself is reviewed, not thresholded.
+  - **Headroom is assessed in the primary tuning metric, not a diagnostic one.** MRR@8 headroom under a saturated recall@8 does not satisfy this AC (SPEC-004 AC-6a). If SPEC-007 changes its primary metric, this check is re-run against the new one.
+  - **Recorded either way:** recall@{1,3,8} per subset for both methods, MRR@8, discordant-pair counts, and the stop/escalate decision with its evidence. **No minimum recall value, chunk count, or document count is specified here, and none may be added retroactively to justify a rung already fetched.**
+  - **This AC fails if a rung is fetched without the prior rung's measurement existing.** Each rung is justified by evidence, not by the plan.
+  - **Decided-question counts are recorded but are explicitly NOT part of the stop condition.** Not because corpus growth fails to raise them — it probably does raise them — but because corpus is sized for realism and headroom while question sets are sized for power; sizing the corpus to make a secondary question answerable optimizes the wrong artifact (Key decision 13). Short decided-counts are answered by SPEC-004's retrieval-only eval set, never by another rung.
+- **AC-11 (per-document metadata)** *(amendment 2026-07-26)* — every ingested document's `documents.source_uri`, `title`, and `doc_type` come from `corpus/corpus.toml`, not from a module constant: asserted by ingesting two different EUR-Lex fixtures through `eurlex_html` in one run and checking they land with *different* titles and source URIs. `doc_type` is `regulation` for every EU act (including the NIS2 Directive), `standard` for every NIST publication, `filing` for the 10-K. `edgar_10k.py` is byte-identical to its pre-amendment state (asserted by diff in review, not by test).
+- **AC-12 (fetch, WAF, and pre-flight verification)** *(amendment 2026-07-26)* — `fetch_corpus` is **resumable**: a file already present and passing its size guard is skipped, so a WAF failure on document 9 of 11 does not refetch the first 8. Each EUR-Lex fetch tries the direct URL, falls back to the Cellar endpoint on the 202-challenge response, and on double failure exits non-zero naming the CELEX id and the manual-download path. Size guards are **per document** in the registry (a global 100 KB floor would falsely reject CSF 2.0 and the Privacy Framework). **Pre-flight, per rung, before that rung is fetched:** one old (GDPR) and one recent (CRA) EUR-Lex document parse to sane section counts under the unmodified `eurlex_html`, and every candidate NIST PDF in the rung is confirmed to carry a usable outline hierarchy — documents failing either check are dropped from the set rather than accommodated (Key decision 16). Probe output is reviewed before the rung's fetch is authorized.
+- **AC-13 (baseline artifacts are immutable and self-describing)** *(amendment 2026-07-26)* — `evals/baselines/baseline-358-chunks.json` exists and is committed **before the first fetch**; each subsequent rung adds `baseline-<measured-chunk-count>-chunks.json` without modifying any existing artifact. Every artifact carries its corpus state: document count, per-document chunk counts, rung label, ingesting git sha, date, and embedder identity. Asserted by test: an artifact's recorded chunk count equals the sum of its per-document counts, and re-running a measurement against an unchanged corpus rewrites only that corpus state's own file (verified by comparing file mtimes/hashes of the other artifacts).
+- **AC-2 restated per document** *(amendment 2026-07-26)* — AC-2's exact counts (113 articles / 180 recitals / 13 annexes) are **specific to the AI Act** and remain asserted for it. For each newly added document the equivalent assertion is a recorded expected section count in the registry, checked on ingest; a document whose parsed section count deviates by more than ±10% from its recorded expectation fails ingestion rather than entering the corpus silently.
 
 ## Test plan
 
@@ -181,3 +325,21 @@ Two fixture tiers, so CI never needs the network:
 Embedding client is faked everywhere (deterministic 1536-dim vectors, call recorder for AC-5/AC-6); no API key in CI. Pipeline tests run against the dockerized Postgres (chunk insert exercises the real vector/tsv columns). Migration test (AC-7) follows SPEC-002's scratch-database pattern.
 
 Test order follows the workflow rule: these tests are written from the ACs above and committed before/with the implementation, in the same commit series referencing SPEC-003.
+
+### Corpus expansion testing *(amendment 2026-07-26)*
+
+The two-tier split holds, with the expansion landing almost entirely in the real-corpus tier — CI must not grow a 24-document fetch dependency.
+
+- **Synthetic tier (CI).** A *second* EUR-Lex-style fixture with different `eli-subdivision` content, a different title and a different source URI, so AC-11's "two documents through one loader" assertion runs without the network. A minimal second bookmarked PDF fixture likewise. Registry parsing (`corpus/corpus.toml` → metadata) and the per-document size-guard logic are unit-tested with no I/O. `fetch_corpus` resumability (AC-12) is tested with mocked transport: a pre-existing valid file is not re-requested, and a 202-challenge response triggers the Cellar URL.
+- **Real-corpus tier (local, `skipif`).** AC-10's de-saturation measurement and the per-document section-count checks of restated AC-2 run only where the corpus exists. **AC-10 is a measurement per rung, recorded rather than asserted green/red** — the recorded distribution is what the stop/escalate decision is made from, and it is reported in that rung's PR.
+- **Pre-flight probes are scripts, not tests** — the GDPR/CRA format probe and the NIST outline check (AC-12) run before fetching and gate whether a document enters `corpus/corpus.toml` at all. Their output is pasted into the PR so the document set is reviewed against what actually parsed, not against what was hoped. **Probes run per rung, against that rung's documents only.**
+- **Artifact immutability (AC-13)** is a cheap unit test over `evals/baselines/` — internal consistency of each artifact, and that a re-measure touches only its own corpus state's file. No corpus needed.
+
+**Sequencing (binding, per rung — the ladder is the process, not just the plan):**
+
+1. **Once, before anything is fetched:** commit `evals/baselines/baseline-358-chunks.json` capturing the pre-expansion state (AC-13). It cannot be reconstructed later.
+2. **Once:** registry + loader metadata change (`corpus/corpus.toml`, metadata argument), with the synthetic-tier tests green. No documents fetched yet.
+3. **Per rung:** pre-flight probes for that rung's documents → review probe output and the document set → fetch → ingest → re-run SPEC-004 retrieval quality → write that rung's labeled baseline artifact → **record the AC-10 stop/escalate verdict with its numbers**.
+4. **Stop as soon as recall@8 < 1.000.** Escalation to the next rung requires the prior rung's recorded measurement showing recall@8 still exactly 1.000.
+
+Fetching a rung before the previous rung's measurement exists violates AC-10. Fetching anything before step 1 destroys the pre-expansion record.

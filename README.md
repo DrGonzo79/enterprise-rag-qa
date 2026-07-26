@@ -37,6 +37,27 @@ take precedence, so Docker/CI behavior is unchanged). If the EUR-Lex download
 is blocked by its WAF challenge, the fetch script prints manual-download
 instructions.
 
+### Swapping the generation provider
+
+Generation sits behind an `LLMClient` protocol, so `AnthropicClient` and
+`OpenAIClient` swap with no call-site change. One thing to know before you try
+it: **`OpenAIClient` raises `UnknownModelError` at construction until you add a
+verified rate row.** Costs are stored per request in `query_log.cost_usd`, which
+is `not null`, so an unpriced model is a hard error rather than a silent
+`cost_usd = 0` — see SPEC-005 Key decision 10. Only Anthropic rows ship, because
+no spec has chosen an OpenAI model and inventing one to fill a table would make
+that choice by accident.
+
+To use OpenAI, add a row to `PRICING` in
+[pricing.py](src/rag_qa/generation/pricing.py) with the rate verified against
+<https://platform.openai.com/docs/pricing>, and the date you checked it. The
+exception message names that page and the module to edit.
+
+Note also that the default model, `claude-sonnet-5`, is chosen on cost and on an
+argument about the task shape — **not on a measurement**. The Opus-vs-Sonnet
+comparison is scoped to the evaluation harness (SPEC-005 Key decision 15); until
+it runs, treat the default as an assumption.
+
 ## Architecture
 
 Ingestion → chunking → embedding → Postgres (pgvector + tsvector)

@@ -2,9 +2,13 @@
 
 Skipped in CI: requires the ingested corpus and a real OPENAI_API_KEY for
 query embeddings (EUR-Lex's WAF makes networked CI ingestion
-non-deterministic — SPEC-003 test plan). Writes evals/retrieval_baseline.json,
-the measured baseline SPEC-007 sets its floor against; this spec deliberately
-asserts no absolute floor.
+non-deterministic — SPEC-003 test plan).
+
+**Measuring always runs; writing the baseline artifact requires
+`--write-baseline` (SPEC-004 AC-13).** The assertions below are the test; the
+artifact is a record of a corpus state that cannot be reconstructed once the
+corpus changes, so it is never produced as a side effect of `pytest`. Without
+the flag the measured table is printed and nothing on disk moves.
 """
 
 import json
@@ -78,7 +82,9 @@ async def corpus_retriever():  # type: ignore[no-untyped-def]
     await engine.dispose()
 
 
-async def test_hybrid_beats_vector_only_and_records_the_baseline(corpus_retriever) -> None:  # type: ignore[no-untyped-def]
+async def test_hybrid_beats_vector_only_and_records_the_baseline(
+    corpus_retriever, write_baseline: bool
+) -> None:  # type: ignore[no-untyped-def]
     retriever, factory = corpus_retriever
     cases = load_cases()
     assert len(cases) >= 24
@@ -193,7 +199,12 @@ async def test_hybrid_beats_vector_only_and_records_the_baseline(corpus_retrieve
         },
         "per_case": rows,
     }
-    BASELINE.write_text(json.dumps(baseline, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    if write_baseline:
+        BASELINE.write_text(
+            json.dumps(baseline, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+        )
+    else:
+        print(f"\n[baseline not written — pass --write-baseline to record {BASELINE.name}]")
 
     print(f"\n{'id':<8}{'style':<12}{'hybrid':>8}{'vector':>8}  expected")
     for row in rows:
@@ -227,6 +238,7 @@ async def test_hybrid_beats_vector_only_and_records_the_baseline(corpus_retrieve
 async def test_latency_against_the_real_corpus(
     corpus_retriever,  # type: ignore[no-untyped-def]
     caplog: pytest.LogCaptureFixture,
+    write_baseline: bool,
 ) -> None:
     """AC-8 local tier. The end-to-end p95 is dominated by the OpenAI embedding
     round-trip (measured p95 843ms against 16ms of retrieval work), so the tight
@@ -271,7 +283,7 @@ async def test_latency_against_the_real_corpus(
     }
     print(f"\nstage split: {json.dumps(stage_split, indent=2)}")
 
-    if BASELINE.exists():
+    if write_baseline and BASELINE.exists():
         baseline = json.loads(BASELINE.read_text(encoding="utf-8"))
         baseline["stage_latency_split_ms"] = stage_split
         BASELINE.write_text(

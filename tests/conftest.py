@@ -23,6 +23,10 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.pool import NullPool
 
+from baseline_guard import snapshot, violations
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
 # Tests default to a DEDICATED database, not the dev `rag` database, so suite
 # runs and test-debugging can never touch locally ingested corpus data
 # (SPEC-002 test plan, limitation note). CI still injects DATABASE_URL=…/rag —
@@ -46,6 +50,62 @@ async def ensure_database(url: str) -> None:
             await admin.execute(f'CREATE DATABASE "{name}"')
     finally:
         await admin.close()
+
+
+# --- baseline write gate + guard (SPEC-004 AC-13) ----------------------------
+#
+# Measuring is a test; producing a baseline artifact is not. The flag gates the
+# write, and the session hooks fail the run if a guarded artifact changed
+# anyway — belt and braces, because the failure this prevents is silent and
+# the artifact it destroys is unreconstructable.
+
+_baseline_snapshot: dict[str, str] = {}
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--write-baseline",
+        action="store_true",
+        default=False,
+        help=(
+            "Write measured baseline artifacts (evals/baselines/, "
+            "evals/retrieval_baseline.json). Off by default: a baseline records a "
+            "corpus state that cannot be reconstructed once the corpus changes, so "
+            "producing one is a deliberate act, never a side effect of `pytest`."
+        ),
+    )
+
+
+@pytest.fixture
+def write_baseline(request: pytest.FixtureRequest) -> bool:
+    """True only when --write-baseline was passed on the command line."""
+    return bool(request.config.getoption("--write-baseline"))
+
+
+def pytest_sessionstart(session: pytest.Session) -> None:
+    global _baseline_snapshot
+    _baseline_snapshot = snapshot(REPO_ROOT)
+
+
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    problems = violations(
+        _baseline_snapshot,
+        snapshot(REPO_ROOT),
+        writes_allowed=bool(session.config.getoption("--write-baseline")),
+    )
+    if not problems:
+        return
+
+    reporter = session.config.pluginmanager.get_plugin("terminalreporter")
+    if reporter is not None:
+        reporter.section("BASELINE GUARD FAILED", red=True, bold=True)
+        for problem in problems:
+            reporter.line(f"  {problem}")
+        reporter.line("")
+        reporter.line("  Baselines are measured records of a corpus state, not test output.")
+        reporter.line("  Restore them (git checkout) and re-run with --write-baseline if the")
+        reporter.line("  write was intended. See SPEC-004 AC-13 and SPEC-003 AC-13.")
+    session.exitstatus = 1
 
 
 CORPUS_DIR = Path(__file__).resolve().parent.parent / "corpus"

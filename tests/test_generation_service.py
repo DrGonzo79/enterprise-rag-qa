@@ -6,8 +6,9 @@ import hashlib
 import uuid
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
+from pathlib import Path
 
 import asyncpg
 import pytest
@@ -15,8 +16,9 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from conftest import DATABASE_URL
+from rag_qa.db.models import QueryLog
 from rag_qa.generation.clients.base import LLMResult, StopKind, TextChunk, Usage
-from rag_qa.generation.pricing import compute_cost, resolve_rate
+from rag_qa.generation.pricing import compute_cost, recompute_cost, resolve_rate
 from rag_qa.generation.prompt import PROMPT_VERSION, SYSTEM_PROMPT
 from rag_qa.generation.service import Generator
 from rag_qa.generation.types import (
@@ -31,6 +33,7 @@ from rag_qa.generation.types import (
 from rag_qa.retrieval.types import RetrievedChunk
 
 IDENTITY = "anthropic:claude-sonnet-5"
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def _chunk(index: int) -> RetrievedChunk:
@@ -317,6 +320,192 @@ def test_every_rate_row_records_its_source_and_verification_date() -> None:
 def test_unpriced_model_raises_at_construction_not_request_time() -> None:
     with pytest.raises(UnknownModelError):
         resolve_rate("anthropic:claude-not-a-real-model")
+
+
+def test_unpriced_model_error_names_that_provider_s_own_pricing_page() -> None:
+    """A fresh clone swapping to OpenAI must not be sent to Anthropic's pricing
+    page to verify an OpenAI rate (KD-10, amended)."""
+    from rag_qa.generation.pricing import PRICING_SOURCES
+
+    with pytest.raises(UnknownModelError) as openai_error:
+        resolve_rate("openai:gpt-5")
+    assert PRICING_SOURCES["openai"] in str(openai_error.value)
+    assert PRICING_SOURCES["anthropic"] not in str(openai_error.value)
+
+    with pytest.raises(UnknownModelError) as anthropic_error:
+        resolve_rate("anthropic:claude-not-a-real-model")
+    assert PRICING_SOURCES["anthropic"] in str(anthropic_error.value)
+
+
+def test_no_openai_rate_rows_ship() -> None:
+    """KD-10, amended: shipping a row would pick an OpenAI model no spec chose.
+    The README quickstart documents this so the fresh clone learns it before the
+    exception does — if a row is ever added, that note must change with it."""
+    from rag_qa.generation.pricing import PRICING
+
+    assert not [identity for identity in PRICING if identity.startswith("openai:")]
+    readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+    assert "OpenAIClient" in readme
+    assert "rate row" in readme
+
+
+# --- AC-9a: recomputation prices from created_at, never today (KD-16) ---------
+
+RATE_CHANGE = date(2026, 9, 1)
+MTOK = (1_000_000, 100_000)  # prompt, completion
+
+
+def test_recompute_uses_the_rate_in_force_when_the_request_ran() -> None:
+    def cost_at(moment: datetime) -> Decimal:
+        return recompute_cost(
+            provider="anthropic",
+            model="claude-sonnet-5",
+            prompt_tokens=MTOK[0],
+            completion_tokens=MTOK[1],
+            created_at=moment,
+        )
+
+    last_intro = cost_at(datetime(2026, 8, 31, 23, 59, 59, tzinfo=UTC))
+    first_standard = cost_at(datetime(2026, 9, 1, 0, 0, 1, tzinfo=UTC))
+
+    assert last_intro == Decimal("3.000000")  # $2/MTok in + $10/MTok out
+    assert first_standard == Decimal("4.500000")  # $3/MTok in + $15/MTok out
+    assert last_intro != first_standard, "two seconds apart must straddle the rate change"
+
+
+def test_recompute_is_a_pure_function_of_created_at() -> None:
+    """The bug this guards: repricing history at the current rate. The same row
+    must cost the same whether it is recomputed before or after the change."""
+    row = {
+        "provider": "anthropic",
+        "model": "claude-sonnet-5",
+        "prompt_tokens": MTOK[0],
+        "completion_tokens": MTOK[1],
+        "created_at": datetime(2026, 7, 26, 12, 0, tzinfo=UTC),
+    }
+    assert recompute_cost(**row) == compute_cost(IDENTITY, *MTOK, when=date(2026, 7, 26))
+    # …and not what today's-rate pricing would give once the change has landed.
+    assert recompute_cost(**row) != compute_cost(IDENTITY, *MTOK, when=RATE_CHANGE)
+
+
+def test_recompute_rejects_a_naive_timestamp() -> None:
+    """query_log.created_at is timestamptz; reading one naively shifts the date
+    by up to a day, which on 2026-08-31 picks the wrong rate."""
+    with pytest.raises(ValueError, match="timezone-aware"):
+        recompute_cost(
+            provider="anthropic",
+            model="claude-sonnet-5",
+            prompt_tokens=MTOK[0],
+            completion_tokens=MTOK[1],
+            created_at=datetime(2026, 8, 31, 23, 59, 59),  # naive on purpose
+        )
+
+
+async def test_recompute_prices_logged_rows_from_their_own_created_at(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """A query_log spanning 2026-09-01 legitimately holds rows at two rates.
+    Recomputation reads each row's own created_at, so the batch reprices
+    correctly; one rate applied to all of it would be wrong for half."""
+    marker = f"recompute-{uuid.uuid4()}"
+    moments = [
+        datetime(2026, 8, 31, 12, 0, tzinfo=UTC),
+        datetime(2026, 9, 1, 12, 0, tzinfo=UTC),
+    ]
+
+    async with session_factory() as session:
+        for moment in moments:
+            session.add(
+                QueryLog(
+                    id=uuid.uuid4(),
+                    question=f"{marker} {moment.date()}",
+                    provider="anthropic",
+                    model="claude-sonnet-5",
+                    latency_ms=100,
+                    prompt_tokens=MTOK[0],
+                    completion_tokens=MTOK[1],
+                    cost_usd=recompute_cost(
+                        provider="anthropic",
+                        model="claude-sonnet-5",
+                        prompt_tokens=MTOK[0],
+                        completion_tokens=MTOK[1],
+                        created_at=moment,
+                    ),
+                    retrieved_chunk_ids=[],
+                    answer_text="Providers must comply [1].",
+                    verdict=str(Verdict.ANSWERED),
+                    prompt_version=PROMPT_VERSION,
+                    created_at=moment,
+                )
+            )
+        await session.commit()
+
+    async with session_factory() as session:
+        rows = (
+            await session.execute(
+                text(
+                    "SELECT provider, model, prompt_tokens, completion_tokens, cost_usd, "
+                    "created_at FROM query_log WHERE question LIKE :q ORDER BY created_at"
+                ),
+                {"q": f"{marker}%"},
+            )
+        ).all()
+        await session.execute(
+            text("DELETE FROM query_log WHERE question LIKE :q"), {"q": f"{marker}%"}
+        )
+        await session.commit()
+
+    assert len(rows) == 2
+    recomputed = [
+        recompute_cost(
+            provider=row[0],
+            model=row[1],
+            prompt_tokens=row[2],
+            completion_tokens=row[3],
+            created_at=row[5],
+        )
+        for row in rows
+    ]
+    assert recomputed == [Decimal("3.000000"), Decimal("4.500000")]
+    assert [row[4] for row in rows] == recomputed  # stored cost survives a reprice
+    assert sum(recomputed) != compute_cost(IDENTITY, *MTOK, when=RATE_CHANGE) * 2
+
+
+async def test_live_row_reprices_to_exactly_what_was_stored(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """created_at is set from the same timestamp the request was priced at, so a
+    request straddling midnight on a rate-change date cannot store a cost its
+    own created_at contradicts."""
+    question = f"Reprice {uuid.uuid4()}"
+    answer = await Generator(FakeLLMClient(), session_factory=session_factory).answer(
+        question, CHUNKS
+    )
+
+    async with session_factory() as session:
+        row = (
+            await session.execute(
+                text(
+                    "SELECT provider, model, prompt_tokens, completion_tokens, cost_usd, "
+                    "created_at FROM query_log WHERE question = :q"
+                ),
+                {"q": question},
+            )
+        ).one()
+        await session.execute(text("DELETE FROM query_log WHERE question = :q"), {"q": question})
+        await session.commit()
+
+    assert row[4] == answer.cost_usd
+    assert (
+        recompute_cost(
+            provider=row[0],
+            model=row[1],
+            prompt_tokens=row[2],
+            completion_tokens=row[3],
+            created_at=row[5],
+        )
+        == answer.cost_usd
+    )
 
 
 # --- AC-10: generator identity comes from the client --------------------------

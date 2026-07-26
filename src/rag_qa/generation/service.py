@@ -4,6 +4,7 @@ import logging
 import time
 import uuid
 from collections.abc import AsyncIterator, Sequence
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -64,6 +65,7 @@ class Generator:
             raise ValueError("question is empty or whitespace-only")
 
         started = time.perf_counter()
+        requested_at = datetime.now(UTC)
         if not chunks:
             # An absence, not a threshold: refuse without spending a request.
             return await self._finalize(
@@ -76,6 +78,7 @@ class Generator:
                 prompt_tokens=0,
                 completion_tokens=0,
                 started=started,
+                requested_at=requested_at,
             )
 
         user = render_context(question, chunks)
@@ -92,6 +95,7 @@ class Generator:
             prompt_tokens=result.prompt_tokens,
             completion_tokens=result.completion_tokens,
             started=started,
+            requested_at=requested_at,
         )
 
     # --- streaming ------------------------------------------------------------
@@ -103,6 +107,7 @@ class Generator:
             raise ValueError("question is empty or whitespace-only")
 
         started = time.perf_counter()
+        requested_at = datetime.now(UTC)
         if not chunks:
             yield VerdictEvent(Verdict.INSUFFICIENT_EVIDENCE)
             answer = await self._finalize(
@@ -115,6 +120,7 @@ class Generator:
                 prompt_tokens=0,
                 completion_tokens=0,
                 started=started,
+                requested_at=requested_at,
             )
             yield AnswerComplete(answer)
             return
@@ -155,6 +161,7 @@ class Generator:
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             started=started,
+            requested_at=requested_at,
         )
         yield AnswerComplete(answer)
 
@@ -172,8 +179,15 @@ class Generator:
         prompt_tokens: int,
         completion_tokens: int,
         started: float,
+        requested_at: datetime,
     ) -> Answer:
-        cost = compute_cost(self._client.identity, prompt_tokens, completion_tokens)
+        # Priced at the request's own timestamp, and that same timestamp is
+        # written to query_log.created_at below — so the stored cost and the
+        # column that reprices it can never disagree about which side of a rate
+        # change the request fell on (KD-16).
+        cost = compute_cost(
+            self._client.identity, prompt_tokens, completion_tokens, when=requested_at.date()
+        )
         latency_ms = int((time.perf_counter() - started) * 1000)
         answer = Answer(
             text=text,
@@ -194,11 +208,15 @@ class Generator:
                 len(chunks),
                 dropped,
             )
-        await self._write_query_log(question, chunks, answer)
+        await self._write_query_log(question, chunks, answer, requested_at)
         return answer
 
     async def _write_query_log(
-        self, question: str, chunks: Sequence[RetrievedChunk], answer: Answer
+        self,
+        question: str,
+        chunks: Sequence[RetrievedChunk],
+        answer: Answer,
+        requested_at: datetime,
     ) -> None:
         if self._session_factory is None:
             return
@@ -219,6 +237,10 @@ class Generator:
                     answer_text=answer.text,
                     verdict=str(answer.verdict),
                     prompt_version=answer.prompt_version,
+                    # Set explicitly rather than left to the server default: this
+                    # is the timestamp cost_usd was priced at, and recompute
+                    # reads it back as the authority (KD-16).
+                    created_at=requested_at,
                 )
             )
             await session.commit()

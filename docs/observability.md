@@ -8,7 +8,7 @@ and finds nothing concludes the logging is broken rather than the document.
 
 ## The shape of a record
 
-Logs are one line of JSON on stdout (`LOG_FORMAT=json`, the default; `text` for a
+Logs are one line of JSON on stderr (`LOG_FORMAT=json`, the default; `text` for a
 human at a terminal). `json.dumps` escapes newlines, so a message containing one
 cannot split a record across two lines — the same framing argument SPEC-006 Key
 decision 3 made for SSE.

@@ -11,6 +11,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from rag_qa.api.conditions import Presentation, Reset
 from rag_qa.generation.types import Answer, Citation
 from rag_qa.ingest.pipeline import Manifest
 from rag_qa.retrieval.types import RetrievalFilters, RetrievedChunk
@@ -22,6 +23,20 @@ class ErrorDetail(BaseModel):
     code: str = Field(description="Stable machine-readable error code.")
     message: str
     request_id: str
+    presentation: Presentation = Field(
+        description=(
+            "How a client should render this condition. `explanatory` means the service is "
+            "deliberately not answering and the client should show the explanatory state "
+            "(SPEC-006 Key decision 16) rather than an error page. Sent so a client need not "
+            "keep its own copy of the taxonomy."
+        )
+    )
+    reset: Reset = Field(
+        description=(
+            "When the condition clears. `window` means `Retry-After` is an accurate clock; "
+            "`operator` means no countdown exists and one must not be rendered."
+        )
+    )
 
 
 class ErrorResponse(BaseModel):

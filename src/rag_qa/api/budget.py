@@ -27,6 +27,7 @@ fake answer would teach a viewer that the system answered when it did not.
 """
 
 import calendar
+import logging
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
@@ -35,7 +36,10 @@ from decimal import ROUND_DOWN, Decimal
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from rag_qa.api.conditions import spec_for
 from rag_qa.api.errors import BudgetExhausted
+
+logger = logging.getLogger(__name__)
 
 # One statement, one checkout: the daily total is a filtered aggregate over the
 # month's rows rather than a second query. Adding the monthly ceiling must not
@@ -191,19 +195,72 @@ class SpendGuard:
         if self._monthly_limit is not None and self._month_total + self._local_delta >= (
             self._monthly_limit
         ):
-            raise BudgetExhausted(
-                f"monthly demo budget of ${self._monthly_limit} reached; resets at "
-                f"{next_utc_month_start(now).isoformat()}",
+            self._trip(
+                ceiling="monthly",
+                limit=self._monthly_limit,
+                spent=self._month_total + self._local_delta,
+                origin="",
+                resets_at=next_utc_month_start(now),
                 retry_after=seconds_until_utc_month_end(now),
             )
 
         daily_limit, origin = self._daily_shape(now)
         if daily_limit is not None and self._day_total + self._local_delta >= daily_limit:
-            raise BudgetExhausted(
-                f"daily demo budget of ${daily_limit}{origin} reached; resets at "
-                f"{(day + timedelta(days=1)).isoformat()}",
+            self._trip(
+                ceiling="daily",
+                limit=daily_limit,
+                spent=self._day_total + self._local_delta,
+                origin=origin,
+                resets_at=day + timedelta(days=1),
                 retry_after=seconds_until_utc_midnight(now),
             )
+
+    def _trip(
+        self,
+        *,
+        ceiling: str,
+        limit: Decimal,
+        spent: Decimal,
+        origin: str,
+        resets_at: datetime,
+        retry_after: int,
+    ) -> None:
+        """Figures to the log, a figure-free message to the caller.
+
+        The ceiling, the override, the derived value, and the running total are
+        exactly the cost meter SPEC-006 KD-8 refuses to publish — an error body
+        naming them hands a caller a live progress bar toward draining the
+        budget, and is a side channel around the admin scope on `/metrics`. The
+        caller is told *that* the demo is not answering and *when* it resumes,
+        which is everything they can act on.
+        """
+        logger.warning(
+            "spend ceiling reached",
+            extra={
+                "ceiling": ceiling,
+                "limit_usd": str(limit),
+                "spent_usd": str(spent),
+                "origin": origin.strip() or "configured",
+                "resets_at": resets_at.isoformat(),
+            },
+        )
+        raise BudgetExhausted(
+            f"{spec_for('budget_exhausted').public_message}; it resets at {resets_at.isoformat()}",
+            retry_after=retry_after,
+            ceiling=ceiling,
+        )
+
+    def remaining(self, now: datetime) -> dict[str, Decimal]:
+        """Headroom per configured ceiling, for the admin-scoped gauge."""
+        headroom: dict[str, Decimal] = {}
+        daily_limit, _ = self._daily_shape(now)
+        if daily_limit is not None:
+            headroom["daily"] = max(Decimal("0"), daily_limit - self._day_total - self._local_delta)
+        if self._monthly_limit is not None:
+            headroom["monthly"] = max(
+                Decimal("0"), self._monthly_limit - self._month_total - self._local_delta
+            )
+        return headroom
 
     def record(self, cost_usd: Decimal) -> None:
         """Count spend that has not reached query_log's cached totals yet."""

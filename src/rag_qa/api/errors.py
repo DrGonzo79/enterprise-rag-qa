@@ -6,15 +6,31 @@ a refusal, a provider decline, a truncation — to a non-200 status. Those are
 outcomes of a request that worked.
 """
 
+from rag_qa.api.conditions import spec_for
 from rag_qa.generation.types import UnknownModelError
 from rag_qa.retrieval.types import EmbedderMismatchError, EmptyCorpusError
 
 
 class ApiError(Exception):
-    """An error with a stable machine-readable code and an HTTP status."""
+    """An error with a stable machine-readable code and an HTTP status.
+
+    Every subclass is checked against `CONDITIONS` at class-creation time, so a
+    failure mode cannot be added to the server side without also acquiring a
+    client-facing rendering. That check runs at import, not in a test, because
+    the drift it prevents is the kind a reviewer waves through.
+    """
 
     status_code: int = 500
     code: str = "internal_error"
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        super().__init_subclass__(**kwargs)
+        spec = spec_for(cls.code)
+        if spec.status != cls.status_code:
+            raise TypeError(
+                f"{cls.__name__}.status_code={cls.status_code} disagrees with CONDITIONS"
+                f"[{cls.code!r}].status={spec.status}"
+            )
 
     def __init__(self, message: str, *, retry_after: int | None = None) -> None:
         super().__init__(message)
@@ -42,11 +58,23 @@ class Overloaded(ApiError):
 
 
 class BudgetExhausted(ApiError):
-    """Daily spend ceiling reached (KD-16). A transport-level condition, not a
-    verdict: under the ceiling the question was never asked."""
+    """A spend ceiling was reached (KD-16). A transport-level condition, not a
+    verdict: under the ceiling the question was never asked.
+
+    `ceiling` names which window stopped the request — `daily` or `monthly` — so
+    SPEC-008's failure signal can label the counter. It is deliberately *not* in
+    the message: which ceiling tripped is operator information, and the caller
+    only needs to know that the demo is not answering and when it resumes.
+    """
 
     status_code = 503
     code = "budget_exhausted"
+
+    def __init__(
+        self, message: str, *, retry_after: int | None = None, ceiling: str = "daily"
+    ) -> None:
+        super().__init__(message, retry_after=retry_after)
+        self.ceiling = ceiling
 
 
 class IngestInProgress(ApiError):
@@ -90,8 +118,23 @@ def envelope(
     error: ApiError, request_id: str
 ) -> tuple[int, dict[str, dict[str, str]], dict[str, str]]:
     """Status, body, headers — pure, so the middleware and the exception
-    handlers cannot render the same error two different ways."""
-    body = {"error": {"code": error.code, "message": error.message, "request_id": request_id}}
+    handlers cannot render the same error two different ways.
+
+    `presentation` and `reset` come from the registry rather than from the
+    raiser, which is what stops a client keeping its own copy of the taxonomy:
+    SPEC-009 reads how to render a condition off the wire instead of matching on
+    `code` against a list that can fall behind this one.
+    """
+    spec = spec_for(error.code)
+    body = {
+        "error": {
+            "code": error.code,
+            "message": error.message,
+            "request_id": request_id,
+            "presentation": str(spec.presentation),
+            "reset": str(spec.reset),
+        }
+    }
     headers = {"Retry-After": str(error.retry_after)} if error.retry_after else {}
     return error.status_code, body, headers
 

@@ -2,6 +2,7 @@
 KD-16)."""
 
 import logging
+import re
 import uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -29,6 +30,19 @@ from rag_qa.generation.prompt import PROMPT_VERSION
 from test_generation_service import FakeLLMClient
 
 QUESTION = "What applies?"
+
+
+def assert_no_figures(message: str) -> None:
+    """The error body must name no dollar amounts.
+
+    SPEC-006 KD-8 keeps the cost meter behind the admin key because an
+    unauthenticated spend number is a live progress bar for anyone trying to
+    drain the budget. A 503 body naming the ceiling, the override, and the
+    derived value was that same meter, reachable by any caller who can trigger
+    the error — a side channel around the scope that was carefully chosen.
+    """
+    assert "$" not in message, message
+    assert not re.search(r"\d+\.\d{2}", message), message
 
 
 async def _log_spend(
@@ -412,8 +426,8 @@ async def test_capped_override_is_the_ceiling_actually_enforced(
         await _cleanup(session_factory, marker)
 
     assert response.status_code == 503
-    assert "capped at 2x" in response.json()["error"]["message"]
     assert client.calls == []
+    assert_no_figures(response.json()["error"]["message"])
 
 
 def test_daily_above_monthly_is_rejected_at_startup() -> None:
@@ -441,8 +455,9 @@ async def test_monthly_cap_trips_over_http_before_the_provider_call(
 
     assert response.status_code == 503
     assert response.json()["error"]["code"] == "budget_exhausted"
-    assert "monthly" in response.json()["error"]["message"]
     assert client.calls == []
+    # Which ceiling tripped is operator information, not caller information.
+    assert_no_figures(response.json()["error"]["message"])
 
 
 async def test_monthly_window_sees_spend_the_daily_window_cannot(
@@ -467,8 +482,9 @@ async def test_monthly_window_sees_spend_the_daily_window_cannot(
         monthly = SpendGuard(
             session_factory, monthly_limit_usd=Decimal("20.00"), now=lambda: mid_month
         )
-        with pytest.raises(BudgetExhausted, match="monthly"):
+        with pytest.raises(BudgetExhausted) as raised:
             await monthly.check()
+        assert raised.value.ceiling == "monthly"
     finally:
         await _cleanup(session_factory, marker)
 
@@ -529,7 +545,9 @@ async def test_monthly_is_reported_when_both_ceilings_are_exhausted(
         await _cleanup(session_factory, marker)
 
     assert response.status_code == 503
-    assert "monthly" in response.json()["error"]["message"]
+    # The monthly reset is what is reported, and it is reported as a clock the
+    # caller can act on rather than as a ceiling they can meter.
+    assert_no_figures(response.json()["error"]["message"])
     now = datetime.now(UTC)
     assert int(response.headers["retry-after"]) == pytest.approx(
         seconds_until_utc_month_end(now), abs=5
@@ -544,3 +562,35 @@ def test_retry_after_counts_down_to_the_next_utc_month() -> None:
     assert next_utc_month_start(datetime(2026, 1, 31, tzinfo=UTC)) == datetime(
         2026, 2, 1, tzinfo=UTC
     )
+
+
+async def test_the_503_body_names_no_figures_and_the_log_names_all_of_them(
+    session_factory: async_sessionmaker[AsyncSession],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The reconciliation: the caller learns *that* and *when*, the operator
+    learns *how much*. Both from one trip."""
+    marker = f"budget-{uuid.uuid4()}"
+    await _log_spend(session_factory, marker, "9.00", datetime.now(UTC))
+    app = build_app(session_factory=session_factory, daily_budget_usd=Decimal("5.00"))
+    try:
+        with caplog.at_level(logging.WARNING, logger="rag_qa.api.budget"):
+            response = await post(app, "/query", {"question": QUESTION})
+    finally:
+        await _cleanup(session_factory, marker)
+
+    error = response.json()["error"]
+    assert_no_figures(error["message"])
+    assert "ceiling" not in error["message"]  # which window tripped is operator info
+    # ...and the presentation seam tells a client to render the explanatory
+    # state rather than an error page, without keeping its own list.
+    assert error["presentation"] == "explanatory"
+    assert error["reset"] == "window"
+    assert int(response.headers["retry-after"]) > 0
+
+    fields = next(r for r in caplog.records if r.msg == "spend ceiling reached").__dict__
+    assert fields["ceiling"] == "daily"
+    assert fields["limit_usd"] == "5.00"
+    assert Decimal(fields["spent_usd"]) >= Decimal("9.00")
+    assert fields["resets_at"]
+    assert fields["request_id"] == response.headers["x-request-id"]

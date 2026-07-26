@@ -7,7 +7,9 @@ rollback isolation. Migration tests use a dedicated scratch database instead.
 """
 
 import os
-from collections.abc import AsyncIterator
+import uuid
+from collections.abc import AsyncIterator, Iterable
+from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
 
@@ -16,6 +18,7 @@ from sqlalchemy.ext.asyncio import (
     AsyncConnection,
     AsyncEngine,
     AsyncSession,
+    async_sessionmaker,
     create_async_engine,
 )
 from sqlalchemy.pool import NullPool
@@ -268,3 +271,202 @@ async def session(connection: AsyncConnection) -> AsyncIterator[AsyncSession]:
         bind=connection, join_transaction_mode="create_savepoint", expire_on_commit=False
     ) as sess:
         yield sess
+
+
+# --- SPEC-004 retrieval fixtures ---------------------------------------------
+#
+# Retrieval runs its two branch searches on SEPARATE connections, so the
+# savepoint-rollback fixture above cannot host it (one connection, one
+# transaction). These fixtures commit real rows through a pooled engine and
+# clean up by deleting the exact document ids they inserted — never a
+# TRUNCATE, so a misconfigured DATABASE_URL pointing at a corpus database
+# still cannot lose data (SPEC-002 test-plan limitation note).
+
+EMBED_DIM = 1536
+STUB_IDENTITY = "fake:test-v1"
+
+
+def unit_vector(theta: float) -> list[float]:
+    """[cos θ, sin θ, 0…] — cosine distance to QUERY_VECTOR is 1 - cos θ, so
+    dense rank order is exactly θ ascending."""
+    import math
+
+    vector = [0.0] * EMBED_DIM
+    vector[0] = math.cos(theta)
+    vector[1] = math.sin(theta)
+    return vector
+
+
+QUERY_VECTOR = unit_vector(0.0)
+
+
+class StubQueryEmbedder:
+    """Returns one fixed vector; identity is settable so AC-4 can mismatch it."""
+
+    def __init__(self, vector: list[float] | None = None, identity: str = STUB_IDENTITY) -> None:
+        self.identity = identity
+        self._vector = vector if vector is not None else QUERY_VECTOR
+        self.calls: list[list[str]] = []
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        self.calls.append(list(texts))
+        return [self._vector for _ in texts]
+
+
+@dataclass(frozen=True)
+class SeededChunk:
+    """One chunk to insert; list position sets its dense rank."""
+
+    document_key: str
+    text: str
+    section_path: str
+
+
+@dataclass
+class SeededCorpus:
+    document_ids: dict[str, uuid.UUID]
+    chunk_ids: dict[str, uuid.UUID]  # keyed by chunk text
+    total_chunks: int
+
+
+async def seed_corpus(
+    engine: AsyncEngine,
+    documents: dict[str, tuple[str, str, str]],  # key -> (title, source_uri, doc_type)
+    chunks: list[SeededChunk],
+    *,
+    identity: str = STUB_IDENTITY,
+) -> SeededCorpus:
+    """Insert documents + chunks whose dense rank order is `chunks` order."""
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+
+    from rag_qa.db.models import Chunk, Document
+
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    document_ids = {key: uuid.uuid4() for key in documents}
+    chunk_ids: dict[str, uuid.UUID] = {}
+    ordinals: dict[str, int] = dict.fromkeys(documents, 0)
+
+    async with factory() as sess:
+        for key, (title, source_uri, doc_type) in documents.items():
+            sess.add(
+                Document(
+                    id=document_ids[key],
+                    source_uri=source_uri,
+                    title=title,
+                    doc_type=doc_type,
+                    content_hash=uuid.uuid4().hex + uuid.uuid4().hex,
+                    byte_size=len(title),
+                )
+            )
+        await sess.flush()
+        for rank, spec in enumerate(chunks):
+            chunk_id = uuid.uuid4()
+            chunk_ids[spec.text] = chunk_id
+            ordinal = ordinals[spec.document_key]
+            ordinals[spec.document_key] = ordinal + 1
+            sess.add(
+                Chunk(
+                    id=chunk_id,
+                    document_id=document_ids[spec.document_key],
+                    ordinal=ordinal,
+                    text=spec.text,
+                    token_count=max(1, len(spec.text.split())),
+                    section_path=spec.section_path,
+                    # rank 0 nearest; strictly increasing angle => exact dense order
+                    embedding=unit_vector((rank + 1) * 0.004),
+                    embedding_model=identity,
+                )
+            )
+        await sess.commit()
+
+    return SeededCorpus(document_ids=document_ids, chunk_ids=chunk_ids, total_chunks=len(chunks))
+
+
+async def drop_documents(engine: AsyncEngine, document_ids: Iterable[uuid.UUID]) -> None:
+    """Delete exactly the seeded documents (chunks cascade). Never a TRUNCATE."""
+    from sqlalchemy import delete
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+
+    from rag_qa.db.models import Document
+
+    factory = async_sessionmaker(engine)
+    async with factory() as sess:
+        await sess.execute(delete(Document).where(Document.id.in_(list(document_ids))))
+        await sess.commit()
+
+
+# The seeded corpus: 200 regulation chunks, 12 filing chunks, 3 standard
+# chunks (215 total, satisfying AC-8's ">= 200 chunks"). Dense rank order is
+# list order, so:
+#   rank 1   = DENSE_ONLY_TEXT   (no lexical overlap with the probe query)
+#   rank 215 = LEXICAL_ONLY_TEXT (the only chunk containing "quarklebit")
+# which is exactly AC-3's setup: FTS-rank-1 but far outside the dense pool.
+DENSE_ONLY_TEXT = "Zephyr alignment considerations govern oversight of automated decisions."
+LEXICAL_ONLY_TEXT = "The quarklebit provision governs exceptional derogation cases."
+PROBE_QUERY = "quarklebit"
+
+SEED_DOCUMENTS = {
+    "regulation": ("Synthetic Regulation", "synthetic://regulation", "regulation"),
+    "filing": ("Synthetic Filing", "synthetic://filing", "filing"),
+    "standard": ("Synthetic Standard", "synthetic://standard", "standard"),
+}
+
+
+def build_seed_chunks() -> list[SeededChunk]:
+    chunks = [
+        SeededChunk("regulation", DENSE_ONLY_TEXT, "Synthetic Regulation › CHAPTER I › Article 1")
+    ]
+    for i in range(198):
+        chunks.append(
+            SeededChunk(
+                "regulation",
+                f"Regulation filler passage {i} describing obligations of providers and deployers.",
+                f"Synthetic Regulation › CHAPTER I › Article {2 + i % 7}",
+            )
+        )
+    for i in range(12):
+        chunks.append(
+            SeededChunk(
+                "filing",
+                f"Filing narrative passage {i} discussing demand, supply and manufacturing risk.",
+                f"Synthetic Filing › Item 1A. Risk Factors › Topic {i % 3}",
+            )
+        )
+    for i, pillar in enumerate(("Govern", "Map", "Measure")):
+        chunks.append(
+            SeededChunk(
+                "standard",
+                f"Standard guidance passage {i} on {pillar} functions and outcomes.",
+                f"Synthetic Standard › Core › {pillar}",
+            )
+        )
+    chunks.append(
+        SeededChunk(
+            "regulation", LEXICAL_ONLY_TEXT, "Synthetic Regulation › CHAPTER IX › Article 99"
+        )
+    )
+    return chunks
+
+
+@pytest.fixture(scope="session")
+async def pooled_engine(migrated_engine: AsyncEngine) -> AsyncIterator[AsyncEngine]:
+    """A genuinely pooled engine — the branch searches need two connections,
+    and AC-11 needs pooled recycling to be real."""
+    engine = create_async_engine(DATABASE_URL, pool_size=4, max_overflow=2)
+    yield engine
+    await engine.dispose()
+
+
+@pytest.fixture(scope="session")
+async def seeded_corpus(pooled_engine: AsyncEngine) -> AsyncIterator[SeededCorpus]:
+    """Read-only 215-chunk corpus shared across retrieval tests."""
+    corpus = await seed_corpus(pooled_engine, SEED_DOCUMENTS, build_seed_chunks())
+    yield corpus
+    await drop_documents(pooled_engine, corpus.document_ids.values())
+
+
+@pytest.fixture
+def session_factory(pooled_engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+
+    return async_sessionmaker(pooled_engine, expire_on_commit=False)

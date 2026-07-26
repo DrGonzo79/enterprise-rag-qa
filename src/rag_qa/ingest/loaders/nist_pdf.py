@@ -126,6 +126,7 @@ def load_nist_pdf(path: Path) -> ParsedDocument:
     return ParsedDocument(
         source_uri=SOURCE_URI,
         title=TITLE,
+        doc_type="standard",
         raw_bytes=raw_bytes,
         sections=tuple(sections),
     )

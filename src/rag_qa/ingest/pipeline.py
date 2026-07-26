@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from rag_qa.db.models import Chunk, Document
 from rag_qa.ingest.chunker import chunk_document
-from rag_qa.ingest.embedder import EMBEDDING_MODEL, EmbeddingClient, embed_all
+from rag_qa.ingest.embedder import EmbeddingClient, embed_all
 from rag_qa.ingest.loaders import load_edgar_10k, load_eurlex_html, load_nist_pdf
 from rag_qa.ingest.types import (
     ChunkDraft,
@@ -94,6 +94,7 @@ async def _upsert(
     drafts: list[ChunkDraft],
     vectors: list[list[float]],
     content_hash: str,
+    embedder_identity: str,
 ) -> str:
     existing = (
         (await session.execute(select(Document).where(Document.source_uri == doc.source_uri)))
@@ -109,6 +110,7 @@ async def _upsert(
         id=uuid.uuid4(),
         source_uri=doc.source_uri,
         title=doc.title,
+        doc_type=doc.doc_type,
         content_hash=content_hash,
         byte_size=len(doc.raw_bytes),
     )
@@ -124,7 +126,9 @@ async def _upsert(
                 token_count=draft.token_count,
                 section_path=draft.section_path,
                 embedding=vector,
-                embedding_model=EMBEDDING_MODEL,
+                # the client's identity, never a constant: a fake-embedder run
+                # must be distinguishable in the DB (SPEC-004 KD-4)
+                embedding_model=embedder_identity,
             )
         )
     await session.commit()
@@ -191,7 +195,9 @@ async def ingest_paths(
         assert session_provider is not None and embedding_client is not None
         vectors = await embed_all([d.text for d in drafts], embedding_client)
         async with session_provider() as session:
-            verdict = await _upsert(session, doc, drafts, vectors, content_hash)
+            verdict = await _upsert(
+                session, doc, drafts, vectors, content_hash, embedding_client.identity
+            )
         manifest.documents.append(
             DocumentReport(
                 document=path.name,

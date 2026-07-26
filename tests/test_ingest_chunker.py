@@ -20,6 +20,7 @@ def _doc(sections: list[Section]) -> ParsedDocument:
     return ParsedDocument(
         source_uri="synthetic://doc",
         title="Synthetic",
+        doc_type="standard",
         raw_bytes=b"synthetic",
         sections=tuple(sections),
     )

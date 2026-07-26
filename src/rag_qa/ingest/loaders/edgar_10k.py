@@ -190,6 +190,7 @@ def load_edgar_10k(path: Path, config: IngestConfig | None = None) -> ParsedDocu
     return ParsedDocument(
         source_uri=SOURCE_URI,
         title=TITLE,
+        doc_type="filing",
         raw_bytes=raw_bytes,
         sections=tuple(sections),
         dropped_tables=tuple(dropped),

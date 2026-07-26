@@ -1,0 +1,222 @@
+# SPEC-004 — Hybrid Retrieval
+
+**Status:** Approved — 2026-07-26 (with review amendments: ef_search application specified and tested, filters pushed into both branch queries with `doc_type` support, degenerate-input ACs, breadcrumb↔FTS coupling note, AC-6 floor replaced by baseline measurement)
+**Date:** 2026-07-25
+**Depends on:** SPEC-003
+
+## Purpose
+
+Turn a natural-language question into the k best chunks with citation metadata: embed the query, run dense vector search (pgvector HNSW, cosine) and Postgres full-text search (tsvector) **concurrently** (SPEC-002 Key decision 5), fuse with Reciprocal Rank Fusion, pass through a (stubbed) reranker seam, and return `RetrievedChunk` records carrying `section_path` so answers can cite *where*.
+
+Two correctness obligations are built in from the start, not retrofitted:
+
+1. **Embedder identity is verified at query time.** The stored corpus and the query embedder must be the same provider+model, or `retrieve()` raises — a fake-embedder corpus or a wrong-model query must fail loudly on the first call, never silently degrade recall weeks later. **This spec fixes a live defect:** `pipeline.py` currently stamps `embedding_model = "text-embedding-3-small"` unconditionally, so a `--embedder fake` ingest is indistinguishable in the database from a real one. The identity string must come from the embedding client, not a constant.
+2. **Result diversity is instrumented.** SPEC-003 Key decision 12 predicts breadcrumb-prefixed chunks may cluster by section in top-k; this spec emits distinct-sections-per-top-k on every call so SPEC-007 can measure it before anyone proposes MMR/dedup fixes.
+
+## Non-goals
+
+- Answer generation, prompting, or the `/ask` endpoint — retrieval is a library; HTTP wiring is the generation spec's job
+- `query_log` writes — that row belongs to the answering path, which owns latency/cost/token fields retrieval cannot fill
+- A real reranker (interface stubbed here; implementation is cuttable per the scope-cut ladder and would be its own spec)
+- De-duplication / MMR — SPEC-003 Key decision 12 says measure first; this spec measures
+- A relevance threshold / refusal signal inside `retrieve()` (see Key decision 9 — deliberate, flagged)
+- Query rewriting, HyDE, multi-query expansion, conversational context
+- Embedding-vector caching for repeated queries
+- Re-embedding the corpus under a new model (detectable now via the identity check; the re-embed workflow is a future spec)
+
+## Interface
+
+### Modules
+
+```
+src/rag_qa/retrieval/
+    __init__.py       # re-exports: Retriever, RetrievedChunk, RetrievalFilters,
+                      #   EmbedderMismatchError, distinct_section_rate
+    types.py          # RetrievedChunk, RetrievalFilters, errors
+    search.py         # vector_search(), fulltext_search() — each takes its own session
+    fusion.py         # rrf_fuse() — pure, no I/O
+    rerank.py         # Reranker protocol + NoopReranker
+    service.py        # Retriever.retrieve() — orchestration, identity check, logging
+    metrics.py        # distinct_section_rate() — pure, imported by SPEC-007 later
+alembic/versions/0003_*.py   # data migration: qualify embedding_model values
+```
+
+Amended in place (SPEC-003 files, same commit series):
+
+- `ingest/embedder.py` — `EmbeddingClient` protocol gains `identity: str` (property). `OpenAIEmbeddingClient.identity = "openai:text-embedding-3-small"` (derived from its model arg); `FakeLocalEmbeddingClient.identity = "fake:sha256-v1"`.
+- `ingest/pipeline.py` — writes `embedding_model=client.identity` instead of the `EMBEDDING_MODEL` constant; writes `documents.doc_type` from the parsed document.
+- `ingest/types.py` — `ParsedDocument` gains `doc_type: str`; each loader sets its constant: `nist_pdf` → `"standard"`, `eurlex_html` → `"regulation"`, `edgar_10k` → `"filing"`. (Categories are semantic, not format-based — a filter for "regulatory texts vs. filings" is the plausible query; "pdf vs. html" is not.)
+- `db/models.py` — `Document` gains `doc_type: Mapped[str]` (text, not null).
+
+### Types
+
+```python
+@dataclass(frozen=True)
+class RetrievedChunk:
+    chunk_id: UUID
+    document_id: UUID
+    document_title: str
+    source_uri: str
+    doc_type: str  # documents.doc_type: standard | regulation | filing
+    section_path: str  # breadcrumb, e.g. "EU AI Act › Chapter III › Article 6"
+    ordinal: int
+    text: str
+    score: float  # fused RRF score; post-rerank score once a real reranker exists
+    vector_rank: int | None  # 1-based rank in the dense list; None if absent from it
+    fulltext_rank: int | None  # 1-based rank in the FTS list; None if absent from it
+
+
+@dataclass(frozen=True)
+class RetrievalFilters:
+    document_ids: tuple[UUID, ...] | None = None
+    source_uris: tuple[str, ...] | None = None
+    doc_types: tuple[str, ...] | None = None  # documents.doc_type (added by migration 0003)
+
+
+class EmbedderMismatchError(RuntimeError): ...  # message names both identities
+
+
+class EmptyCorpusError(RuntimeError): ...
+
+
+class Retriever:
+    def __init__(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        query_embedder: EmbeddingClient,  # SPEC-003 protocol, now with .identity
+        reranker: Reranker = NoopReranker(),
+    ) -> None: ...
+
+    async def retrieve(
+        self, query: str, k: int = 8, filters: RetrievalFilters | None = None
+    ) -> list[RetrievedChunk]: ...
+```
+
+### Constants (module-level in `service.py` / `fusion.py`; deliberately not config — see Key decision 8)
+
+| Constant | Value | Role |
+|---|---|---|
+| `CANDIDATE_POOL` | 50 | rows fetched from *each* search before fusion |
+| `RRF_K` | 60 | RRF smoothing constant (Key decision 2) |
+| `RERANK_WINDOW` | `4 * k` | fused candidates handed to the reranker |
+
+### Execution flow of `retrieve()`
+
+0. Validate input: a query that is empty or whitespace-only raises `ValueError` before any I/O (embedding an empty string is a silent garbage-in path).
+1. Embed the query: `query_embedder.embed([query])` → one 1536-dim vector.
+2. Open **two** sessions from the factory and `asyncio.gather` two branches (a single `AsyncSession` cannot multiplex queries — SPEC-002 Key decision 5's concurrency requires separate connections):
+   - **Branch A (vector):** inside the branch's transaction, `SET LOCAL hnsw.ef_search = 50;` then
+     `SELECT c.id, c.document_id, c.ordinal, c.text, c.section_path, d.title, d.source_uri, d.doc_type FROM chunks c JOIN documents d ON ... [WHERE filter] ORDER BY c.embedding <=> :qvec LIMIT 50`. `ef_search` is raised from the default 40 to match `CANDIDATE_POOL` so the index can actually return 50 candidates. **How the GUC is applied (review amendment 1):** `hnsw.ef_search` is a session GUC and the engine pools/recycles connections, so setting it once per connection is unreliable — `SET LOCAL` is issued *in the same transaction as the search, on every call*; it scopes to that transaction and reverts at commit/rollback, so no pooled connection ever carries it as leaked state. AC-11 asserts both halves (in effect during the search on a fresh pool connection; not present after release).
+   - **Branch B (identity check, then FTS, sequentially on one session):**
+     `SELECT DISTINCT embedding_model FROM chunks` — if zero rows → `EmptyCorpusError`; if more than one value, or the single value ≠ `query_embedder.identity` → `EmbedderMismatchError` (corpus-wide invariant: one embedder per corpus, checked regardless of filters). Then
+     `SELECT ..., ts_rank_cd(c.tsv, q) AS rank FROM chunks c JOIN documents d ..., websearch_to_tsquery('english', :query) q WHERE c.tsv @@ q [AND filter] ORDER BY rank DESC LIMIT 50`.
+3. Fuse: `rrf_fuse(vector_list, fts_list)` — `score(c) = Σ over lists containing c of 1 / (RRF_K + rank)`. Deterministic total order: fused score desc, then best single-list rank asc, then `chunk_id` asc. Degenerate cases are defined behavior, not errors: an empty FTS list (no lexical match — common for paraphrase queries) degrades to vector order; fewer than `k` total candidates (tiny corpus or selective filter) returns what exists, length < k, never padding and never raising.
+4. Rerank seam: top `RERANK_WINDOW` fused candidates → `reranker.rerank(query, candidates, k)`. `NoopReranker` returns `candidates[:k]`.
+5. Instrument: one structured log record per call — query sha256 (first 12 hex; never the raw query at INFO), `k`, result count, `distinct_section_rate`, and stage latencies `embed_ms` / `vector_ms` / `fts_ms` / `fuse_ms` / `total_ms`.
+
+Filters (review amendment 2) are pushed into **both** branch queries as `WHERE` predicates *before* ranking and `LIMIT` — never applied to fused results after the fact, which would silently return fewer than k. Supported: `document_ids` (`c.document_id = ANY(...)`), `source_uris`, and `doc_types` (both on the joined `documents` row); multiple fields AND together, values within a field OR together. AC-10 includes the push-down proof: a filtered query returns the full k when ≥ k matching chunks exist, even when the corpus-wide top hits all lie outside the filter. Note: pgvector applies predicates during/after the HNSW scan, so a highly selective filter can return fewer than `CANDIDATE_POOL` dense candidates; with a 3-document corpus and document-level filters this is acceptable and not worked around here.
+
+### Reranker seam (`rerank.py`)
+
+```python
+class Reranker(Protocol):
+    async def rerank(
+        self, query: str, candidates: list[RetrievedChunk], k: int
+    ) -> list[RetrievedChunk]: ...
+
+
+class NoopReranker:
+    async def rerank(self, query, candidates, k):  # candidates arrive fused-order
+        return candidates[:k]
+```
+
+The seam's position (post-fusion, pre-truncation, window `4k`) is fixed now so a future cross-encoder reranker changes zero call sites. Per the scope-cut ladder the real implementation is the second thing cut; the protocol costs ~10 lines and prevents a retrofit through every caller.
+
+### Diversity metric (`metrics.py`)
+
+```python
+def distinct_section_rate(chunks: Sequence[RetrievedChunk]) -> float:
+    """len(unique section_path) / len(chunks); 0.0 for empty input."""
+```
+
+Pure function, no I/O — `retrieve()` calls it for the per-query log line, and SPEC-007 imports the *same* function for eval aggregation, so the number in production logs and the number in eval reports can never diverge by construction.
+
+### Migration `0003`
+
+Two changes, one migration (this spec's single schema-touching migration per SPEC-002's rule):
+
+1. **Qualify embedder identities (data):** `UPDATE chunks SET embedding_model = 'openai:' || embedding_model WHERE embedding_model NOT LIKE '%:%'`. Downgrade strips the `openai:` prefix. **Known limitation, accepted:** rows previously ingested with the fake embedder are mislabeled `text-embedding-3-small` (the pipeline.py defect) and the migration cannot distinguish them; any database known to contain fake-embedder rows must be re-ingested. The dev `rag` database holds the real corpus (real embeddings), so the migration is correct there; test databases are rebuilt from scratch anyway.
+2. **Add `documents.doc_type text not null` (schema, review amendment 2):** added nullable, backfilled by `source_uri` pattern (`nvlpubs.nist.gov` → `standard`; `eur-lex`/`publications.europa.eu` → `regulation`; `sec.gov` → `filing`; anything else → `unknown`), then set not-null. Downgrade drops the column. Backfill-by-URI is a one-time bridge for pre-0003 rows; all new rows get `doc_type` from the loader.
+
+### New dependencies
+
+None. Query embedding reuses `openai` (SPEC-003); everything else is SQLAlchemy + stdlib.
+
+## Key decisions
+
+1. **RRF, not score fusion.** Cosine distance and `ts_rank_cd` live on incommensurable scales; min-max normalizing them per query makes each chunk's score depend on which other chunks happened to be retrieved — unstable and untestable. RRF consumes only ranks, has one parameter, and is the standard hybrid baseline. Rejected: weighted linear score combination (two tuning weights and a normalization scheme before any eval harness exists to tune against).
+2. **`RRF_K = 60`.** The constant from Cormack, Clarke & Buettcher (2009), the near-universal default. Its job is damping: at k=60 the gap between rank 1 (1/61) and rank 2 (1/62) is small, so one list can't dominate on rank-1 alone, while top ranks still outweigh the tail. With exactly two lists and a 50-candidate pool, sensitivity to k is low; tuning it before SPEC-007 can measure the effect is unfalsifiable knob-twiddling. Revisit only with eval data.
+3. **Embedder identity is a single qualified string (`provider:model`) in the existing `embedding_model` column** — `openai:text-embedding-3-small`, `fake:sha256-v1`. **Flagged — arguing against the obvious choice:** the obvious design is a separate `embedding_provider` column (normalized, queryable). Argued down because the only operation ever performed on this value is equality comparison against the query embedder's identity; two columns mean two things to compare, two things to backfill, and a schema migration — for a value that is semantically one opaque identifier. If a future spec needs provider-level queries, splitting is a cheap data migration then.
+4. **Identity verified on every `retrieve()` call, not at startup.** **Flagged — arguing against the obvious choice:** a startup check is the obvious, cheaper design. But the ingestion CLI can rewrite the corpus while the API process is running (whole-document replace, SPEC-003 decision 6) — a startup check validates a corpus that may no longer exist. The per-call check is one `SELECT DISTINCT` on an indexed-scan-friendly small table, and it runs inside the `gather` alongside the searches (Branch B, before FTS), so it adds **zero wall-clock latency** in the common case. Mismatch is an exception, never a warning: a warning in a log nobody tails *is* the silent-degradation failure mode.
+5. **Two sessions per call, identity check sharing the FTS session.** `gather` needs ≥ 2 connections (one `AsyncSession` = one connection = sequential). Three parallel sessions would buy ~1 ms on the cheapest query while tripling per-request connection pressure against SPEC-002 decision 8's hard pool bound of 10 per replica; at 2 connections per in-flight retrieve, 5 concurrent retrievals saturate a replica's pool — acceptable for a demo service, and the answering spec inherits this math explicitly.
+6. **`websearch_to_tsquery`, not `to_tsquery`/`plainto_tsquery`.** It never raises on arbitrary user input (`to_tsquery` throws on unbalanced syntax — a user typing `6(2` must not 500), and it preserves quoted-phrase support that `plainto_tsquery` lacks — useful for exact citations.
+7. **`CANDIDATE_POOL = 50` per list, `ef_search` raised to match.** Deep enough that RRF can promote a chunk ranked ~40th in one list and unranked in the other; shallow enough that both queries stay ms-scale on a corpus of a few thousand chunks. `SET LOCAL hnsw.ef_search = 50` because the default (40) would silently cap the dense list below the requested `LIMIT`.
+8. **Retrieval constants are module constants, not `IngestConfig`-style config.** Chunking parameters went into a frozen config because they feed `content_hash`; retrieval parameters affect no stored state and have no idempotency interaction. They become tunable (and worth a config object) exactly when SPEC-007 can measure a change — promoting them earlier just multiplies untested code paths.
+9. **No relevance threshold in `retrieve()` — flagged, arguing against the obvious choice.** Refusal is a charter-level scored capability, so the obvious move is a min-score cutoff here ("if the best score is weak, return nothing"). Argued down: RRF scores are rank-derived and bounded (max ≈ 2/61) — they encode *agreement between lists*, not calibrated relevance, and any threshold picked now would be a guess that SPEC-007 immediately invalidates. `retrieve()` always returns its best k with scores and per-list ranks exposed; the refusal decision belongs to the generation/eval layer, made against measured score distributions.
+10. **Hybrid-must-win acceptance criterion is scoped to where hybrid has a mechanism to win — flagged, arguing against the obvious choice.** The obvious AC is "hybrid beats vector-only overall." On a ~24-question smoke set, overall strict superiority is a coin flip — hybrid's edge is concentrated in exact-term queries, and a one-question swing flips the sign, making the AC flaky and inviting tuning-to-the-test. AC-6 instead requires **no regression overall** and **strict improvement on the citation-style subset** ("Article 6(2)", "Item 1A") — the precise claim in the charter's why-hybrid rationale, and the falsifiable one. **Vindicated by measurement, and only just:** the citation claim holds (Key decision 12), while the unscoped "hybrid beats vector-only overall" version would have *failed* — hybrid loses overall at k=1. Scoping this AC is the reason the spec records a real finding instead of a green check.
+11. **Coupling note (review amendment 4): the hybrid advantage on citation queries is coupled to SPEC-003's breadcrumb prefixing (its Key decision 5).** "Article 6" matches lexically largely because the breadcrumb line (`EU AI Act › … › Article 6 …`) is prefixed into `chunks.text` and therefore into `tsv` — the article body often doesn't repeat its own number. KD-10's scoped claim (hybrid strictly beats vector-only on citation-style queries) rests on that prefix being present. **Neither decision may be tuned in isolation:** removing or reformatting breadcrumb prefixing would likely shrink or erase the FTS edge that justifies hybrid retrieval, and any such change must re-run AC-6's comparison in the same commit.
+12. **MEASURED FINDING, UNRESOLVED — plain RRF is not a free win on this corpus; it trades a small citation gain for a large paraphrase loss (recorded 2026-07-26, first real run).** At k=1 (the only regime with headroom — recall@3 and recall@8 are 1.000 for both methods on 358 chunks):
+
+    | subset | n | hybrid recall@1 | vector-only recall@1 |
+    |---|---|---|---|
+    | citation | 14 | **0.929** | 0.857 |
+    | paraphrase | 12 | **0.583** | 0.917 |
+    | overall | 26 | **0.769** | 0.885 |
+
+    **Mechanism:** RRF sees only ranks, so the full-text branch's rank-1 earns the same 1/61 as the dense branch's rank-1 *regardless of whether the lexical match means anything*. On a paraphrase query the FTS branch still returns 50 rows of incidental word overlap; a mediocre dense hit that also ranks well lexically (1/61 + 1/70 ≈ 0.031) outscores the correct dense rank-1 that has no lexical match at all (1/61 ≈ 0.016). Citation queries are the case where the lexical signal is real — and there hybrid does win, which is why KD-10's scoped claim survives while an unscoped one would not.
+
+    **Deliberately not resolved in this spec.** The obvious fixes — weighting the branches, shortening the FTS candidate pool, or gating the FTS branch on lexical-match quality — all introduce tuning parameters, and KD-1/KD-2/KD-8 commit this project to not tuning retrieval knobs before SPEC-007 can measure the effect. Changing the fusion rule now would also amend two approved Key decisions on the strength of a 26-question smoke set. **This is SPEC-007's first order of business**, and it is a live question about the charter's "why hybrid, not vector-only" rationale: the rationale holds for exact-citation queries and is currently *negative* for paraphrase queries at this corpus size. Re-measure before deciding — hybrid's advantage is expected to grow with corpus size, and 358 chunks is small enough that dense retrieval alone is strong.
+
+13. **Latency is asserted tightly only where it's measurable honestly — flagged (minor).** The obvious AC is a p95 bound in CI. CI runners have noisy, shared I/O; a tight p95 there is a flaky test generator. Split instead: CI asserts the structural property (concurrency: wall time < sum of injected per-branch delays) plus a deliberately generous fake-embedder bound; the real p95 target (AC-8) runs against the real corpus locally, like SPEC-003's real-corpus tier.
+
+## Acceptance criteria
+
+- **AC-1 (contract)** — Against a seeded synthetic corpus with a stub query embedder: `retrieve(q, k=8)` returns ≤ 8 `RetrievedChunk`, scores non-increasing, every field populated (non-empty `section_path`, `document_title`, `source_uri`), and repeated calls return identical ordering (deterministic tie-break).
+- **AC-2 (fusion math, pure)** — `rrf_fuse` on hand-built rank lists returns exactly `1/(60+r₁) + 1/(60+r₂)` scores; a chunk present in both lists at rank 5 outscores a chunk at rank 1 in a single list iff the math says so (`1/65+1/65 > 1/61` → true, asserted numerically); tie-break order is as specified.
+- **AC-3 (hybrid mechanics, synthetic)** — In a fixture where chunk T is FTS-rank-1 but outside the dense top-50, and chunk V is dense-rank-1 with no lexical match: hybrid top-8 contains both; vector-only top-8 misses T. Proves the fusion path, independent of embedding quality.
+- **AC-4 (embedder identity)** —
+  (a) Corpus rows say `fake:sha256-v1`, query embedder is `openai:text-embedding-3-small` → `EmbedderMismatchError` whose message contains both identities; symmetric case likewise.
+  (b) Mixed identities across chunk rows → `EmbedderMismatchError`.
+  (c) Matching identities → results returned.
+  (d) Empty `chunks` table → `EmptyCorpusError`.
+  (e) Ingest regression: a `--embedder fake` pipeline run writes `embedding_model = 'fake:sha256-v1'` on every row (the pipeline.py defect stays fixed).
+- **AC-5 (migration)** — On a database with rows `embedding_model = 'text-embedding-3-small'`: `alembic upgrade head` rewrites them to `openai:text-embedding-3-small`, leaves already-qualified rows untouched (idempotent predicate), adds `documents.doc_type` not-null with URI-pattern backfill (a pre-seeded NIST-URI document row reads `standard` after upgrade); `downgrade -1` strips the prefix and drops the column; both exit 0.
+- **AC-6 (retrieval quality, real corpus, local)** — A committed smoke set `evals/retrieval_smoke.jsonl` of 26 questions (14 citation-style: exact articles/items/clauses; 12 paraphrase-style), each labeled with the expected `section_path` (prefix match). Hybrid is compared against vector-only (same query embeddings, FTS branch disabled). **Measured 2026-07-26 on the 358-chunk corpus; recall@8 saturates at 1.000 for both methods, so the discriminating regime is k=1** (see Key decision 12):
+  - **Asserted:** hybrid recall@1 on the citation subset **strictly greater** than vector-only (measured 0.929 vs 0.857) — KD-10's claim, in the only regime with headroom.
+  - **Asserted:** hybrid recall@8 ≥ vector-only recall@8 overall (measured 1.000 vs 1.000). This clause is *satisfied but vacuous at this corpus size* — recorded as such rather than presented as evidence.
+  - **Recorded, not asserted:** recall@{1,3,8} × {overall, citation, paraphrase}, MRR@8, the distinct-section-rate distribution, and the stage-latency split, written to `evals/retrieval_baseline.json` (committed). **No absolute floor (review amendment):** the floor is set in SPEC-007 against the 50-question golden set — a provisional number amended to match the first run would be a measurement wearing a standard's clothes.
+- **AC-7 (concurrency, SPEC-002 KD-5)** — With instrumented search functions injecting `sleep(0.3)` in each branch: `retrieve()` wall time < 0.55 s (branches overlapped, not sequential), and the two branches observably use distinct connections (e.g. distinct `pg_backend_pid()`).
+- **AC-8 (latency)** — Measured 2026-07-26 over the 26 smoke queries, the split is decisive: `embed_ms` p50 170 / p95 843 / max 1117, versus **retrieval-side (both branches, concurrent) p50 11 / p95 16 / max 17**. An end-to-end p95 bound is therefore a bound on OpenAI's tail latency, not on this code, and over 26 samples p95 is the second-worst call (observed run-to-run: 856, 1072, 1361 ms). Split accordingly, per the same honesty rule as Key decision 13:
+  - **Asserted (local, real corpus):** retrieval-side p95 — `retrieve()` total minus the embedding round-trip — ≤ 150 ms. Currently 16 ms, ~10× headroom; this is the budget the code owns and the one a regression would move.
+  - **Asserted (local):** end-to-end **p50** ≤ 800 ms (measured 182 ms) — a stable estimator at this sample count, keeping a real end-to-end commitment.
+  - **Recorded, not asserted:** end-to-end p95/max, and the full stage split, in `evals/retrieval_baseline.json`. Restoring an end-to-end p95 assertion requires either a sample count where p95 is stable or a provider-latency budget agreed separately.
+  - **CI tier** (fake embedder, synthetic corpus ≥ 200 chunks): p95 over 50 calls ≤ 500 ms — generous by design, structural regressions only (Key decision 13).
+- **AC-9 (diversity instrumentation, SPEC-003 KD-12)** — `distinct_section_rate` unit-tested (8 chunks / 3 sections → 0.375; empty → 0.0); every `retrieve()` call emits one log record containing `distinct_section_rate` and all five stage latencies (captured via `caplog`); the function is importable from `rag_qa.retrieval.metrics` without a database.
+- **AC-10 (filters, push-down)** — With `filters.document_ids = (X,)`: every returned chunk has `document_id == X`; on a corpus where the top corpus-wide vector *and* FTS hits all live outside X and X holds ≥ k matching chunks, the filtered call still returns **exactly k** results (proves predicates run inside both branch queries, not post-fusion). Same shape asserted for `doc_types` and `source_uris`; combined filters AND together.
+- **AC-11 (ef_search GUC, review amendment 1)** — During a `retrieve()` call on a connection drawn fresh from the pool, `SHOW hnsw.ef_search` inside the vector branch's transaction reads 50; after the call, the same pooled connection outside any retrieval transaction reads the default (40) — `SET LOCAL` scoped correctly, no leakage across pool recycling.
+- **AC-12 (degenerate inputs, review amendment 3)** — (a) `retrieve("")` and `retrieve("   \n")` raise `ValueError` with **zero** embedding calls and zero SQL issued. (b) A query with no lexical match (`websearch_to_tsquery` yields no `@@` hits) returns k results in vector order without error, `fulltext_rank is None` on all. (c) A corpus/filter combination holding fewer than k chunks returns exactly that many, no padding, no error.
+
+## Test plan
+
+`tests/test_retrieval_fusion.py`, `test_retrieval_search.py`, `test_retrieval_service.py`, `test_retrieval_quality.py`, plus the migration test — async where DB-touching, reusing SPEC-002's binding fixture pattern (session-scoped engine, savepoint rollback), against the dockerized Postgres / CI service container.
+
+Two tiers, mirroring SPEC-003:
+
+- **Synthetic tier (CI, no network, no API key).** A seeding fixture inserts documents + ~40–200 chunks with **hand-constructed embedding vectors** (inserted directly, not via an embedding client) so dense-rank order is controlled exactly; texts are crafted so FTS winners are controlled independently. The query embedder is a stub returning a fixed vector with a settable `identity`. Backs AC-1–AC-4(a–d), AC-7, AC-8(CI), AC-9, AC-10, AC-11, AC-12. AC-4(e) reuses SPEC-003's synthetic ingest fixtures end-to-end with the fake embedder. Fusion tests (AC-2) are pure — no DB.
+- **Real-corpus tier (local, `skipif` like SPEC-003).** `test_retrieval_quality.py` requires the ingested corpus (`rag` database) and `OPENAI_API_KEY` for query embeddings — skipped in CI. Runs AC-6 and AC-8(local); writes `evals/retrieval_baseline.json` (recall@{1,3,8} per subset, MRR@8, diversity distribution, stage-latency split) and prints the per-query table (question, hybrid rank, vector-only rank, expected section). The distinct-section-rate distribution is the first real measurement SPEC-003 Key decision 12 asked for: **measured mean 0.832, median 0.875, min 0.375** at k=8 — clustering exists but is mild, so no de-duplication/MMR work is justified yet.
+
+Migration test (AC-5) follows SPEC-002's scratch-database pattern: seed unqualified rows and a NIST-URI document at revision 0002, upgrade, assert the embedding_model rewrite and the `doc_type` backfill, downgrade, assert restore.
+
+Concurrency test (AC-7) monkeypatches `search.vector_search` / `search.fulltext_search` with delayed wrappers recording `(start, end, pg_backend_pid)`; overlap is asserted from timestamps, not timing luck (0.55 s bound on two 0.3 s sleeps fails only if execution is sequential).
+
+Tests are written from these ACs and committed before/with the implementation, in the same commit series referencing SPEC-004.

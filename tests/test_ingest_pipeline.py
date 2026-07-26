@@ -134,7 +134,8 @@ async def test_chunks_carry_section_path_and_model(
     ).all()
     assert rows
     assert all(path and "›" in path for path, _, _ in rows)
-    assert all(model == "text-embedding-3-small" for _, model, _ in rows)
+    # the client's identity, not a constant (SPEC-004 AC-4e)
+    assert all(model == FakeVectorClient.identity for _, model, _ in rows)
 
 
 # --- manifest (AC-9) ----------------------------------------------------------
@@ -230,5 +231,7 @@ async def test_migration_0002_roundtrip() -> None:
 
     await asyncio.to_thread(command.upgrade, config, "head")
     assert await has_section_path()
-    await asyncio.to_thread(command.downgrade, config, "-1")
+    # Target revision 0001 rather than a step count: SPEC-004 added 0003, and a
+    # "-1" step now only reverts that, leaving section_path in place.
+    await asyncio.to_thread(command.downgrade, config, "0001")
     assert not await has_section_path()

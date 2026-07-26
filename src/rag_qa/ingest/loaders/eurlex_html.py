@@ -165,6 +165,7 @@ def load_eurlex_html(path: Path) -> ParsedDocument:
     return ParsedDocument(
         source_uri=SOURCE_URI,
         title=TITLE,
+        doc_type="regulation",
         raw_bytes=raw_bytes,
         sections=tuple(sections),
     )

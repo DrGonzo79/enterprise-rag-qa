@@ -50,6 +50,8 @@ class Section:
 class ParsedDocument:
     source_uri: str
     title: str
+    # semantic category, set per loader (SPEC-004): standard | regulation | filing
+    doc_type: str
     raw_bytes: bytes
     sections: tuple[Section, ...]
     dropped_tables: tuple[DroppedTable, ...] = field(default=())

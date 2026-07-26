@@ -10,6 +10,8 @@ from rag_qa.ingest.embedder import RetryableEmbeddingError, embed_all
 class FakeEmbeddingClient:
     """Deterministic vectors + instrumentation for AC-5/AC-6 assertions."""
 
+    identity = "fake:test-v1"  # EmbeddingClient protocol (SPEC-004)
+
     def __init__(self, fail_first_n: int = 0) -> None:
         self.calls: list[int] = []  # batch sizes, in completion order
         self.in_flight = 0

@@ -1,0 +1,26 @@
+{"id": "cit-01", "style": "citation", "question": "What does Article 6(2) say about classifying high-risk AI systems?", "expected_section_prefix": "EU AI Act › CHAPTER III › SECTION 1 › Article 6"}
+{"id": "cit-02", "style": "citation", "question": "What does Article 9 require for a risk management system?", "expected_section_prefix": "EU AI Act › CHAPTER III › SECTION 2 › Article 9"}
+{"id": "cit-03", "style": "citation", "question": "Which AI practices does Article 5 prohibit?", "expected_section_prefix": "EU AI Act › CHAPTER II › Article 5"}
+{"id": "cit-04", "style": "citation", "question": "What does Article 13 require about transparency and provision of information to deployers?", "expected_section_prefix": "EU AI Act › CHAPTER III › SECTION 2 › Article 13"}
+{"id": "cit-05", "style": "citation", "question": "What does Article 14 require for human oversight?", "expected_section_prefix": "EU AI Act › CHAPTER III › SECTION 2 › Article 14"}
+{"id": "cit-06", "style": "citation", "question": "What does Article 10 require about data and data governance?", "expected_section_prefix": "EU AI Act › CHAPTER III › SECTION 2 › Article 10"}
+{"id": "cit-07", "style": "citation", "question": "What penalties are set out in Article 99?", "expected_section_prefix": "EU AI Act › CHAPTER XII › Article 99"}
+{"id": "cit-08", "style": "citation", "question": "What obligations does Article 53 place on providers of general-purpose AI models?", "expected_section_prefix": "EU AI Act › CHAPTER V › SECTION 2 › Article 53"}
+{"id": "cit-09", "style": "citation", "question": "What does Article 50 require for transparency obligations of certain AI systems?", "expected_section_prefix": "EU AI Act › CHAPTER IV › Article 50"}
+{"id": "cit-10", "style": "citation", "question": "What does Article 57 establish about AI regulatory sandboxes?", "expected_section_prefix": "EU AI Act › CHAPTER VI › Article 57"}
+{"id": "cit-11", "style": "citation", "question": "What does Article 15 require for accuracy, robustness and cybersecurity?", "expected_section_prefix": "EU AI Act › CHAPTER III › SECTION 2 › Article 15"}
+{"id": "cit-12", "style": "citation", "question": "What is listed in Annex III of the AI Act?", "expected_section_prefix": "EU AI Act › Annex Iii"}
+{"id": "cit-13", "style": "citation", "question": "What does Item 1A disclose about risk factors?", "expected_section_prefix": "NVIDIA 10-K FY2026 › Item 1A. Risk Factors"}
+{"id": "cit-14", "style": "citation", "question": "What does Item 1C describe about cybersecurity risk management and governance?", "expected_section_prefix": "NVIDIA 10-K FY2026 › Item 1C. Cybersecurity"}
+{"id": "par-01", "style": "paraphrase", "question": "How should an organization decide how much AI risk it is willing to accept?", "expected_section_prefix": "NIST AI RMF 1.0 › Framing Risk › Challenges for AI Risk Management › Risk Tolerance"}
+{"id": "par-02", "style": "paraphrase", "question": "What makes an AI system valid and reliable?", "expected_section_prefix": "NIST AI RMF 1.0 › AI Risks and Trustworthiness › Valid and Reliable"}
+{"id": "par-03", "style": "paraphrase", "question": "Why is it hard to measure the risk of an AI system?", "expected_section_prefix": "NIST AI RMF 1.0 › Framing Risk › Challenges for AI Risk Management › Risk Measurement"}
+{"id": "par-04", "style": "paraphrase", "question": "How do the risks of machine learning differ from those of conventional software?", "expected_section_prefix": "NIST AI RMF 1.0 › Appendix B"}
+{"id": "par-05", "style": "paraphrase", "question": "What does it mean for a system to be fair and to manage harmful bias?", "expected_section_prefix": "NIST AI RMF 1.0 › AI Risks and Trustworthiness › Fair"}
+{"id": "par-06", "style": "paraphrase", "question": "How does the framework describe accountability and transparency as characteristics?", "expected_section_prefix": "NIST AI RMF 1.0 › AI Risks and Trustworthiness › Accountable and Transparent"}
+{"id": "par-07", "style": "paraphrase", "question": "What tasks does the govern function of the framework cover?", "expected_section_prefix": "NIST AI RMF 1.0 › AI RMF Core › Govern"}
+{"id": "par-08", "style": "paraphrase", "question": "How does the company describe competition in the markets where it sells?", "expected_section_prefix": "NVIDIA 10-K FY2026 › Item 1. Business › Competition"}
+{"id": "par-09", "style": "paraphrase", "question": "How does the company recruit, develop and retain its workforce?", "expected_section_prefix": "NVIDIA 10-K FY2026 › Item 1. Business › Human Capital Management"}
+{"id": "par-10", "style": "paraphrase", "question": "Who actually fabricates the company's chips and assembles its boards?", "expected_section_prefix": "NVIDIA 10-K FY2026 › Item 1. Business › Manufacturing"}
+{"id": "par-11", "style": "paraphrase", "question": "What does the company say about protecting its inventions and intellectual property?", "expected_section_prefix": "NVIDIA 10-K FY2026 › Item 1. Business › Patents and Proprietary Rights"}
+{"id": "par-12", "style": "paraphrase", "question": "How could a weakening economy hurt the business?", "expected_section_prefix": "NVIDIA 10-K FY2026 › Item 1A. Risk Factors › Adverse economic conditions"}

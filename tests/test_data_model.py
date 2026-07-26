@@ -22,6 +22,7 @@ def _document(**overrides: object) -> Document:
         "id": uuid.uuid4(),
         "source_uri": "https://example.com/doc.pdf",
         "title": "Test Document",
+        "doc_type": "standard",  # SPEC-004 migration 0003
         "content_hash": uuid.uuid4().hex + uuid.uuid4().hex,
         "byte_size": 1024,
     }

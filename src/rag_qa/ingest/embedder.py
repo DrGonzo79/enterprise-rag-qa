@@ -18,6 +18,10 @@ BACKOFF_BASE_SECONDS = 1.0
 
 
 class EmbeddingClient(Protocol):
+    # "provider:model" identity written to chunks.embedding_model at ingest and
+    # verified against stored vectors at query time (SPEC-004 KD-3/KD-4).
+    identity: str
+
     async def embed(self, texts: list[str]) -> list[list[float]]: ...
 
 
@@ -34,6 +38,7 @@ class OpenAIEmbeddingClient:
 
         self._client = AsyncOpenAI()
         self._model = model
+        self.identity = f"openai:{model}"
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         import openai
@@ -58,6 +63,7 @@ class FakeLocalEmbeddingClient:
 
     def __init__(self, dim: int = 1536) -> None:
         self._dim = dim
+        self.identity = "fake:sha256-v1"
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         import hashlib

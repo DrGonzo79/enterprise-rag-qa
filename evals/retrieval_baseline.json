@@ -1,0 +1,300 @@
+{
+  "note": "Measured baseline, not a threshold. SPEC-004 AC-6 sets no floor; SPEC-007 sets one against the 50-question golden set. recall@3 and recall@8 saturate at 1.000 for both methods on this 358-chunk corpus — k=1 is the only regime with discriminating power. See SPEC-004 Key decision 12 for the unresolved finding that plain RRF loses to vector-only on paraphrase queries.",
+  "measured_on": "358-chunk corpus (NIST AI RMF, EU AI Act, NVDA 10-K)",
+  "k": 8,
+  "cases": 26,
+  "recall_at_1": {
+    "hybrid_overall": 0.7692,
+    "vector_only_overall": 0.8846,
+    "hybrid_citation": 0.9286,
+    "vector_only_citation": 0.8571,
+    "hybrid_paraphrase": 0.5833,
+    "vector_only_paraphrase": 0.9167
+  },
+  "recall_at_3": {
+    "hybrid_overall": 1.0,
+    "vector_only_overall": 1.0,
+    "hybrid_citation": 1.0,
+    "vector_only_citation": 1.0,
+    "hybrid_paraphrase": 1.0,
+    "vector_only_paraphrase": 1.0
+  },
+  "recall_at_8": {
+    "hybrid_overall": 1.0,
+    "vector_only_overall": 1.0,
+    "hybrid_citation": 1.0,
+    "vector_only_citation": 1.0,
+    "hybrid_paraphrase": 1.0,
+    "vector_only_paraphrase": 1.0
+  },
+  "mrr_at_k": {
+    "hybrid_overall": 0.8654,
+    "vector_only_overall": 0.9423,
+    "hybrid_citation": 0.9524,
+    "vector_only_citation": 0.9286,
+    "hybrid_paraphrase": 0.7639,
+    "vector_only_paraphrase": 0.9583
+  },
+  "distinct_section_rate": {
+    "mean": 0.8317,
+    "median": 0.875,
+    "min": 0.375,
+    "max": 1.0
+  },
+  "latency_ms": {
+    "end_to_end_p50": 213.4,
+    "end_to_end_p95": 616.9,
+    "end_to_end_max": 689.3
+  },
+  "per_case": [
+    {
+      "id": "cit-01",
+      "style": "citation",
+      "question": "What does Article 6(2) say about classifying high-risk AI systems?",
+      "expected": "EU AI Act › CHAPTER III › SECTION 1 › Article 6",
+      "hybrid_rank": 1,
+      "vector_rank": 1,
+      "distinct_section_rate": 0.875
+    },
+    {
+      "id": "cit-02",
+      "style": "citation",
+      "question": "What does Article 9 require for a risk management system?",
+      "expected": "EU AI Act › CHAPTER III › SECTION 2 › Article 9",
+      "hybrid_rank": 1,
+      "vector_rank": 1,
+      "distinct_section_rate": 1.0
+    },
+    {
+      "id": "cit-03",
+      "style": "citation",
+      "question": "Which AI practices does Article 5 prohibit?",
+      "expected": "EU AI Act › CHAPTER II › Article 5",
+      "hybrid_rank": 1,
+      "vector_rank": 1,
+      "distinct_section_rate": 0.625
+    },
+    {
+      "id": "cit-04",
+      "style": "citation",
+      "question": "What does Article 13 require about transparency and provision of information to deployers?",
+      "expected": "EU AI Act › CHAPTER III › SECTION 2 › Article 13",
+      "hybrid_rank": 1,
+      "vector_rank": 1,
+      "distinct_section_rate": 0.625
+    },
+    {
+      "id": "cit-05",
+      "style": "citation",
+      "question": "What does Article 14 require for human oversight?",
+      "expected": "EU AI Act › CHAPTER III › SECTION 2 › Article 14",
+      "hybrid_rank": 1,
+      "vector_rank": 1,
+      "distinct_section_rate": 0.875
+    },
+    {
+      "id": "cit-06",
+      "style": "citation",
+      "question": "What does Article 10 require about data and data governance?",
+      "expected": "EU AI Act › CHAPTER III › SECTION 2 › Article 10",
+      "hybrid_rank": 1,
+      "vector_rank": 1,
+      "distinct_section_rate": 0.875
+    },
+    {
+      "id": "cit-07",
+      "style": "citation",
+      "question": "What penalties are set out in Article 99?",
+      "expected": "EU AI Act › CHAPTER XII › Article 99",
+      "hybrid_rank": 1,
+      "vector_rank": 1,
+      "distinct_section_rate": 0.875
+    },
+    {
+      "id": "cit-08",
+      "style": "citation",
+      "question": "What obligations does Article 53 place on providers of general-purpose AI models?",
+      "expected": "EU AI Act › CHAPTER V › SECTION 2 › Article 53",
+      "hybrid_rank": 1,
+      "vector_rank": 1,
+      "distinct_section_rate": 1.0
+    },
+    {
+      "id": "cit-09",
+      "style": "citation",
+      "question": "What does Article 50 require for transparency obligations of certain AI systems?",
+      "expected": "EU AI Act › CHAPTER IV › Article 50",
+      "hybrid_rank": 1,
+      "vector_rank": 1,
+      "distinct_section_rate": 0.875
+    },
+    {
+      "id": "cit-10",
+      "style": "citation",
+      "question": "What does Article 57 establish about AI regulatory sandboxes?",
+      "expected": "EU AI Act › CHAPTER VI › Article 57",
+      "hybrid_rank": 1,
+      "vector_rank": 2,
+      "distinct_section_rate": 0.625
+    },
+    {
+      "id": "cit-11",
+      "style": "citation",
+      "question": "What does Article 15 require for accuracy, robustness and cybersecurity?",
+      "expected": "EU AI Act › CHAPTER III › SECTION 2 › Article 15",
+      "hybrid_rank": 1,
+      "vector_rank": 1,
+      "distinct_section_rate": 1.0
+    },
+    {
+      "id": "cit-12",
+      "style": "citation",
+      "question": "What is listed in Annex III of the AI Act?",
+      "expected": "EU AI Act › Annex Iii",
+      "hybrid_rank": 3,
+      "vector_rank": 1,
+      "distinct_section_rate": 0.875
+    },
+    {
+      "id": "cit-13",
+      "style": "citation",
+      "question": "What does Item 1A disclose about risk factors?",
+      "expected": "NVIDIA 10-K FY2026 › Item 1A. Risk Factors",
+      "hybrid_rank": 1,
+      "vector_rank": 2,
+      "distinct_section_rate": 0.75
+    },
+    {
+      "id": "cit-14",
+      "style": "citation",
+      "question": "What does Item 1C describe about cybersecurity risk management and governance?",
+      "expected": "NVIDIA 10-K FY2026 › Item 1C. Cybersecurity",
+      "hybrid_rank": 1,
+      "vector_rank": 1,
+      "distinct_section_rate": 0.875
+    },
+    {
+      "id": "par-01",
+      "style": "paraphrase",
+      "question": "How should an organization decide how much AI risk it is willing to accept?",
+      "expected": "NIST AI RMF 1.0 › Framing Risk › Challenges for AI Risk Management › Risk Tolerance",
+      "hybrid_rank": 2,
+      "vector_rank": 2,
+      "distinct_section_rate": 0.875
+    },
+    {
+      "id": "par-02",
+      "style": "paraphrase",
+      "question": "What makes an AI system valid and reliable?",
+      "expected": "NIST AI RMF 1.0 › AI Risks and Trustworthiness › Valid and Reliable",
+      "hybrid_rank": 3,
+      "vector_rank": 1,
+      "distinct_section_rate": 0.875
+    },
+    {
+      "id": "par-03",
+      "style": "paraphrase",
+      "question": "Why is it hard to measure the risk of an AI system?",
+      "expected": "NIST AI RMF 1.0 › Framing Risk › Challenges for AI Risk Management › Risk Measurement",
+      "hybrid_rank": 1,
+      "vector_rank": 1,
+      "distinct_section_rate": 0.75
+    },
+    {
+      "id": "par-04",
+      "style": "paraphrase",
+      "question": "How do the risks of machine learning differ from those of conventional software?",
+      "expected": "NIST AI RMF 1.0 › Appendix B",
+      "hybrid_rank": 1,
+      "vector_rank": 1,
+      "distinct_section_rate": 0.875
+    },
+    {
+      "id": "par-05",
+      "style": "paraphrase",
+      "question": "What does it mean for a system to be fair and to manage harmful bias?",
+      "expected": "NIST AI RMF 1.0 › AI Risks and Trustworthiness › Fair",
+      "hybrid_rank": 1,
+      "vector_rank": 1,
+      "distinct_section_rate": 1.0
+    },
+    {
+      "id": "par-06",
+      "style": "paraphrase",
+      "question": "How does the framework describe accountability and transparency as characteristics?",
+      "expected": "NIST AI RMF 1.0 › AI Risks and Trustworthiness › Accountable and Transparent",
+      "hybrid_rank": 3,
+      "vector_rank": 1,
+      "distinct_section_rate": 0.875
+    },
+    {
+      "id": "par-07",
+      "style": "paraphrase",
+      "question": "What tasks does the govern function of the framework cover?",
+      "expected": "NIST AI RMF 1.0 › AI RMF Core › Govern",
+      "hybrid_rank": 2,
+      "vector_rank": 1,
+      "distinct_section_rate": 0.875
+    },
+    {
+      "id": "par-08",
+      "style": "paraphrase",
+      "question": "How does the company describe competition in the markets where it sells?",
+      "expected": "NVIDIA 10-K FY2026 › Item 1. Business › Competition",
+      "hybrid_rank": 2,
+      "vector_rank": 1,
+      "distinct_section_rate": 0.875
+    },
+    {
+      "id": "par-09",
+      "style": "paraphrase",
+      "question": "How does the company recruit, develop and retain its workforce?",
+      "expected": "NVIDIA 10-K FY2026 › Item 1. Business › Human Capital Management",
+      "hybrid_rank": 1,
+      "vector_rank": 1,
+      "distinct_section_rate": 1.0
+    },
+    {
+      "id": "par-10",
+      "style": "paraphrase",
+      "question": "Who actually fabricates the company's chips and assembles its boards?",
+      "expected": "NVIDIA 10-K FY2026 › Item 1. Business › Manufacturing",
+      "hybrid_rank": 1,
+      "vector_rank": 1,
+      "distinct_section_rate": 0.75
+    },
+    {
+      "id": "par-11",
+      "style": "paraphrase",
+      "question": "What does the company say about protecting its inventions and intellectual property?",
+      "expected": "NVIDIA 10-K FY2026 › Item 1. Business › Patents and Proprietary Rights",
+      "hybrid_rank": 1,
+      "vector_rank": 1,
+      "distinct_section_rate": 0.75
+    },
+    {
+      "id": "par-12",
+      "style": "paraphrase",
+      "question": "How could a weakening economy hurt the business?",
+      "expected": "NVIDIA 10-K FY2026 › Item 1A. Risk Factors › Adverse economic conditions",
+      "hybrid_rank": 1,
+      "vector_rank": 1,
+      "distinct_section_rate": 0.375
+    }
+  ],
+  "stage_latency_split_ms": {
+    "embed_ms": {
+      "p50": 211.4,
+      "p95": 937.1
+    },
+    "retrieval_side_ms": {
+      "p50": 11.7,
+      "p95": 13.5
+    },
+    "end_to_end_ms": {
+      "p50": 222.0,
+      "p95": 948.0,
+      "max": 1077.2
+    }
+  }
+}

@@ -33,6 +33,8 @@ class Document(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     source_uri: Mapped[str] = mapped_column(Text, nullable=False)
     title: Mapped[str] = mapped_column(Text, nullable=False)
+    # semantic category for retrieval filters (SPEC-004): standard | regulation | filing
+    doc_type: Mapped[str] = mapped_column(Text, nullable=False)
     # sha256 over raw content ‖ chunking config (SPEC-002 Key decision 9)
     content_hash: Mapped[str] = mapped_column(CHAR(64), unique=True, nullable=False)
     byte_size: Mapped[int] = mapped_column(Integer, nullable=False)

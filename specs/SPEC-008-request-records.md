@@ -1,0 +1,118 @@
+# SPEC-008 — Request Records and Failure Signal
+
+**Status:** Draft — 2026-07-26
+**Depends on:** SPEC-006 (API — the request-id seam, log configuration, in-process counters, `/metrics`)
+**Hands off to:** SPEC-010 (deployment — log shipping, retention, alert rules, budget alerts)
+
+**Scope note.** An earlier draft of this spec was titled *Observability* and also covered log configuration, `LOG_LEVEL`, and metric label cardinality. Those were not gaps in coverage — they were **defects in shipped code**, and they were fixed under SPEC-006 as Key decision 17 in commit `424b667`. Parking a bug in an unimplemented spec files it as roadmap, which is the opposite of what a defect needs. What remains here is genuinely new work, and the spec is named for it.
+
+## Purpose
+
+SPEC-006 delivers a request id that reaches an operator, structured records from retrieval and generation, and counters behind `/metrics`. Three things are still missing, and they share a shape: **the system's most important moments produce the least signal.**
+
+1. **No record says what happened to the request.** The id correlates SPEC-004's and SPEC-005's records with each other, but nothing states the outcome — method, route, status, duration. A trace has links and no spine.
+2. **The three ways this service refuses work are indistinguishable.** A budget trip, a shed under the concurrency bound, and an embedder mismatch all render as `rag_qa_requests_total{route="/query",status="503"}`. The single most consequential operational state of this deployment — *the demo has stopped answering and will not resume until the window resets* — cannot be read from the endpoint an operator reads.
+3. **A provider failure mid-stream leaves no server-side record at all.** `_pump` catches the exception, queues it, and the client receives a terminal error frame. Nothing is logged. The one failure mode that reaches a user as a broken answer is the one the server keeps no evidence of.
+
+Plus the artifact that makes the rest usable by someone who did not write it: `docs/observability.md`, one real request followed end to end, with its field names checked against the code so it cannot quietly go stale.
+
+## Non-goals
+
+- **Log configuration, formatters, `LOG_LEVEL`, and metric label bounds** — fixed under SPEC-006 Key decision 17 (commit `424b667`). This spec consumes that configuration and does not revisit it.
+- **OpenTelemetry traces, spans, and exporters** — first on the charter's scope-cut ladder. Key decision 6 states the seam and the revisit trigger; nothing is built.
+- **Dashboards, alert rules, scrape configuration, log shipping, retention** — SPEC-010. This spec produces signal; deployment decides who is woken by it.
+- **Changing SPEC-006's request-id design.** No library signature gains a parameter.
+- **Per-caller cost attribution, usage billing, multi-tenancy** — unchanged non-goals from SPEC-005 and SPEC-006.
+- **Evaluation metrics** — SPEC-007 measures answer quality offline. `/metrics` answers "what is happening now".
+- **Log sampling or volume control**, beyond the probe-endpoint rule in Key decision 1. At demo traffic a day of logs is a few megabytes; sampling would tune a problem that does not exist and would complicate the correlation this spec exists to provide.
+- **A new runtime dependency.** Key decision 4 adds a test-only one.
+
+## Interface
+
+### Modules
+
+```
+src/rag_qa/api/
+    middleware.py         # + RequestRecordMiddleware: one completion record per request
+    metrics.py            # + breaker/shed/error counters, budget headroom gauge
+    budget.py             # + the ceiling that tripped, so the counter can be labelled
+    routes/query.py       # + server-side ERROR record when a stream fails mid-flight
+docs/
+    observability.md      # one real request, end to end
+```
+
+### The completion record
+
+Emitted once per HTTP request, at `INFO`, or `WARNING` for 5xx:
+
+```json
+{"ts":"2026-07-26T17:04:03.221Z","level":"INFO","logger":"rag_qa.api.request",
+ "msg":"http.request","request_id":"9f2c1ab4e0d3477a","method":"POST","route":"/query",
+ "status":200,"duration_ms":1483.2,"verdict":"answered"}
+```
+
+| Field | Always | Notes |
+|---|---|---|
+| `method`, `route`, `status`, `duration_ms` | yes | `route` is the matched template from SPEC-006 Key decision 17, never the raw path |
+| `verdict` | no | present only when the handler produced one |
+| `error_code` | no | the error envelope's code, when the response was an error |
+
+### Metrics added
+
+| Series | Type | Labels | Answers |
+|---|---|---|---|
+| `rag_qa_budget_trips_total` | counter | `ceiling` = `daily`\|`monthly` | Has the demo stopped answering, and which ceiling stopped it |
+| `rag_qa_requests_shed_total` | counter | — | Is the concurrency bound being reached |
+| `rag_qa_errors_total` | counter | `code` (the envelope's closed set) | Which failure, not merely which status |
+| `rag_qa_budget_remaining_usd` | gauge | `ceiling` | How much headroom is left |
+
+### Configuration
+
+None added.
+
+### New dependencies
+
+None at runtime. One test-only: `prometheus-client`, used solely as a parser (Key decision 4).
+
+## Key decisions
+
+1. **One completion record per request, emitted by the middleware — not uvicorn's access log. Flagged, arguing against the obvious choice.** Uvicorn already logs every request, for free, in a familiar format. Rejected on three counts, the first decisive: **it does not carry the request id**, so the one line naming the request's outcome would be the only line in the trace that cannot be joined to the rest of it. Second, it is a preformatted string, so a JSON pipeline gets prose where it needs `status` and `duration_ms` as values. Third, its timing brackets the ASGI call and excludes middleware — where the shed and budget decisions are made, so the request whose duration matters most is the one it measures worst. `configure_logging()` therefore **disables uvicorn's access log**, because two access logs per request is worse than either alone. The record is emitted in a `finally`, so a shed 503, a budget 503, and an unhandled 500 each produce exactly one: **a request that failed early is not a request that goes unrecorded.**
+
+    **Probe endpoints are the immediate consequence, and they are handled rather than discovered.** A readiness probe every 10 s across three replicas is ~26,000 records a day whose content is "still ok" — volume that costs money to ship, buries what matters, and trains an operator to filter out the logger that would have told them the corpus went empty. `/health` and `/healthz` completion records are emitted at `DEBUG`, so they vanish at the default level while still being counted in `/metrics`, where a count is exactly the right representation for a high-frequency uninteresting event.
+
+2. **The completion record carries no question text, no answer text, and no key. Flagged — the easiest rule here to violate later with one temporary debug line.** SPEC-004 already logs `query_sha` rather than the query, and SPEC-005 stores question and answer in `query_log` under an explicitly demo-only retention decision. That distinction becomes the rule, because **logs and `query_log` are not the same kind of store**: the table is one `DELETE` from being purged and lives in a database the owner controls, while log records ship to a platform sink with its own retention, its own copies, and no delete story any spec here can promise. A question typed into a public demo is user input the project never asked to keep twice. AC-2 asserts it with a canary rather than trusting review, because the violating change is always one line and always looks harmless.
+
+3. **The three refusals get distinct counters, and `/metrics` stays admin-scoped precisely because of what they say.** Status alone cannot tell a budget trip from a shed from an embedder mismatch, so today the endpoint an operator reads cannot answer the question they are actually asking. Adding `ceiling`-labelled trip counters and a headroom gauge fixes that. **The tension with SPEC-006 Key decision 8 is real and resolves the same way it did there:** budget headroom is the sharpest possible version of "a real-time feedback channel for anyone trying to burn the budget" — it is a progress bar with the finish line labelled. It is acceptable **only** behind the admin key, and this decision stands as an argument against ever relaxing that scope: the endpoint just got more sensitive, not less.
+
+4. **No `prometheus_client` at runtime; it is added as a test-only parser instead. Flagged (minor), arguing against the obvious choice.** The obvious move is to adopt the library and delete the hand-rolled renderer. Rejected for now: the renderer is ~90 lines, written and tested, and the exposition format is stable text rather than a moving target; the library brings a process-global registry that fights the per-app `Metrics` instance SPEC-006 Key decision 9 deliberately uses, and its multiprocess mode is a real complication for a Container App. **What is not acceptable is hand-rolling a wire format and hoping it parses**, so the library becomes a development dependency and AC-6 feeds `/metrics` through its parser. The oracle is the library; the runtime is ours. **Revisit when** label combinations get complex enough that rendering them by hand stops being obviously correct, or when a second process model appears.
+
+5. **A stream that fails mid-flight is recorded server-side, at `ERROR`, in addition to the frame the client receives. Flagged (defect-shaped, but new behaviour rather than a fix).** `_pump` currently catches the provider exception, queues it, and `frames()` yields a terminal error frame — a correct client-facing outcome with no server-side trace whatsoever. The asymmetry is backwards: **this is the only failure mode that reaches a user as a broken answer, and it is the only one that leaves the operator nothing to look at.** `query_log` does not close the gap either — it records the tokens consumed, not that the stream failed. The record carries the request id and the translated error code, which is what joins it to the completion record and to SPEC-004's and SPEC-005's lines. It is emitted where the exception is caught, before the frame is queued, because the frame's delivery depends on a client that may already be gone.
+
+6. **OpenTelemetry is scoped and declared, not built. Flagged (deliberate deferral).** The charter puts OTel traces first on the cut ladder and this spec agrees rather than quietly reinstating them. What a trace buys over what is specified here is span-level attribution *across services*, and there is one service. The three latency questions this deployment has — embedding round-trip, retrieval, provider call — are already answered by SPEC-004's branch timings, the completion record's total, and the histogram's distribution. **The seam, stated so adopting OTel later is wiring rather than redesign:** the request id is already a `ContextVar` propagated into tasks, which is the mechanism a span context uses, and the completion record already holds the attributes a root span would. **Revisit when** a second service appears, or when a latency question arises that the histogram plus branch timings genuinely cannot answer — not when a trace would merely look impressive.
+
+7. **`docs/observability.md` traces one real request, and its field names are asserted against the code. Flagged — the alternative is a document worse than nothing.** A walkthrough written from memory names fields that are nearly right, and a reader who greps for one and finds nothing concludes the logging is broken rather than the doc. The sample records and metric names are produced by **running** the request, and AC-8 parses the document, extracts every field and metric name it shows, and asserts each is actually emitted. **The doc drifts, the test fails, someone fixes the doc** — the only mechanism that has ever kept documentation true. It is also the artifact a reader of a public repository is most likely to judge this project by, which is the second reason it is in scope rather than deferred.
+
+## Acceptance criteria
+
+- **AC-1 (the completion record exists and is singular)** — Exactly one `msg: "http.request"` record per request, carrying `method`, `route`, `status`, `duration_ms`, and `request_id`, asserted for each of: a 200 `/query`, a 503 shed by the semaphore, a 503 `budget_exhausted`, an unhandled 500, and a completed SSE stream (emitted when the stream ends, not when headers are sent). `duration_ms` > 0 in every case; `route` is the matched template, never a raw path; 5xx records are at `WARNING` or above; the `/query` record carries `verdict` and an error response carries `error_code`.
+- **AC-2 (the record carries nothing sensitive)** — A `/query` whose question contains a canary and whose fake-client answer contains a second canary emits **no** record containing either canary, the read key, or the admin key. Asserted over every record emitted during the request, in both `json` and `text` modes.
+- **AC-3 (probe endpoints do not flood)** — Ten `/health` and ten `/healthz` calls at the default level emit **zero** completion records, while `rag_qa_requests_total` for those routes advances by ten each. At `LOG_LEVEL=DEBUG` the same calls emit twenty. A count is the right representation for a high-frequency uninteresting event; a line per poll is not.
+- **AC-4 (the counters advance, and only on their own trigger)** — `rag_qa_budget_trips_total{ceiling="daily"}` and `{ceiling="monthly"}` each advance on the corresponding trip and on nothing else — including not on each other, asserted with a case where both ceilings are exhausted and the monthly is reported (SPEC-006 KD-16). `rag_qa_requests_shed_total` advances on a semaphore shed and **not** on a budget 503. `rag_qa_errors_total{code=…}` advances with the envelope's code for `embedder_mismatch`, `budget_exhausted`, `upstream_error`, and `validation_error`. `rag_qa_budget_remaining_usd` equals the ceiling minus recorded spend and is absent when no ceiling is configured.
+- **AC-5 (the three refusals are distinguishable)** — After one budget trip, one shed, and one embedder mismatch, `/metrics` output contains three distinct series that separate them — the failing assertion being that all three are visible as themselves rather than as `status="503"` counted three times. This is the criterion the whole metric section exists for; it is asserted directly rather than inferred from the individual counters.
+- **AC-6 (the exposition is valid, judged by something that is not us)** — `/metrics` parses without error via `prometheus_client.parser.text_string_to_metric_families` (test-only dependency), every family carries `HELP` and `TYPE`, and no metric name appears twice. Asserted after traffic that populates every series, so the parser sees labels and buckets rather than an empty registry.
+- **AC-7 (a stream failing mid-flight is recorded)** — An SSE stream whose provider fails after the first frame emits an `ERROR` record carrying the request id and the translated error code, **in addition to** the terminal error frame the client receives, and still produces exactly one completion record. Asserted by counting records, since the current behaviour produces zero. A client that disconnects mid-stream — which is not a failure — produces **no** `ERROR` record, so the two are not conflated.
+- **AC-8 (the walkthrough cannot go stale)** — `docs/observability.md` exists; every JSON field name in its sample records is emitted by the formatter for a real request, and every metric name it mentions appears in `/metrics` output. Renaming a field without updating the document fails this test.
+
+## Test plan
+
+`tests/test_api_logging.py` (AC-1, AC-2, AC-3, AC-8), additions to `tests/test_api_metrics.py` (AC-4, AC-5, AC-6) and `tests/test_api_sse.py` (AC-7).
+
+**Capture is through the configured handler, never `caplog`.** SPEC-006's `captured_logs` helper (`tests/test_api_context.py`) installs the real formatter over a `StringIO` and is reused here. `caplog` reads `LogRecord` objects before formatting, which is precisely how SPEC-006's original AC-7 passed while no formatter existed — the fifth entry in CLAUDE.md's list of tests that proved nothing. Records are parsed with `json.loads` per line, so a record that fails to be one line fails loudly.
+
+**Tiering follows SPEC-006's.** AC-1, AC-2, AC-3, AC-7 run on the no-database tier with a stubbed retriever and `FakeLLMClient`. AC-4, AC-5, AC-6 need the pooled tier for the budget path. AC-8 needs whatever tier produces the sample it checks.
+
+**No network in any tier**, unchanged from SPEC-005 and SPEC-006.
+
+**Every test is verified by breaking the behaviour it covers** (CLAUDE.md rule 3), and four breaks are named because the criteria were written from them: deleting the `finally` that emits the completion record must fail AC-1 for the shed and 500 cases specifically, not merely for the 200 case; adding the question to the completion record must fail AC-2; labelling both budget ceilings with one constant must fail AC-4; and removing the `ERROR` record must fail AC-7 while every SSE test in SPEC-006 continues to pass — which is the shape of the gap this spec exists to close.
+
+Tests are written from these acceptance criteria and committed with the implementation, in the same commit series referencing SPEC-008.

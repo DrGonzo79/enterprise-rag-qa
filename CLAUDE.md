@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Retrieval-augmented Q&A over public compliance documents (NIST AI RMF, EU AI Act, public 10-K filings) with a scored evaluation harness and hybrid retrieval. Building in public; target ship September 15, 2026. Currently at the scaffold stage — `src/rag_qa/` holds only a `/healthz` FastAPI app; most of the system exists as specs, not code.
+Retrieval-augmented Q&A over public compliance documents (NIST AI RMF, EU AI Act, public 10-K filings) with a scored evaluation harness and hybrid retrieval. Building in public; target ship September 15, 2026. Ingestion, hybrid retrieval, generation, and the HTTP API are implemented under SPEC-003 through SPEC-006; the eval harness (SPEC-007), frontend (SPEC-009), and deployment (SPEC-010) are not yet written.
 
 ## Commands
 
@@ -30,14 +30,14 @@ Specs in `/specs` precede all code. The process:
 1. Specs are `specs/SPEC-NNN-name.md`, numbered sequentially, with **exactly six sections in order**: Purpose · Non-goals · Interface · Key decisions · Acceptance criteria · Test plan.
 2. Acceptance criteria must be objectively testable — each names the command, assertion, or observable state that proves it.
 3. Tests are written **from the acceptance criteria, before implementation**.
-   - **After writing any test, verify it fails when the behavior under test is broken.** Break the behavior — invert a condition, delete the guard, add the consumer the code forbids — run the test, watch it fail, then restore. A test never observed failing asserts the author's intent, not the system's behavior. **Three tests in this project have passed while proving nothing:** the savepoint blind spot (the app's own sessions could not see the fixture's uncommitted rows), the verdict-prefix check, and a request-id test asserting against stub log records that were never emitted. A fourth was caught by this rule during SPEC-006's second review — the concurrency measurement read peak overlap, which timing made 2 even when three sessions were open. A fifth is SPEC-006 AC-7: it asserts the request id on `caplog` records, and `caplog` reads `LogRecord` objects before any formatter runs, so the test structurally could not observe that no formatter existed and the id reached no operator — it proved the half of KD-5 that worked and was blind to the half that did not. The failure mode is uniform: the assertion was true for a reason unrelated to the behavior. Only the failing run distinguishes them, and **a test that inspects an intermediate object rather than the output is the shape to be most suspicious of.**
+   - **After writing any test, verify it fails when the behavior under test is broken.** Break the behavior — invert a condition, delete the guard, add the consumer the code forbids — run the test, watch it fail, then restore. A test never observed failing asserts the author's intent, not the system's behavior. **Three tests in this project have passed while proving nothing:** the savepoint blind spot (the app's own sessions could not see the fixture's uncommitted rows), the verdict-prefix check, and a request-id test asserting against stub log records that were never emitted. A fourth was caught by this rule during SPEC-006's second review — the concurrency measurement read peak overlap, which timing made 2 even when three sessions were open. A fifth was SPEC-006 AC-7: it asserted the request id on `caplog` records, and `caplog` reads `LogRecord` objects before any formatter runs, so the test structurally could not observe that no formatter existed and the id reached no operator — it proved the half of KD-5 that worked and was blind to the half that did not. (Fixed in `424b667`; AC-7 now asserts on rendered output.) The failure mode is uniform: the assertion was true for a reason unrelated to the behavior. Only the failing run distinguishes them, and **a test that inspects an intermediate object rather than the output is the shape to be most suspicious of.**
 4. Nothing is implemented until its spec is marked Approved. Check the Status line first.
 5. Spec + tests + code are committed together; when implementation forces a decision change, the spec is updated **in the same commit**.
 6. Every implementation commit references its spec.
 
 **Commit convention:** `SPEC-NNN: short description`
 
-Current spec state (2026-07-26): SPEC-001 (scaffold), SPEC-002 (data model), SPEC-003 (ingestion), SPEC-004 (retrieval), SPEC-005 (generation), SPEC-006 (API) are Approved and implemented. SPEC-000 (charter) is Draft. SPEC-008 (observability) is Draft — do not implement until approved.
+Current spec state (2026-07-26): SPEC-001 (scaffold), SPEC-002 (data model), SPEC-003 (ingestion), SPEC-004 (retrieval), SPEC-005 (generation), SPEC-006 (API) are Approved and implemented. SPEC-000 (charter) is Draft. SPEC-008 (request records and failure signal) is Draft — do not implement until approved.
 
 ## Stack (locked — challenges require a spec amendment)
 

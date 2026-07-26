@@ -2,21 +2,24 @@
 
 import asyncio
 from collections.abc import AsyncIterator
+from typing import Any
 
 import pytest
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy import event, text
+from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 
 from api_harness import READ_KEY, StubRetriever, build_app, client_for
-from conftest import DATABASE_URL
+from conftest import DATABASE_URL, PROBE_QUERY, SeededCorpus, StubQueryEmbedder
 from rag_qa.api.concurrency import (
     CONNECTIONS_PER_QUERY,
     MAX_CONCURRENT_QUERIES,
+    QUERY_CONNECTIONS,
     RESERVED,
     RESERVED_CONNECTIONS,
     max_concurrent_queries,
 )
 from rag_qa.db.engine import POOL_MAX_OVERFLOW, POOL_SIZE
+from rag_qa.retrieval import Retriever
 
 QUESTION = {"question": "What applies?"}
 
@@ -44,6 +47,68 @@ def test_reserved_is_an_enumeration_not_a_magic_margin() -> None:
 def test_bound_tracks_a_hypothetical_pool_change() -> None:
     assert max_concurrent_queries(pool_size=20, max_overflow=20) == 19
     assert max_concurrent_queries(pool_size=1, max_overflow=0) == 1  # never zero
+
+
+def test_divisor_is_an_enumeration_not_a_magic_number() -> None:
+    """RESERVED guards the numerator; this guards the divisor, which is where
+    KD-10's deferred risk actually lives."""
+    assert len(QUERY_CONNECTIONS) == CONNECTIONS_PER_QUERY
+    assert all(name.strip() for name in QUERY_CONNECTIONS)
+
+
+async def test_connections_per_query_is_measured_against_a_live_pool(
+    pooled_engine: AsyncEngine, seeded_corpus: SeededCorpus
+) -> None:
+    """The divisor asserted against the code it describes, not against itself.
+
+    KD-10 defers a specific risk: "if anything ever adds a second concurrent
+    connection consumer to a request, the arithmetic silently changes and the
+    deadlock returns." An equality between two constants cannot catch that — only
+    counting real checkouts can. Adding a session anywhere inside `retrieve()`
+    fails here, which forces the arithmetic to be revisited rather than silently
+    invalidated.
+
+    **Total checkouts, not peak overlap, and the difference is the whole test.**
+    Peak is what the arithmetic nominally cares about, but it is measured under
+    whatever interleaving the event loop happens to produce: a third session
+    whose connection has to be *created* can land after an earlier branch has
+    already checked in, and the observed peak stays at 2 while three sessions
+    were opened. That reading is timing luck, and a test that reports it would
+    pass while proving nothing. Total checkouts is deterministic and
+    conservative — it can only over-count concurrency, which errs toward a
+    smaller bound, and any added session forces the question to be looked at.
+    """
+    checkouts = 0
+    live = 0
+    peak = 0
+
+    def on_checkout(*_: Any) -> None:
+        nonlocal checkouts, live, peak
+        checkouts += 1
+        live += 1
+        peak = max(peak, live)
+
+    def on_checkin(*_: Any) -> None:
+        nonlocal live
+        live -= 1
+
+    sync_engine = pooled_engine.sync_engine
+    event.listen(sync_engine, "checkout", on_checkout)
+    event.listen(sync_engine, "checkin", on_checkin)
+    try:
+        factory = async_sessionmaker(pooled_engine, expire_on_commit=False)
+        retriever = Retriever(factory, StubQueryEmbedder())
+        results = await retriever.retrieve(PROBE_QUERY, k=5)
+    finally:
+        event.remove(sync_engine, "checkout", on_checkout)
+        event.remove(sync_engine, "checkin", on_checkin)
+
+    assert results, "a retrieval that returned nothing proves nothing about its pool use"
+    assert checkouts == CONNECTIONS_PER_QUERY, (
+        f"one retrieve() checked out {checkouts} connections; the semaphore divides by "
+        f"{CONNECTIONS_PER_QUERY}. Update QUERY_CONNECTIONS and re-derive the bound."
+    )
+    assert peak <= CONNECTIONS_PER_QUERY
 
 
 # --- the bound is enforced ----------------------------------------------------

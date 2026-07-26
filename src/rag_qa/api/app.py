@@ -57,6 +57,7 @@ def create_app(
         budget=SpendGuard(
             session_factory,
             daily_limit_usd=resolved.daily_budget_usd,
+            monthly_limit_usd=resolved.monthly_budget_usd,
             refresh_seconds=resolved.budget_refresh_seconds,
         ),
         query_semaphore=asyncio.Semaphore(resolved.max_concurrent_queries),
@@ -127,6 +128,7 @@ def _build_dependencies(state: AppState) -> None:
     state.budget = SpendGuard(
         factory,
         daily_limit_usd=state.settings.daily_budget_usd,
+        monthly_limit_usd=state.settings.monthly_budget_usd,
         refresh_seconds=state.settings.budget_refresh_seconds,
     )
 

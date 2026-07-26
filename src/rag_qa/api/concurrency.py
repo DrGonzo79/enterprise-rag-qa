@@ -12,9 +12,18 @@ The pool cannot be enlarged, so concurrency is bounded above it instead.
 
 from rag_qa.db.engine import POOL_MAX_OVERFLOW, POOL_SIZE
 
-# SPEC-004 KD-5: vector branch + full-text branch, concurrently. The identity
-# check rides the full-text session, so it takes no third connection.
-CONNECTIONS_PER_QUERY = 2
+# The divisor is enumerated for the same reason RESERVED is, and for a sharper
+# one: RESERVED guards the numerator, but KD-10's deferred risk lives *here* —
+# "if anything ever adds a second concurrent connection consumer to a request,
+# the arithmetic silently changes and the deadlock returns." A hardcoded 2 is
+# exactly that silence. Naming each concurrent checkout makes adding one a
+# visible edit, and AC-8 *measures* the real peak against a live pool, so the
+# constant cannot drift from the code it claims to describe.
+QUERY_CONNECTIONS: tuple[str, ...] = (
+    "vector branch (SPEC-004 KD-5)",
+    "full-text branch — embedder identity check rides the same session",
+)
+CONNECTIONS_PER_QUERY = len(QUERY_CONNECTIONS)
 
 # What the margin reserves, enumerated so it is auditable rather than magic
 # (KD-10, review amendment 3). The reserve exists so single-checkout consumers
@@ -23,7 +32,9 @@ CONNECTIONS_PER_QUERY = 2
 #
 # Deliberately NOT reserved, each with its consequence recorded in KD-10:
 #   - /metrics       0 connections by KD-9. If that ever changes, add it here.
-#   - budget refresh single-checkout, once per TTL per replica.
+#   - budget refresh single-checkout, once per TTL per replica. The daily and
+#                    monthly windows are one statement deliberately, so adding
+#                    the monthly ceiling did not add a checkout.
 #   - /ingest        admin-triggered, single-flight, rare. If it becomes routine,
 #                    add it here and the bound drops by one.
 #   - migrations     run out-of-band via the CLI, never in the serving process.

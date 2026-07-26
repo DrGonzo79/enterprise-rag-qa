@@ -38,6 +38,10 @@ def test_env_example_keys() -> None:
         # omitted these would send a first-time reader into a startup failure.
         "RAG_QA_API_KEY",
         "RAG_QA_ADMIN_API_KEY",
+        # SPEC-006 KD-16 (review amendment 2): the monthly cap is the budget an
+        # owner commits to; the daily ceiling is derived from it unless set.
+        "RAG_QA_MONTHLY_BUDGET_USD",
+        "RAG_QA_DAILY_BUDGET_USD",
     }
     for secret in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "RAG_QA_API_KEY", "RAG_QA_ADMIN_API_KEY"):
         assert entries[secret] == "", secret

@@ -20,8 +20,30 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.pool import NullPool
 
-DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql+asyncpg://rag:rag@localhost:5432/rag")
+# Tests default to a DEDICATED database, not the dev `rag` database, so suite
+# runs and test-debugging can never touch locally ingested corpus data
+# (SPEC-002 test plan, limitation note). CI still injects DATABASE_URL=…/rag —
+# its service container holds no real data.
+DATABASE_URL = os.environ.get(
+    "DATABASE_URL", "postgresql+asyncpg://rag:rag@localhost:5432/rag_test"
+)
+ADMIN_URL = DATABASE_URL.replace("+asyncpg", "").rsplit("/", 1)[0] + "/rag"
 SCRATCH_DB = "rag_migration_test"
+
+
+async def ensure_database(url: str) -> None:
+    """Create the database named by `url` if it doesn't exist yet."""
+    import asyncpg
+
+    name = url.rsplit("/", 1)[1]
+    admin = await asyncpg.connect(ADMIN_URL)
+    try:
+        exists = await admin.fetchrow("SELECT 1 FROM pg_database WHERE datname = $1", name)
+        if not exists:
+            await admin.execute(f'CREATE DATABASE "{name}"')
+    finally:
+        await admin.close()
+
 
 CORPUS_DIR = Path(__file__).resolve().parent.parent / "corpus"
 REAL_CORPUS_PRESENT = all(
@@ -202,6 +224,7 @@ def synth_corpus(tmp_path: Path) -> Path:
 
 @pytest.fixture(scope="session")
 async def engine() -> AsyncIterator[AsyncEngine]:
+    await ensure_database(DATABASE_URL)
     engine = create_async_engine(DATABASE_URL, poolclass=NullPool)
     yield engine
     await engine.dispose()

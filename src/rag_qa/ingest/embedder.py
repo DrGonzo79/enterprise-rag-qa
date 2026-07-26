@@ -49,6 +49,31 @@ class OpenAIEmbeddingClient:
         return [item.embedding for item in response.data]
 
 
+class FakeLocalEmbeddingClient:
+    """Offline embedder for smoke runs and cross-process idempotency tests
+    (`--embedder fake`): deterministic pseudo-vectors derived from the text's
+    sha256, no network. When RAG_QA_FAKE_EMBEDDER_LOG names a file, each
+    embed() call appends one line — tests count lines to prove the second
+    ingest of an unchanged corpus makes zero embedding calls."""
+
+    def __init__(self, dim: int = 1536) -> None:
+        self._dim = dim
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        import hashlib
+        import os
+
+        log_path = os.environ.get("RAG_QA_FAKE_EMBEDDER_LOG")
+        if log_path:
+            with open(log_path, "a", encoding="utf-8") as log:
+                log.write(f"embed {len(texts)}\n")
+        vectors: list[list[float]] = []
+        for text in texts:
+            seed = hashlib.sha256(text.encode("utf-8")).digest()
+            vectors.append([seed[i % len(seed)] / 255.0 for i in range(self._dim)])
+        return vectors
+
+
 async def embed_all(
     texts: list[str],
     client: EmbeddingClient,

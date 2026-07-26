@@ -87,7 +87,7 @@ async def test_second_run_skips_everything(session: AsyncSession, synth_corpus: 
     second = await ingest_paths(
         paths, config, dry_run=False, session_provider=_provider(session), embedding_client=client
     )
-    assert {r.verdict for r in second.documents} == {"skip"}
+    assert {r.verdict for r in second.documents} == {"unchanged"}
     assert await _counts(session) == (docs_after_first, chunks_after_first)
     assert len(client.calls) == calls_after_first  # zero embedding calls on run 2
 

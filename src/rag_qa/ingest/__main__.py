@@ -13,7 +13,7 @@ from rag_qa.ingest.pipeline import Manifest, discover, ingest_paths
 from rag_qa.ingest.types import IngestConfig
 
 
-async def _amain(directory: Path, dry_run: bool) -> Manifest:
+async def _amain(directory: Path, dry_run: bool, embedder: str) -> Manifest:
     config = IngestConfig()
     paths = discover(directory, config)
     if not paths:
@@ -28,7 +28,7 @@ async def _amain(directory: Path, dry_run: bool) -> Manifest:
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from rag_qa.db.engine import create_engine, create_session_factory
-    from rag_qa.ingest.embedder import OpenAIEmbeddingClient
+    from rag_qa.ingest.embedder import FakeLocalEmbeddingClient, OpenAIEmbeddingClient
 
     engine = create_engine()
     factory = create_session_factory(engine)
@@ -38,13 +38,14 @@ async def _amain(directory: Path, dry_run: bool) -> Manifest:
         async with factory() as session:
             yield session
 
+    client = FakeLocalEmbeddingClient() if embedder == "fake" else OpenAIEmbeddingClient()
     try:
         return await ingest_paths(
             paths,
             config,
             dry_run=False,
             session_provider=provide_session,
-            embedding_client=OpenAIEmbeddingClient(),
+            embedding_client=client,
             manifest_dir=directory,
         )
     finally:
@@ -61,9 +62,15 @@ def cli(argv: list[str] | None = None) -> int:
         action="store_true",
         help="parse and chunk only: report counts and cost, no DB, no API calls",
     )
+    parser.add_argument(
+        "--embedder",
+        choices=("openai", "fake"),
+        default="openai",
+        help="'fake' = deterministic offline vectors (smoke runs, idempotency tests)",
+    )
     args = parser.parse_args(argv)
 
-    manifest = asyncio.run(_amain(args.directory, args.dry_run))
+    manifest = asyncio.run(_amain(args.directory, args.dry_run, args.embedder))
 
     for report in manifest.documents:
         print(

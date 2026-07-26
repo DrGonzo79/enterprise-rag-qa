@@ -39,7 +39,7 @@ SessionProvider = Callable[[], AbstractAsyncContextManager[AsyncSession]]
 @dataclass
 class DocumentReport:
     document: str
-    verdict: str  # "new" | "skip" | "replace" | "dry-run"
+    verdict: str  # "new" | "unchanged" | "replace" | "dry-run"
     content_hash: str
     sections: int
     chunks: int
@@ -158,7 +158,7 @@ async def ingest_paths(
                     manifest.documents.append(
                         DocumentReport(
                             document=path.name,
-                            verdict="skip",
+                            verdict="unchanged",
                             content_hash=content_hash,
                             sections=0,
                             chunks=0,

@@ -1,7 +1,6 @@
 """Tests derived from SPEC-002 acceptance criteria (written before implementation)."""
 
 import asyncio
-import os
 import uuid
 
 import asyncpg
@@ -10,9 +9,9 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from conftest import DATABASE_URL
 from rag_qa.db.models import Chunk, Document
 
-DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql+asyncpg://rag:rag@localhost:5432/rag")
 SCRATCH_DB = "rag_migration_test"
 
 EXPECTED_TABLES = {"documents", "chunks", "query_log", "eval_runs", "eval_results"}

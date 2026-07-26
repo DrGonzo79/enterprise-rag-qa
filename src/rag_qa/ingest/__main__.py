@@ -8,6 +8,7 @@ import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+from rag_qa.env import load_env
 from rag_qa.ingest.pipeline import Manifest, discover, ingest_paths
 from rag_qa.ingest.types import IngestConfig
 
@@ -51,6 +52,7 @@ async def _amain(directory: Path, dry_run: bool) -> Manifest:
 
 
 def cli(argv: list[str] | None = None) -> int:
+    load_env()  # .env fills gaps for local runs; real env vars win (SPEC-001 KD-6)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     parser = argparse.ArgumentParser(prog="python -m rag_qa.ingest")
     parser.add_argument("directory", type=Path, help="corpus directory")

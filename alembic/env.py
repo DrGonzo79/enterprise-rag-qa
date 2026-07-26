@@ -9,11 +9,13 @@ from sqlalchemy import Connection, pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from rag_qa.db.models import Base
+from rag_qa.env import load_env
 
 config = context.config
 
 url = config.get_main_option("sqlalchemy.url")
 if not url:
+    load_env()  # .env fills gaps for local runs; real env vars win (SPEC-001 KD-6)
     config.set_main_option("sqlalchemy.url", os.environ["DATABASE_URL"])
 
 target_metadata = Base.metadata

@@ -18,6 +18,25 @@ The corpus is public compliance material — NIST AI Risk Management Framework,
 the EU AI Act, and public 10-K filings — because regulatory text is where
 grounding and citation actually matter.
 
+## Quickstart (local)
+
+```bash
+git clone https://github.com/DrGonzo79/enterprise-rag-qa && cd enterprise-rag-qa
+uv sync                              # install (Python 3.12, uv-managed)
+cp .env.example .env                 # then add your OPENAI_API_KEY
+docker compose up -d postgres        # pgvector Postgres on :5432
+uv run alembic upgrade head          # create the schema
+uv run python -m scripts.fetch_corpus            # download the three source documents
+uv run python -m rag_qa.ingest corpus/ --dry-run # inspect chunk counts + cost (no DB, no API)
+uv run python -m rag_qa.ingest corpus/           # embed and load (~$0.005)
+uv run pytest                        # green = you're set
+```
+
+Local runs read `.env` automatically (exported environment variables always
+take precedence, so Docker/CI behavior is unchanged). If the EUR-Lex download
+is blocked by its WAF challenge, the fetch script prints manual-download
+instructions.
+
 ## Architecture
 
 Ingestion → chunking → embedding → Postgres (pgvector + tsvector)

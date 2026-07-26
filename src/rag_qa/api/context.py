@@ -48,6 +48,28 @@ def current_request_id() -> str:
     return request_id_var.get()
 
 
+# What the request turned out to be, filled in as it is discovered and read once
+# by the completion record. A **mutable dict** in the ContextVar rather than a
+# value, deliberately: `contextvars` copy at task creation, so SPEC-006's
+# background SSE pump inherits a reference to this same dict and its verdict is
+# visible to the middleware that created it. A plain value would be copied and
+# the stream's outcome would never come back.
+_outcome_var: ContextVar[dict[str, Any] | None] = ContextVar("rag_qa_outcome", default=None)
+
+
+def new_outcome() -> dict[str, Any]:
+    outcome: dict[str, Any] = {}
+    _outcome_var.set(outcome)
+    return outcome
+
+
+def record_outcome(**fields: Any) -> None:
+    """Attach what is now known about the request. A no-op outside one."""
+    outcome = _outcome_var.get()
+    if outcome is not None:
+        outcome.update(fields)
+
+
 def install_log_record_factory() -> None:
     """Add `request_id` to every LogRecord. Idempotent."""
     existing = logging.getLogRecordFactory()

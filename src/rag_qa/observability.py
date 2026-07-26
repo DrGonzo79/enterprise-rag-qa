@@ -127,4 +127,10 @@ def configure_logging(
     handler.setLevel(logging.NOTSET)
     root.setLevel(logging.WARNING)
     logging.getLogger("rag_qa").setLevel(resolved_level)
+
+    # SPEC-008 KD-1 replaces uvicorn's access log with a record that carries the
+    # request id, the status as a value, and a duration measured around the
+    # middleware where the shed and budget decisions are made. Two access logs
+    # per request is worse than either alone, so this one goes.
+    logging.getLogger("uvicorn.access").disabled = True
     return handler

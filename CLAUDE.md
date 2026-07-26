@@ -37,7 +37,7 @@ Specs in `/specs` precede all code. The process:
 
 **Commit convention:** `SPEC-NNN: short description`
 
-Current spec state (2026-07-26): SPEC-001 (scaffold), SPEC-002 (data model), SPEC-003 (ingestion), SPEC-004 (retrieval), SPEC-005 (generation), SPEC-006 (API) are Approved and implemented. SPEC-000 (charter) is Draft. SPEC-008 (request records and failure signal) is Draft — do not implement until approved.
+Current spec state (2026-07-26): SPEC-001 (scaffold), SPEC-002 (data model), SPEC-003 (ingestion), SPEC-004 (retrieval), SPEC-005 (generation), SPEC-006 (API) are Approved and implemented. SPEC-008 (request records and failure signal) is Approved and implemented. SPEC-000 (charter) is Draft.
 
 ## Stack (locked — challenges require a spec amendment)
 

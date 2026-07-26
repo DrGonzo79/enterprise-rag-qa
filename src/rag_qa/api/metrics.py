@@ -12,7 +12,10 @@ Division of labor: this answers "what is happening now, per replica";
 """
 
 from collections import Counter
+from collections.abc import Mapping
 from decimal import Decimal
+
+from rag_qa.api.conditions import spec_for
 
 LATENCY_BUCKETS_SECONDS: tuple[float, ...] = (0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10)
 
@@ -31,6 +34,14 @@ class Metrics:
         self.prompt_tokens = 0
         self.completion_tokens = 0
         self.cost_usd = Decimal("0")
+        # SPEC-008: the failure signal. A budget trip, a shed, and an embedder
+        # mismatch are all `status="503"` on rag_qa_requests_total, so the single
+        # most consequential state of this deployment -- the demo has stopped
+        # answering -- could not be read from the endpoint an operator reads.
+        self.errors: Counter[str] = Counter()
+        self.budget_trips: Counter[str] = Counter()
+        self.requests_shed = 0
+        self.budget_remaining: dict[str, Decimal] = {}
 
     def observe_request(self, endpoint: str, status: int) -> None:
         self.requests[(endpoint, status)] += 1
@@ -41,6 +52,23 @@ class Metrics:
         for bound in LATENCY_BUCKETS_SECONDS:
             if seconds <= bound:
                 self.latency_buckets[bound] += 1
+
+    def observe_error(self, code: str) -> None:
+        """`spec_for` rather than a bare increment: a code with no registry entry
+        has no client-facing rendering, and counting it here while no frontend
+        can show it is exactly the half-added failure mode conditions.py exists
+        to prevent."""
+        spec_for(code)
+        self.errors[code] += 1
+
+    def observe_shed(self) -> None:
+        self.requests_shed += 1
+
+    def observe_budget_trip(self, ceiling: str) -> None:
+        self.budget_trips[ceiling] += 1
+
+    def set_budget_remaining(self, headroom: Mapping[str, Decimal]) -> None:
+        self.budget_remaining = dict(headroom)
 
     def observe_answer(
         self, verdict: str, prompt_tokens: int, completion_tokens: int, cost_usd: Decimal
@@ -88,5 +116,32 @@ class Metrics:
             "# HELP rag_qa_cost_usd_total Generation spend since process start.",
             "# TYPE rag_qa_cost_usd_total counter",
             f"rag_qa_cost_usd_total {self.cost_usd}",
+            "# HELP rag_qa_errors_total Error responses by condition code.",
+            "# TYPE rag_qa_errors_total counter",
         ]
+        for code, count in sorted(self.errors.items()):
+            lines.append(f'rag_qa_errors_total{{code="{_escape(code)}"}} {count}')
+
+        lines += [
+            "# HELP rag_qa_budget_trips_total Spend-ceiling trips by ceiling.",
+            "# TYPE rag_qa_budget_trips_total counter",
+        ]
+        for ceiling, count in sorted(self.budget_trips.items()):
+            lines.append(f'rag_qa_budget_trips_total{{ceiling="{_escape(ceiling)}"}} {count}')
+
+        lines += [
+            "# HELP rag_qa_requests_shed_total Requests shed at the concurrency bound.",
+            "# TYPE rag_qa_requests_shed_total counter",
+            f"rag_qa_requests_shed_total {self.requests_shed}",
+        ]
+
+        if self.budget_remaining:
+            lines += [
+                "# HELP rag_qa_budget_remaining_usd Headroom before the demo stops answering.",
+                "# TYPE rag_qa_budget_remaining_usd gauge",
+            ]
+            for ceiling, amount in sorted(self.budget_remaining.items()):
+                lines.append(
+                    f'rag_qa_budget_remaining_usd{{ceiling="{_escape(ceiling)}"}} {amount}'
+                )
         return "\n".join(lines) + "\n"

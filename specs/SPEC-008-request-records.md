@@ -1,6 +1,8 @@
 # SPEC-008 — Request Records and Failure Signal
 
-**Status:** Draft — 2026-07-26
+**Status:** Approved — 2026-07-26, implemented in the same commit series.
+
+**Review amendment (2026-07-26, approving round):** the server-side taxonomy is not defined here. It is derived from `rag_qa/api/conditions.py`, the shared registry introduced by SPEC-006 Key decision 16's reconciliation (commit `e81d569`) — see Key decision 8. The review that approved this spec required it: *"that taxonomy and the client-facing states should not be two independent lists."*
 **Depends on:** SPEC-006 (API — the request-id seam, log configuration, in-process counters, `/metrics`)
 **Hands off to:** SPEC-010 (deployment — log shipping, retention, alert rules, budget alerts)
 
@@ -33,9 +35,11 @@ Plus the artifact that makes the rest usable by someone who did not write it: `d
 
 ```
 src/rag_qa/api/
-    middleware.py         # + RequestRecordMiddleware: one completion record per request
+    middleware.py         # + the completion record, in RequestContextMiddleware (KD-8)
     metrics.py            # + breaker/shed/error counters, budget headroom gauge
     budget.py             # + the ceiling that tripped, so the counter can be labelled
+    conditions.py         # the shared registry (SPEC-006 KD-16) this taxonomy derives from
+    context.py            # + the outcome ContextVar the record is assembled in
     routes/query.py       # + server-side ERROR record when a stream fails mid-flight
 docs/
     observability.md      # one real request, end to end
@@ -90,7 +94,11 @@ None at runtime. One test-only: `prometheus-client`, used solely as a parser (Ke
 
 6. **OpenTelemetry is scoped and declared, not built. Flagged (deliberate deferral).** The charter puts OTel traces first on the cut ladder and this spec agrees rather than quietly reinstating them. What a trace buys over what is specified here is span-level attribution *across services*, and there is one service. The three latency questions this deployment has — embedding round-trip, retrieval, provider call — are already answered by SPEC-004's branch timings, the completion record's total, and the histogram's distribution. **The seam, stated so adopting OTel later is wiring rather than redesign:** the request id is already a `ContextVar` propagated into tasks, which is the mechanism a span context uses, and the completion record already holds the attributes a root span would. **Revisit when** a second service appears, or when a latency question arises that the histogram plus branch timings genuinely cannot answer — not when a trace would merely look impressive.
 
-7. **`docs/observability.md` traces one real request, and its field names are asserted against the code. Flagged — the alternative is a document worse than nothing.** A walkthrough written from memory names fields that are nearly right, and a reader who greps for one and finds nothing concludes the logging is broken rather than the doc. The sample records and metric names are produced by **running** the request, and AC-8 parses the document, extracts every field and metric name it shows, and asserts each is actually emitted. **The doc drifts, the test fails, someone fixes the doc** — the only mechanism that has ever kept documentation true. It is also the artifact a reader of a public repository is most likely to judge this project by, which is the second reason it is in scope rather than deferred.
+8. **The failure signal is labelled from the shared condition registry, not from a list of its own. Flagged — this is the decision that keeps the spec honest.** The obvious implementation of "distinguish a budget trip from a shed from an embedder mismatch" is a small enum here, next to the counters. Rejected: SPEC-006 Key decision 16 already needs a client-facing list of the same conditions, and two lists of the same set drift in the worst possible way — a new failure mode is added to whichever half its author was looking at, and the other half silently renders it as a generic error or counts it as one. Neither half breaks; both quietly become wrong. `Metrics.observe_error` therefore resolves the code through `spec_for()` and **raises** on a code with no registry entry, which means a condition cannot be counted server-side without also having a rendering. AC-9 asserts both directions, because the reverse — a rendering for something nothing can produce — is a frontend branch that can never be reviewed against reality.
+
+    **The completion record is emitted from `RequestContextMiddleware` rather than a middleware of its own, and the reason is ordering.** It must run *inside* the request-id context, or the one line naming the outcome is the only line in the trace that cannot be joined to the rest; and *after* the error envelope has been chosen, or an unhandled exception is recorded before anyone has decided it is a 500 with a code. A separate middleware sits on one side of that boundary or the other. There is no position that is both, so the two concerns share a class and the docstring says why.
+
+9. **`docs/observability.md` traces one real request, and its field names are asserted against the code. Flagged — the alternative is a document worse than nothing.** A walkthrough written from memory names fields that are nearly right, and a reader who greps for one and finds nothing concludes the logging is broken rather than the doc. The sample records and metric names are produced by **running** the request, and AC-8 parses the document, extracts every field and metric name it shows, and asserts each is actually emitted. **The doc drifts, the test fails, someone fixes the doc** — the only mechanism that has ever kept documentation true. It is also the artifact a reader of a public repository is most likely to judge this project by, which is the second reason it is in scope rather than deferred.
 
 ## Acceptance criteria
 
@@ -101,11 +109,12 @@ None at runtime. One test-only: `prometheus-client`, used solely as a parser (Ke
 - **AC-5 (the three refusals are distinguishable)** — After one budget trip, one shed, and one embedder mismatch, `/metrics` output contains three distinct series that separate them — the failing assertion being that all three are visible as themselves rather than as `status="503"` counted three times. This is the criterion the whole metric section exists for; it is asserted directly rather than inferred from the individual counters.
 - **AC-6 (the exposition is valid, judged by something that is not us)** — `/metrics` parses without error via `prometheus_client.parser.text_string_to_metric_families` (test-only dependency), every family carries `HELP` and `TYPE`, and no metric name appears twice. Asserted after traffic that populates every series, so the parser sees labels and buckets rather than an empty registry.
 - **AC-7 (a stream failing mid-flight is recorded)** — An SSE stream whose provider fails after the first frame emits an `ERROR` record carrying the request id and the translated error code, **in addition to** the terminal error frame the client receives, and still produces exactly one completion record. Asserted by counting records, since the current behaviour produces zero. A client that disconnects mid-stream — which is not a failure — produces **no** `ERROR` record, so the two are not conflated.
-- **AC-8 (the walkthrough cannot go stale)** — `docs/observability.md` exists; every JSON field name in its sample records is emitted by the formatter for a real request, and every metric name it mentions appears in `/metrics` output. Renaming a field without updating the document fails this test.
+- **AC-8 (the walkthrough cannot go stale)** — `docs/observability.md` exists; every JSON field name in its sample records is emitted by the formatter, and every metric name it mentions appears in `/metrics` output. **The sample driven for this must cover every record the document shows** — a real retrieval, a completion, a budget trip, and a stream that dies mid-flight — because a narrower sample lets a renamed field in an infrequent record slip through, which is the exact drift being guarded. Renaming a field without updating the document fails this test.
+- **AC-9 (one registry, two sides)** — Every code the failure signal can count has a `CONDITIONS` entry and every entry is reachable from a raisable error, asserted in both directions. `Metrics.observe_error` **raises** on an unregistered code, and defining an `ApiError` subclass with one raises at class creation. The `code` labels appearing in `rag_qa_errors_total` are a subset of the registry. Adding a failure mode to one half only is therefore an import-time or test-time failure rather than something a reviewer must catch.
 
 ## Test plan
 
-`tests/test_api_logging.py` (AC-1, AC-2, AC-3, AC-8), additions to `tests/test_api_metrics.py` (AC-4, AC-5, AC-6) and `tests/test_api_sse.py` (AC-7).
+`tests/test_api_logging.py` (AC-1 – AC-8) and `tests/test_api_conditions.py` (AC-9).
 
 **Capture is through the configured handler, never `caplog`.** SPEC-006's `captured_logs` helper (`tests/test_api_context.py`) installs the real formatter over a `StringIO` and is reused here. `caplog` reads `LogRecord` objects before formatting, which is precisely how SPEC-006's original AC-7 passed while no formatter existed — the fifth entry in CLAUDE.md's list of tests that proved nothing. Records are parsed with `json.loads` per line, so a record that fails to be one line fails loudly.
 
@@ -113,6 +122,6 @@ None at runtime. One test-only: `prometheus-client`, used solely as a parser (Ke
 
 **No network in any tier**, unchanged from SPEC-005 and SPEC-006.
 
-**Every test is verified by breaking the behaviour it covers** (CLAUDE.md rule 3), and four breaks are named because the criteria were written from them: deleting the `finally` that emits the completion record must fail AC-1 for the shed and 500 cases specifically, not merely for the 200 case; adding the question to the completion record must fail AC-2; labelling both budget ceilings with one constant must fail AC-4; and removing the `ERROR` record must fail AC-7 while every SSE test in SPEC-006 continues to pass — which is the shape of the gap this spec exists to close.
+**Every test is verified by breaking the behaviour it covers** (CLAUDE.md rule 3). Six breaks were run and all six were caught: removing the `finally` that emits the completion record (fails AC-1 for the shed and 500 cases, not merely the 200 case); labelling both budget ceilings with one constant (AC-4); demoting the mid-stream `ERROR` record below the default level (AC-7); narrating probes at `INFO` again (AC-3); renaming a field in the document only (AC-8); and letting `observe_error` accept an unregistered code (AC-9).
 
 Tests are written from these acceptance criteria and committed with the implementation, in the same commit series referencing SPEC-008.

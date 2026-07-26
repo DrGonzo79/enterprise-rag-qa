@@ -163,3 +163,28 @@ async def test_openapi_publishes_the_taxonomy() -> None:
             enums |= set(schema["enum"])
     assert {str(p) for p in Presentation} <= enums
     assert {str(r) for r in Reset} <= enums
+
+
+async def test_the_failure_signal_is_labelled_from_the_same_registry() -> None:
+    """The two sides meeting: SPEC-008's counter labels are registry codes, so a
+    condition cannot be counted server-side without having a rendering."""
+    from api_harness import ADMIN_KEY
+
+    app = build_app()
+    await post(app, "/query", {"question": "   "})
+    body = (await get(app, "/metrics", key=ADMIN_KEY)).text
+    labelled = {
+        line.split('code="')[1].split('"')[0]
+        for line in body.splitlines()
+        if line.startswith("rag_qa_errors_total{")
+    }
+    assert labelled == {"validation_error"}
+    assert labelled <= set(CONDITIONS)
+
+
+def test_counting_an_unregistered_code_raises() -> None:
+    """Enforced in the counter itself, not only at the raise site."""
+    from rag_qa.api.metrics import Metrics
+
+    with pytest.raises(KeyError, match="no entry in CONDITIONS"):
+        Metrics().observe_error("invented_failure")

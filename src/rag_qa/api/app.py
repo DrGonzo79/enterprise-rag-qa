@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from rag_qa.api.budget import SpendGuard
-from rag_qa.api.context import current_request_id, install_log_record_factory
+from rag_qa.api.context import current_request_id, install_log_record_factory, record_outcome
 from rag_qa.api.deps import AppState, Settings
 from rag_qa.api.errors import ApiError, envelope
 from rag_qa.api.metrics import Metrics
@@ -77,7 +77,7 @@ def create_app(
     app.state.rag = state
 
     app.add_middleware(MetricsMiddleware, metrics=state.metrics)
-    app.add_middleware(RequestContextMiddleware)
+    app.add_middleware(RequestContextMiddleware, metrics=state.metrics)
 
     app.include_router(health.router)
     app.include_router(query.router)
@@ -139,6 +139,9 @@ def _build_dependencies(state: AppState) -> None:
 
 
 def _envelope(error: ApiError) -> JSONResponse:
+    # The single choke point for every handled error, so the completion record
+    # and the failure counters see the code without each handler remembering.
+    record_outcome(error_code=error.code, ceiling=getattr(error, "ceiling", None))
     status, body, headers = envelope(error, current_request_id())
     # Validated through the declared model so the wire shape and the OpenAPI
     # schema cannot drift apart.

@@ -7,6 +7,8 @@ front of a metered LLM API is a real-time feedback channel for anyone trying to
 burn the budget.
 """
 
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends, Request, Response
 
 from rag_qa.api.auth import Scope, require
@@ -26,4 +28,7 @@ PROMETHEUS_CONTENT_TYPE = "text/plain; version=0.0.4; charset=utf-8"
 )
 async def metrics(request: Request) -> Response:
     state: AppState = request.app.state.rag
+    # Cached totals only — `remaining` reads what the guard already refreshed, so
+    # a scrape still opens no connection (KD-9, AC-12).
+    state.metrics.set_budget_remaining(state.budget.remaining(datetime.now(UTC)))
     return Response(content=state.metrics.render(), media_type=PROMETHEUS_CONTENT_TYPE)

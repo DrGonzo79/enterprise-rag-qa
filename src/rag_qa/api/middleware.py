@@ -7,13 +7,20 @@ responses in a way that interferes with SSE.
 """
 
 import logging
+import time
 from collections.abc import Awaitable, Callable, MutableMapping
 from typing import Any
 
 from starlette.datastructures import Headers, MutableHeaders
 from starlette.responses import JSONResponse
 
-from rag_qa.api.context import REQUEST_ID_HEADER, request_id_var, sanitize_request_id
+from rag_qa.api.context import (
+    REQUEST_ID_HEADER,
+    new_outcome,
+    record_outcome,
+    request_id_var,
+    sanitize_request_id,
+)
 from rag_qa.api.errors import ApiError, envelope, translate
 from rag_qa.api.metrics import Metrics
 
@@ -23,49 +30,7 @@ Scope = MutableMapping[str, Any]
 Message = MutableMapping[str, Any]
 Receive = Callable[[], Awaitable[Message]]
 Send = Callable[[Message], Awaitable[None]]
-
-
-class RequestContextMiddleware:
-    def __init__(self, app: Callable[[Scope, Receive, Send], Awaitable[None]]) -> None:
-        self.app = app
-
-    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http":
-            await self.app(scope, receive, send)
-            return
-
-        inbound = Headers(scope=scope).get(REQUEST_ID_HEADER)
-        request_id = sanitize_request_id(inbound)
-        token = request_id_var.set(request_id)
-
-        started = False
-
-        async def send_with_header(message: Message) -> None:
-            nonlocal started
-            if message["type"] == "http.response.start":
-                started = True
-                MutableHeaders(scope=message)[REQUEST_ID_HEADER] = request_id
-            await send(message)
-
-        try:
-            await self.app(scope, receive, send_with_header)
-        except Exception as exc:
-            # Starlette's ServerErrorMiddleware sits *outside* this one, so a
-            # response it rendered would carry neither the request-id header nor
-            # the metrics counter. Unhandled errors are finished here instead,
-            # where the context is still set and the send wrapper is in place.
-            if started:
-                raise  # headers already went out; nothing can be retracted
-            error = translate(exc) or ApiError("internal error")
-            if error.code == "internal_error":
-                # Never leak a traceback, SQL, or a file path to a caller.
-                logger.exception("unhandled error serving %s", scope.get("path"))
-            status, body, headers = envelope(error, request_id)
-            await JSONResponse(body, status_code=status, headers=headers)(
-                scope, receive, send_with_header
-            )
-        finally:
-            request_id_var.reset(token)
+Outcome = MutableMapping[str, Any]
 
 
 UNMATCHED_ROUTE = "__unmatched__"
@@ -102,6 +67,113 @@ def route_label(scope: Scope) -> str:
     if scope.get("endpoint") is not None and not scope.get("path_params"):
         return str(scope.get("path", UNMATCHED_ROUTE))
     return UNMATCHED_ROUTE
+
+
+PROBE_ROUTES = frozenset({"/health", "/healthz"})
+
+request_logger = logging.getLogger("rag_qa.api.request")
+
+
+class RequestContextMiddleware:
+    """Request id, error envelope, and the completion record (SPEC-008).
+
+    **The completion record is emitted here rather than by its own middleware,
+    and the reason is ordering rather than convenience.** It has to run *inside*
+    the request-id context — otherwise the one line naming the outcome is the
+    only line in the trace that cannot be joined to the rest — and *after* the
+    error envelope has been chosen, or an unhandled exception would be recorded
+    before anyone decided it was a 500 with a code. A separate middleware lands
+    on one side of that or the other; there is no position that is both.
+    """
+
+    def __init__(
+        self, app: Callable[[Scope, Receive, Send], Awaitable[None]], metrics: Metrics
+    ) -> None:
+        self.app = app
+        self.metrics = metrics
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        inbound = Headers(scope=scope).get(REQUEST_ID_HEADER)
+        request_id = sanitize_request_id(inbound)
+        token = request_id_var.set(request_id)
+        outcome = new_outcome()
+        began = time.perf_counter()
+
+        started = False
+        status = 500
+
+        async def send_with_header(message: Message) -> None:
+            nonlocal started, status
+            if message["type"] == "http.response.start":
+                started = True
+                status = int(message["status"])
+                MutableHeaders(scope=message)[REQUEST_ID_HEADER] = request_id
+            await send(message)
+
+        try:
+            await self.app(scope, receive, send_with_header)
+        except Exception as exc:
+            # Starlette's ServerErrorMiddleware sits *outside* this one, so a
+            # response it rendered would carry neither the request-id header nor
+            # the metrics counter. Unhandled errors are finished here instead,
+            # where the context is still set and the send wrapper is in place.
+            if started:
+                raise  # headers already went out; nothing can be retracted
+            error = translate(exc) or ApiError("internal error")
+            if error.code == "internal_error":
+                # Never leak a traceback, SQL, or a file path to a caller.
+                logger.exception("unhandled error serving %s", scope.get("path"))
+            record_outcome(error_code=error.code)
+            body_status, body, headers = envelope(error, request_id)
+            status = body_status
+            await JSONResponse(body, status_code=body_status, headers=headers)(
+                scope, receive, send_with_header
+            )
+        finally:
+            # The stream has finished by now, not merely its headers — which is
+            # what lets an SSE request carry the verdict its background pump
+            # resolved seconds after the response started.
+            self._finish(scope, status, (time.perf_counter() - began) * 1000, outcome)
+            request_id_var.reset(token)
+
+    def _finish(self, scope: Scope, status: int, duration_ms: float, outcome: Outcome) -> None:
+        route = route_label(scope)
+        code = outcome.get("error_code")
+        if isinstance(code, str):
+            self.metrics.observe_error(code)
+            if code == "overloaded":
+                self.metrics.observe_shed()
+            ceiling = outcome.get("ceiling")
+            if code == "budget_exhausted" and isinstance(ceiling, str):
+                self.metrics.observe_budget_trip(ceiling)
+
+        # A readiness probe every 10s across three replicas is ~26,000 records a
+        # day saying "still ok": volume that costs money to ship, buries what
+        # matters, and teaches an operator to filter out the logger that would
+        # have told them the corpus went empty. The request is still *counted*,
+        # which is the right representation for a frequent uninteresting event.
+        if route in PROBE_ROUTES:
+            level = logging.DEBUG
+        elif status >= 500:
+            level = logging.WARNING
+        else:
+            level = logging.INFO
+
+        fields: dict[str, Any] = {
+            "method": str(scope.get("method", "")),
+            "route": route,
+            "status": status,
+            "duration_ms": round(duration_ms, 2),
+        }
+        for key in ("verdict", "error_code"):
+            value = outcome.get(key)
+            if value is not None:
+                fields[key] = value
+        request_logger.log(level, "http.request", extra=fields)
 
 
 class MetricsMiddleware:

@@ -5,6 +5,7 @@ describes the outcome. Nothing here maps a refusal to an error.
 """
 
 import asyncio
+import logging
 import time
 from collections.abc import AsyncIterator, Sequence
 from typing import Any
@@ -13,7 +14,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 
 from rag_qa.api.auth import Scope, require
-from rag_qa.api.context import current_request_id
+from rag_qa.api.context import current_request_id, record_outcome
 from rag_qa.api.deps import AppState
 from rag_qa.api.errors import (
     ApiError,
@@ -27,6 +28,8 @@ from rag_qa.api.schemas import ErrorResponse, QueryRequest, QueryResponse
 from rag_qa.api.sse import SSE_HEADERS, data_frame, error_frame, event_payload, with_heartbeats
 from rag_qa.generation.types import AnswerComplete, AnswerEvent
 from rag_qa.retrieval.types import RetrievedChunk
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -131,6 +134,7 @@ async def query(request: Request, payload: QueryRequest) -> Any:
             str(answer.verdict), answer.prompt_tokens, answer.completion_tokens, answer.cost_usd
         )
         state.metrics.observe_query_latency(time.perf_counter() - started)
+        record_outcome(verdict=str(answer.verdict))
         return QueryResponse.build(answer, chunks, current_request_id())
 
     return StreamingResponse(
@@ -160,7 +164,20 @@ async def _pump(
                     answer.cost_usd,
                 )
                 state.metrics.observe_query_latency(time.perf_counter() - started)
+                record_outcome(verdict=str(answer.verdict))
     except Exception as exc:
+        # The client gets a terminal frame; without this the server kept nothing
+        # at all about the one failure a user experiences as a broken answer.
+        # Logged where it is caught, before the frame is queued, because the
+        # frame's delivery depends on a client that may already be gone.
+        translated = translate(exc)
+        code = translated.code if translated is not None else "upstream_error"
+        record_outcome(error_code=code)
+        state.metrics.observe_error(code)
+        logger.error(
+            "stream failed after the response began",
+            extra={"error_code": code, "exception_type": type(exc).__name__},
+        )
         queue.put_nowait(("error", exc))
     finally:
         queue.put_nowait(("done", None))

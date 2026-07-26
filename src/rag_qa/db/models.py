@@ -62,6 +62,8 @@ class Chunk(Base):
     ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
     text: Mapped[str] = mapped_column(Text, nullable=False)
     token_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    # breadcrumb like "EU AI Act › Chapter III › Article 6" (SPEC-003 decision 4)
+    section_path: Mapped[str] = mapped_column(Text, nullable=False)
     embedding: Mapped[Any] = mapped_column(Vector(EMBEDDING_DIM), nullable=False)
     embedding_model: Mapped[str] = mapped_column(Text, nullable=False)
     tsv: Mapped[Any] = mapped_column(

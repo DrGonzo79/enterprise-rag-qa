@@ -13,6 +13,11 @@ dependencies = [
     "alembic>=1.14",
     "pgvector>=0.3",
     "tiktoken>=0.8",
+    "pypdf>=6.14.2",
+    "beautifulsoup4>=4.15.0",
+    "lxml>=6.1.1",
+    "pysbd>=0.3.4",
+    "openai>=2.48.0",
 ]
 
 [dependency-groups]
@@ -39,6 +44,12 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+# Breadcrumb separator and legal-text dashes are intentional, not typos.
+allowed-confusables = ["›", "–", "—", "’"]
+
+[tool.ruff.lint.per-file-ignores]
+# Synthetic corpus fixtures embed long verbatim HTML lines.
+"tests/conftest.py" = ["E501"]
 
 [tool.pyright]
 include = ["src", "tests"]
@@ -49,6 +60,7 @@ strict = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]  # lets tests import scripts.fetch_corpus
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"

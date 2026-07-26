@@ -37,6 +37,7 @@ def _chunk(document_id: uuid.UUID, **overrides: object) -> Chunk:
         "ordinal": 0,
         "text": "The quick brown fox discusses Article 6(2) compliance.",
         "token_count": 12,
+        "section_path": "Test Doc › Chapter 1",  # SPEC-003 migration 0002
         "embedding": [0.1] * 1536,
         "embedding_model": "text-embedding-3-small",
     }

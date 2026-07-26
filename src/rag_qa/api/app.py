@@ -28,6 +28,7 @@ from rag_qa.api.middleware import MetricsMiddleware, RequestContextMiddleware
 from rag_qa.api.routes import health, ingest, metrics, query
 from rag_qa.api.schemas import ErrorResponse
 from rag_qa.generation.service import Generator
+from rag_qa.observability import configure_logging
 from rag_qa.retrieval.service import Retriever
 
 logger = logging.getLogger(__name__)
@@ -49,7 +50,11 @@ def create_app(
     embedding_client: object | None = None,
 ) -> FastAPI:
     resolved = settings if settings is not None else Settings.from_env()
+    # The factory stamps request_id onto every record; configure_logging is what
+    # makes any of it reach an operator. Shipping the first without the second
+    # was the defect (KD-5, amended).
     install_log_record_factory()
+    configure_logging()
 
     state = AppState(
         settings=resolved,

@@ -68,12 +68,46 @@ class RequestContextMiddleware:
             request_id_var.reset(token)
 
 
-class MetricsMiddleware:
-    """Request counts by path and status, in process (KD-9).
+UNMATCHED_ROUTE = "__unmatched__"
 
-    Paths are recorded verbatim because this API has a fixed, small set of them
-    and none carry parameters — so there is no cardinality explosion to guard
-    against, and no route-template lookup to get wrong.
+
+def route_label(scope: Scope) -> str:
+    """The matched route template, or one constant for everything else.
+
+    **The original implementation recorded `scope["path"]` verbatim**, justified
+    on the grounds that this API has a fixed, small set of paths and none carry
+    parameters. That premise holds for *matched* routes and fails completely for
+    the 404 space: `GET /a1`, `/a2`, … each created a new key in a
+    process-lifetime `Counter` that is never evicted, required no authentication
+    (routing precedes auth), and was reachable by anyone who could open a socket.
+    Unbounded dictionary growth in the serving process first, a scrape response
+    that grows with it second, a Prometheus cardinality explosion third — in the
+    same process that enforces the spend ceiling, whose correctness depends on it
+    staying up.
+
+    **The rule the original reasoning was missing:** a label is safe when its
+    value space is enumerable from the code, and a path is only enumerable
+    *after* it matches something. Both branches below are enumerable — FastAPI's
+    `APIRoute` publishes its template in the scope, and a route that matched
+    without publishing one (`/docs`, `/openapi.json`) is still one of a fixed set
+    the app registered. Anything else is a single constant.
+    """
+    template = getattr(scope.get("route"), "path", None)
+    if isinstance(template, str):
+        return template
+    # Matched a framework route that publishes no template. `endpoint` is set
+    # only on a match, so this stays bounded by the registered route table —
+    # except for a parameterized one, which would leak a concrete path, so it is
+    # excluded explicitly rather than by assuming none is ever added.
+    if scope.get("endpoint") is not None and not scope.get("path_params"):
+        return str(scope.get("path", UNMATCHED_ROUTE))
+    return UNMATCHED_ROUTE
+
+
+class MetricsMiddleware:
+    """Request counts by route template and status, in process (KD-9).
+
+    Labels come from the matched route, never the raw path — see `route_label`.
     """
 
     def __init__(
@@ -87,11 +121,11 @@ class MetricsMiddleware:
             await self.app(scope, receive, send)
             return
 
-        path = str(scope.get("path", ""))
-
         async def send_with_metrics(message: Message) -> None:
             if message["type"] == "http.response.start":
-                self.metrics.observe_request(path, int(message["status"]))
+                # Read at response time: the router has updated the scope by now,
+                # so the template is available where the raw path used to be.
+                self.metrics.observe_request(route_label(scope), int(message["status"]))
             await send(message)
 
         await self.app(scope, receive, send_with_metrics)

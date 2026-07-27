@@ -28,13 +28,15 @@ class ErrorDetail(BaseModel):
             "How a client should render this condition. `explanatory` means the service is "
             "deliberately not answering and the client should show the explanatory state "
             "(SPEC-006 Key decision 16) rather than an error page. Sent so a client need not "
-            "keep its own copy of the taxonomy."
+            "keep its own copy of the taxonomy. **Members are added over time: treat an "
+            "unrecognised value as `degraded`, never as an error.**"
         )
     )
     reset: Reset = Field(
         description=(
             "When the condition clears. `window` means `Retry-After` is an accurate clock; "
-            "`operator` means no countdown exists and one must not be rendered."
+            "`operator` means no countdown exists and one must not be rendered. **Members are "
+            "added over time: treat an unrecognised value as `shortly`, never as an error.**"
         )
     )
 

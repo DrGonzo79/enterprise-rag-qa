@@ -132,5 +132,15 @@ def configure_logging(
     # request id, the status as a value, and a duration measured around the
     # middleware where the shed and budget decisions are made. Two access logs
     # per request is worse than either alone, so this one goes.
+    #
+    # It is *only* the access log. `uvicorn.access` is written from
+    # `RequestResponseCycle.send`, so it covered exactly the requests that
+    # reached the ASGI app — the ones the completion record now covers with
+    # strictly more information. Requests uvicorn rejects at the protocol layer
+    # never reached it either; they go to `uvicorn.error`, which is kept and
+    # routed through this formatter so one pipeline carries both (SPEC-008 KD-2).
     logging.getLogger("uvicorn.access").disabled = True
+    uvicorn_error = logging.getLogger("uvicorn.error")
+    uvicorn_error.handlers = []
+    uvicorn_error.propagate = True
     return handler

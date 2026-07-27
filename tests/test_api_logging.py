@@ -387,3 +387,124 @@ def test_uvicorns_access_log_is_replaced_not_duplicated() -> None:
     logging.getLogger("uvicorn.access").disabled = False
     configure_logging()
     assert logging.getLogger("uvicorn.access").disabled
+
+
+# --- failure paths: the record must survive them, and must not guess ----------
+
+
+async def test_a_bare_exception_still_yields_a_well_formed_500_and_one_record() -> None:
+    """`observe_error` raises on an unregistered code by design. Nothing can
+    reach it with one — the class check makes subclasses impossible, and a code
+    assigned dynamically is overwritten with `internal_error` before the record
+    is emitted — so an unhandled exception ends as an ordinary 500."""
+    from fastapi import APIRouter
+
+    app = build_app()
+    router = APIRouter()
+
+    @router.get("/bare")
+    async def bare() -> None:
+        raise ValueError("untranslated and unregistered")
+
+    app.include_router(router)
+    with captured_logs() as sink:
+        async with client_for(app) as http:
+            response = await http.get("/bare")
+
+    assert response.status_code == 500
+    error = response.json()["error"]
+    assert error["code"] == "internal_error"
+    assert error["request_id"] == response.headers["x-request-id"]
+    assert error["presentation"] == "degraded"
+    assert "ValueError" not in response.text  # no traceback, no type leak
+
+    completed = records(sink)
+    assert len(completed) == 1
+    assert completed[0]["status"] == 500
+    assert completed[0]["error_code"] == "internal_error"
+
+
+async def test_an_error_assigned_an_unregistered_code_degrades_to_500() -> None:
+    """The dynamic-assignment path, which no class check can cover."""
+    from fastapi import APIRouter
+
+    from rag_qa.api.errors import ApiError
+
+    app = build_app()
+    router = APIRouter()
+
+    @router.get("/rogue")
+    async def rogue() -> None:
+        error = ApiError("boom")
+        error.code = "never_registered"
+        raise error
+
+    app.include_router(router)
+    async with client_for(app) as http:
+        response = await http.get("/rogue")
+
+    assert response.status_code == 500
+    assert response.json()["error"]["code"] == "internal_error"
+
+
+async def test_telemetry_failure_cannot_break_a_response() -> None:
+    """`_finish` runs after `http.response.start` has gone out, so an exception
+    there escapes as a protocol error on a request the caller was already
+    answered. It is swallowed and logged instead."""
+    app = build_app()
+
+    def explode(_code: str) -> None:
+        raise RuntimeError("metrics backend on fire")
+
+    app.state.rag.metrics.observe_error = explode  # type: ignore[method-assign]
+
+    with captured_logs() as sink:
+        response = await post(app, "/query", {"question": "   "})  # 422 -> observe_error
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "validation_error"
+    assert any(
+        line["msg"].startswith("failed to record the completion")
+        for line in (json.loads(x) for x in sink.getvalue().splitlines() if x.strip())
+    )
+
+
+async def test_a_disconnect_is_recorded_but_is_not_distinguishable_from_completion() -> None:
+    """Documented rather than guessed (SPEC-008 KD-3).
+
+    Generation deliberately outlives the client connection — the tokens were
+    spent whether or not anyone was listening — so the completion record reports
+    what the *server* did, and a disconnect after a complete answer looks exactly
+    like a delivered one. What distinguishes a provider failure is the separate
+    ERROR record, not a field on this one.
+    """
+    app = build_app()
+    with captured_logs() as sink:
+        async with (
+            client_for(app) as http,
+            http.stream("POST", "/query", json={**QUESTION, "stream": True}) as response,
+        ):
+            await response.aiter_raw().__anext__()  # take one chunk, then leave
+
+    completed = records(sink)
+    assert len(completed) == 1, "a disconnect must still produce a record"
+    assert completed[0]["status"] == 200
+    assert completed[0]["verdict"] == "answered"
+    # The honest part: there is no field here that says the client left.
+    assert "client_disconnected" not in completed[0]
+    assert records(sink, "stream failed after the response began") == []
+
+
+def test_uvicorn_protocol_errors_stay_and_are_routed_through_the_formatter() -> None:
+    """Only the access log is replaced. `uvicorn.error` carries the requests that
+    never reached the ASGI app, and it is kept — routed here so one pipeline
+    carries both rather than two formats."""
+    import logging as stdlib_logging
+
+    with captured_logs() as sink:
+        stdlib_logging.getLogger("uvicorn.error").warning("Invalid HTTP request received.")
+
+    lines = [json.loads(x) for x in sink.getvalue().splitlines() if x.strip()]
+    assert [line["msg"] for line in lines] == ["Invalid HTTP request received."]
+    assert lines[0]["logger"] == "uvicorn.error"
+    assert lines[0]["request_id"] == ""  # correct: the request never reached us

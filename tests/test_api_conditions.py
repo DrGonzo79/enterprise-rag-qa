@@ -188,3 +188,16 @@ def test_counting_an_unregistered_code_raises() -> None:
 
     with pytest.raises(KeyError, match="no entry in CONDITIONS"):
         Metrics().observe_error("invented_failure")
+
+
+async def test_the_schema_tells_clients_how_to_fail_on_an_unknown_member() -> None:
+    """`presentation` and `reset` are a published contract now, so a client that
+    switches exhaustively breaks the day a member is added — on the error path,
+    where it is least tested. The fallback is stated where a client reads it."""
+    app = build_app()
+    document = (await get(app, "/openapi.json", key=None)).json()
+    detail = document["components"]["schemas"]["ErrorDetail"]["properties"]
+    assert "degraded" in detail["presentation"]["description"]
+    assert "unrecognised" in detail["presentation"]["description"]
+    assert "shortly" in detail["reset"]["description"]
+    assert "unrecognised" in detail["reset"]["description"]

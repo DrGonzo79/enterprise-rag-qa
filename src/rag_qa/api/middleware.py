@@ -141,6 +141,26 @@ class RequestContextMiddleware:
             request_id_var.reset(token)
 
     def _finish(self, scope: Scope, status: int, duration_ms: float, outcome: Outcome) -> None:
+        """Telemetry must never be able to break a response.
+
+        This runs in a `finally`, **after** `http.response.start` has gone out —
+        so an exception raised here cannot be turned into a response by anything
+        upstream; it escapes as a protocol error on a request the caller has
+        already been answered. `observe_error` deliberately raises on a code with
+        no registry entry (SPEC-008 KD-9), which is the right behaviour at the
+        unit level and the wrong thing to let loose here. No path reaches it with
+        an unregistered code today — the class check makes subclasses impossible
+        and the middleware overwrites a rogue dynamic code with `internal_error`
+        before this runs — but "unreachable through three coincidences" is a
+        weaker guarantee than "cannot break the response", and the second is one
+        `try` away.
+        """
+        try:
+            self._record(scope, status, duration_ms, outcome)
+        except Exception:
+            logger.exception("failed to record the completion of %s", scope.get("path"))
+
+    def _record(self, scope: Scope, status: int, duration_ms: float, outcome: Outcome) -> None:
         route = route_label(scope)
         code = outcome.get("error_code")
         if isinstance(code, str):

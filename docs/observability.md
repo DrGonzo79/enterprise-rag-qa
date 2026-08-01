@@ -150,6 +150,46 @@ Those exist because a budget trip, a shed, and an embedder mismatch were
 otherwise all `status="503"` — three very different operational situations
 counted as one number.
 
+### Alerting on these
+
+**An absent series is honest to a human and invisible to a threshold rule.**
+`rag_qa_budget_remaining_usd < 1` never fires when the series is missing, and it
+is missing in exactly the two cases worth paging about: a replica that has not
+refreshed yet, and a deployment where the ceiling was never configured at all.
+Every threshold below is paired with an `absent()` rule; the pair is the alert,
+not the threshold alone.
+
+```promql
+# The demo has stopped answering. A trip, not a threshold -- this is the one
+# that means visitors are seeing the explanatory state right now.
+increase(rag_qa_budget_trips_total[15m]) > 0
+
+# Headroom is nearly gone...
+min by (ceiling) (rag_qa_budget_remaining_usd) < 1
+# ...and, separately, there is no headroom figure at all. The rule above
+# cannot see this case, which includes "no ceiling was ever configured".
+absent(rag_qa_budget_remaining_usd)
+
+# The headroom figure is too old to act on. 900s: the cache refreshes on any
+# /query within RAG_QA_BUDGET_REFRESH_SECONDS (30s default), so anything past a
+# quarter hour means this replica has been idle while others may have been
+# spending the shared budget. Treat headroom as unknown, not as reassuring.
+rag_qa_budget_snapshot_age_seconds > 900
+absent(rag_qa_budget_snapshot_age_seconds)
+
+# Telemetry itself is failing. Best-effort by construction (see below), so any
+# non-zero rate is worth looking at rather than a threshold.
+increase(rag_qa_telemetry_failures_total[15m]) > 0
+```
+
+**`rag_qa_telemetry_failures_total` is best-effort and is not the authoritative
+count.** It is incremented inside the same `except` that reports the failure,
+under `suppress`, on the `Metrics` object that may itself be what broke — so a
+failure mode that takes out the counter takes out the count of itself. **The
+`ERROR` record on `rag_qa.api.middleware` ("failed to record the completion of
+…") is the floor**: alert on the log line and use the counter as the convenient
+rate, never the reverse.
+
 **The headroom figure is cached and never refreshed by a scrape.** `/metrics`
 must open no database connection (Key decision 9), and the budget refresh is
 deliberately outside the reserved-connection accounting, so a monitor polling
@@ -157,7 +197,10 @@ every 15 s would contend for exactly the connections the concurrency bound
 protects. The snapshot therefore comes from whatever the last `/query` refreshed
 — which on an idle replica ages without bound while other replicas keep spending
 the shared budget. `rag_qa_budget_snapshot_age_seconds` is how you tell
-"headroom is $4" from "headroom was $4, forty minutes ago". Both series are
+"headroom is $4" from "headroom was $4, forty minutes ago". It is computed **at
+scrape time** from the timestamp of the last refresh, so it advances between
+scrapes with no traffic — an age frozen at refresh time would report the same
+number forever and be worse than absent. Both series are
 **absent** until the first refresh: a fresh replica's totals are zero, and
 publishing the full ceiling as headroom would announce plenty of budget at the
 moment the process knows least.

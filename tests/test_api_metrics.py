@@ -176,3 +176,37 @@ def _registered_paths(routes: object) -> set[str]:
         for nested in (getattr(route, "routes", None), getattr(route, "original_router", None)):
             found |= _registered_paths(getattr(nested, "routes", nested))
     return found
+
+
+async def test_snapshot_age_advances_between_scrapes(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Computed at scrape time from the refresh timestamp, not frozen at refresh.
+
+    A frozen age reports the same number forever and is worse than absent: it
+    reads as "fresh" precisely when the figure has stopped being fresh. This is
+    the shape rule 3 keeps turning up, so it is asserted rather than assumed.
+    """
+    from decimal import Decimal
+
+    from rag_qa.api.budget import SpendGuard
+
+    clock = [1000.0]
+    guard = SpendGuard(
+        session_factory,
+        monthly_limit_usd=Decimal("20.00"),
+        refresh_seconds=1e9,  # never refresh again, so only the age can move
+        monotonic=lambda: clock[0],
+    )
+    await guard.check()  # populates the cache at t=1000
+
+    app = build_app(session_factory=session_factory, monthly_budget_usd=Decimal("20.00"))
+    app.state.rag.budget = guard
+
+    clock[0] = 1030.0
+    first = (await get(app, "/metrics", key=ADMIN_KEY)).text
+    clock[0] = 1330.0
+    second = (await get(app, "/metrics", key=ADMIN_KEY)).text
+
+    assert "rag_qa_budget_snapshot_age_seconds 30.000" in first
+    assert "rag_qa_budget_snapshot_age_seconds 330.000" in second

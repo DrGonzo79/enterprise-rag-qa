@@ -29,10 +29,35 @@ first thing filed under CLAUDE.md rule 4's unprompted-amendment clause — and
 approved on review as SPEC-006 Key decision 16 amendment 6. Key decision 4 and
 AC-8 below are written to the fixed contract.
 
-**Three further dependencies are named rather than assumed**, and all are on
-things that do not exist yet: the eval report (SPEC-007, unwritten), the
-recorded Q&A fixture (needs a corpus and a real model run), and the deployment
-that serves the static assets (SPEC-010).
+**What SPEC-007's draft can and cannot supply** *(revised 2026-08-02, after
+SPEC-007 was drafted — the blocker list is only useful if it is current)*:
+
+| KD-16 requires | SPEC-007 status | Blocks approval of this spec? |
+|---|---|---|
+| The eval **report** in the panel | Format and location settled: `evals/reports/report-<sha>-<chunks>chunks-<date>.json`, with `contracts/eval-report.schema.json` generated and drift-checked (SPEC-007 AC-11) | **No** — this spec can be written against the schema |
+| A report that **exists** | Blocked on corpus de-saturation (SPEC-003 AC-10) and one real, billable run | **Yes** — see below |
+| The **methodology** beside the figures | Settled, and stronger than assumed: SPEC-007 KD-2 puts methodology *inside* the artifact and binds this spec to render `methodology.limitations` **adjacent to** the figures, not behind a disclosure | **No**, but it adds a requirement — see Key decision 5 |
+| Labeled pre-recorded Q&A pairs | Still unowned. SPEC-007 covers eval cases, not demo recordings; the capture needs the same corpus and a real run | **Yes** |
+
+**So two things still block, and they are the same two as before, now sharper.**
+Neither is a spec gap; both are lead time. (a) There is no report and cannot be
+one until the corpus is de-saturated and a golden run has been paid for. (b) The
+recorded Q&A pairs have no owning spec — **flagged: they are not SPEC-007's, and
+if they are not to be this spec's, they need one**; they are a *required* content
+of a panel this spec must build.
+
+**One new requirement lands on this spec from SPEC-007 KD-2:** the limitations
+text — including the single-author bound — renders next to the numbers. A caveat
+one click away from a figure is a caveat most readers never see, and the eval's
+honesty about its own bias is worth nothing if the panel hides it.
+
+**One thing to watch, not a blocker:** SPEC-007 KD-5 proposes a `source` column
+on `query_log` so eval spend stops consuming the visitor ceiling. If the recorded
+Q&A capture runs through the same `Generator`, it needs the same treatment, or
+producing this spec's fixture takes the demo down for a day.
+
+**A third dependency is named rather than assumed:** the deployment that serves
+the static assets (SPEC-010), which is also where the read key question lands.
 
 ## Purpose
 

@@ -6,274 +6,368 @@
 **Depends on:** SPEC-002 (`eval_runs` / `eval_results`), SPEC-003 (corpus, de-saturation gate), SPEC-004 (retrieval, tuning metric), SPEC-005 (generation)
 **Consumed by:** SPEC-009 (the explanatory panel renders this spec's report)
 
-**Your brief was cut off mid-sentence, so this draft is built on part of it.**
-The text received ended at: *"What the eval measures and what a number in it
-licenses someone to claim. If a figure will appear in the degraded"* — the
-sentence stops there, and any bullets after it did not arrive. Key decision 1
-below is written to the complete bullet plus the evident continuation (a figure
-rendered in SPEC-009's explanatory panel is a claim made to strangers, so it
-needs a stated warrant). **Everything else here is derived from what the
-repository already binds** — SPEC-004 Key decision 12a, SPEC-004 AC-6a, SPEC-003's
-cross-spec note on golden-set authoring, and the RRF paraphrase regression
-measured 2026-07-26 — and is flagged as such. Please supply the rest of the
-brief; the missing bullets may well change the shape of the Interface section.
-
 **One prerequisite is binding and currently unmet.** SPEC-004 Key decision 12a:
 *do not report retrieval metrics, tune fusion, or set quality floors against a
-corpus that has not passed SPEC-003 AC-10 (de-saturation)*. At 358 chunks
+corpus that has not passed SPEC-003 AC-10 (de-saturation).* At 358 chunks
 recall@3 and recall@8 are pinned at 1.000 for both methods, which makes this
 harness **unfalsifiable as scoped**. Corpus expansion is a prerequisite, not an
-enhancement. See Key decision 6.
+enhancement (Key decision 7).
+
+**Two amendments to approved specs are proposed here and deliberately not
+applied** (CLAUDE.md rule 4): a `source` column on `query_log` (SPEC-002) and a
+source-scoped daily window (SPEC-006 Key decision 16). Both are in Key decision
+5. Nothing in this spec is implemented until it and they are approved.
 
 ## Purpose
 
 Make the project's central claim checkable by someone who does not trust it.
 
-Everything else in this repository produces an answer; this produces a number
-about how good those answers are, and the number is the thesis. That places an
-unusual obligation on it: **a figure this harness publishes will be read by
-people who cannot inspect how it was produced**, because SPEC-006 Key decision 16
-binds SPEC-009 to render the eval report in the explanatory panel — to visitors,
-on the demo's worst day. A metric that overstates what it knows is worse than no
-metric, because it converts an honest project into a misleading one at exactly
-the moment it is being evaluated.
+Everything else here produces an answer; this produces a number about how good
+those answers are, and the number is the thesis. That places an unusual
+obligation on it: **a figure this harness publishes is read by people who cannot
+inspect how it was produced**, because SPEC-006 Key decision 16 binds SPEC-009 to
+render the eval report in the explanatory panel — to visitors, on the demo's
+worst day, beside labeled recordings. At that moment the figure is a public
+claim about quality made by an artifact the reader cannot audit, and a number
+that overstates what it knows converts an honest project into a misleading one
+at exactly the point it is being evaluated.
 
 Three things, in order:
 
-1. **Score answers against a golden set**, including refusals, and record every
-   run in `eval_runs` / `eval_results` so a result is attributable to a corpus
-   state, a commit, and a configuration.
-2. **Adjudicate open retrieval questions** that the repository has deliberately
-   left open — first among them whether Reciprocal Rank Fusion beats vector-only,
-   which was measured on 2026-07-26 as a *loss* on paraphrase questions and has
-   been held un-tuned since, waiting for this harness.
-3. **Publish a report whose every figure carries its warrant** — sample size,
-   corpus state, and what it does not say.
+1. **Score answers against a golden set**, refusals included, recording every run
+   in `eval_runs` / `eval_results` so a result is attributable to a corpus state,
+   a commit, and a configuration.
+2. **Adjudicate the retrieval questions the repository has deliberately left
+   open** — first among them whether Reciprocal Rank Fusion beats vector-only,
+   measured 2026-07-26 as a *loss* on paraphrase questions and held un-tuned
+   since, waiting for this.
+3. **Publish a report whose every figure carries its warrant and its
+   methodology**, in the artifact itself, so the panel renders both together.
 
 ## Non-goals
 
 - **No LLM-as-judge in v1.** It replaces a measurement problem with a second,
-  unmeasured model. Revisit only with a human-labelled agreement study, which is
-  itself a research task this project has no room for.
-- **No leaderboard, no public benchmark comparison.** This corpus and question
-  set are ours; a number from them is not comparable to anyone else's and
-  presenting it as if it were would be the overstatement this spec exists to
-  prevent.
-- **No tuning inside the harness.** The harness measures; a person changes the
-  system and re-measures. A harness that also searches the configuration space
-  optimises against its own test set by construction.
-- **No online / per-request evaluation.** SPEC-006 Non-goals already put this
-  offline against the libraries, not over HTTP.
-- **No regression gate in CI in v1.** See Key decision 7 — it needs a floor, and
-  a floor cannot be set before the corpus is de-saturated.
+  unmeasured model. Revisit only with a human-labelled agreement study.
+- **No leaderboard or public benchmark comparison.** This corpus and question set
+  are ours; a number from them is not comparable to anyone else's, and presenting
+  it as if it were is the overstatement this spec exists to prevent.
+- **No tuning inside the harness.** It measures; a person changes the system and
+  re-measures. A harness that searches the configuration space optimises against
+  its own test set by construction.
+- **No online or per-request evaluation.** SPEC-006's Non-goals already put this
+  offline against the libraries.
+- **No CI regression gate in v1** (Key decision 8) — it needs a floor, and a
+  floor cannot be set before the corpus is de-saturated.
+- **No claim that this set is unbiased.** It is single-author and cannot be
+  blind. That is stated as a bound, not mitigated away — Key decision 3.
 
 ## Interface
 
 ```
 evals/
-  golden/            # the scored set: question, expectation, provenance
-    answerable.jsonl
+  golden/
+    answerable.jsonl        # authored cases, with provenance
     unanswerable.jsonl
-  retrieval/         # SPEC-004 AC-6a's separate, larger, retrieval-only set
-    cases.jsonl
+  retrieval/
+    cases.jsonl             # SPEC-004 AC-6a's separate, larger, generation-free set
   reports/
-    report-<git-sha>-<chunks>-chunks.json     # immutable, one per run
-    latest.json                               # convenience copy
+    report-<git-sha>-<chunks>chunks-<utc-date>.json   # immutable
+    latest.json                                        # convenience copy
+contracts/
+  eval-report.schema.json   # GENERATED + drift-checked, like conditions.json
 ```
 
 ```bash
-uv run python -m rag_qa.evals.run --set golden --config default   # costs money
-uv run python -m rag_qa.evals.run --set retrieval                 # no generation
-uv run python -m rag_qa.evals.report <run-id>                     # render only
+uv run python -m rag_qa.evals.run --set retrieval              # free; no generation
+uv run python -m rag_qa.evals.run --set golden                 # estimates, spends nothing
+uv run python -m rag_qa.evals.run --set golden --spend         # the billable call
+uv run python -m rag_qa.evals.report <run-id>                  # render only
 ```
 
-**Two sets, and they are not interchangeable** (SPEC-004 AC-6a, binding):
+**Two sets, not interchangeable** (SPEC-004 AC-6a, binding):
 
 | | golden | retrieval |
 |---|---|---|
-| Size | 50 (predates any power analysis — see KD-5) | as large as authoring allows |
-| Calls the model | yes — costs real money | **no** |
-| Measures | end-to-end verdict + citation correctness + refusal | recall@k, MRR@k |
-| Runs | deliberately, by a person | freely, in CI once de-saturated |
+| Size | 50 (predates any power analysis — KD-6) | as large as authoring allows |
+| Calls the model | yes — real money (KD-5) | **no** |
+| Measures | verdict, citation correctness, refusal | recall@k, MRR@k |
+| Runs | deliberately, by a person | freely, once de-saturated |
 
-**A case:**
+**A case** — provenance is part of the record, not a comment:
 
 ```jsonc
 {
   "case_id": "eu-ai-act-art6-2",
   "question": "What does Article 6(2) classify as high-risk?",
-  "kind": "answerable",              // or "unanswerable"
+  "kind": "answerable",                    // or "unanswerable"
   "expected_sections": ["EU AI Act › CHAPTER III › Article 6"],
-  "unanswerable_verified_at": null,  // required when kind == "unanswerable"
-  "notes": "authored from Annex III; competition from the 10-K risk factors"
+  "authored_from": "eu-ai-act",            // the document, before any retrieval ran
+  "authored_before_retrieval": true,       // KD-3; false is allowed and is reported
+  "edited_after_seeing_results": false,    // KD-3; true invalidates the case
+  "unanswerable_verified_at": null,        // required when kind == "unanswerable"
+  "notes": "near-miss: the 10-K risk factors use similar language"
 }
 ```
 
-**A report figure** — every published number is this shape, never a bare scalar:
+**A published figure** — never a bare scalar:
 
 ```jsonc
 {
   "metric": "refusal_rate_on_unanswerable",
   "value": 0.86,
-  "n": 22,                            // the denominator, always
-  "interval": [0.65, 0.97],           // Wilson, 95%
+  "n": 22,                                 // the denominator, always
+  "decided": 22,                           // cases where it could have gone either way
+  "interval": [0.65, 0.97],                // Wilson, 95%
   "corpus_chunks": 1180,
   "git_sha": "…",
-  "decided": 22,                      // cases where the metric could discriminate
   "claim": "On 22 questions verified unanswerable against this corpus, the system declined 19.",
   "not_a_claim": "That it declines 86% of unanswerable questions in general."
+}
+```
+
+**The report carries its own methodology**, because SPEC-009 renders it to a
+reader who has not opened the repository:
+
+```jsonc
+{
+  "schema_version": "1",
+  "methodology": {
+    "summary": "50 questions authored from the source documents before retrieval was run…",
+    "authoring": "single-author, not blind — see limitations",
+    "limitations": ["…"],                  // KD-3's bound, rendered, not filed
+    "corpus": {"chunks": 1180, "documents": [...], "desaturated": true}
+  },
+  "figures": [ /* the shape above */ ],
+  "cost_usd": "0.4831",
+  "run": {"id": "…", "git_sha": "…", "dirty_worktree": false, "created_at": "…"}
 }
 ```
 
 ## Key decisions
 
 1. **Every published figure carries its warrant, and `claim` / `not_a_claim` are
-   required fields rather than documentation.** This is the decision the rest of
-   the spec serves. A number in the explanatory panel is read by someone who
-   cannot see the harness, and the failure mode is not fabrication — it is a true
-   number licensing a false inference. **The repository already has the worked
-   example:** SPEC-004 AC-6 asserted hybrid recall@1 > vector-only, measured
-   0.929 vs 0.857, and that margin was *one net question out of fourteen*, from a
-   2–1 split of three decided questions. It was written up as evidence that
-   hybrid retrieval works. It was a coin flip, and SPEC-004 Key decision 12 had
-   to be amended to withdraw the claim while keeping the assertion. **A figure
-   without `n`, `decided`, and an interval would have made that correction
-   impossible to notice**, because the number itself was never wrong. So: no
-   scalar is published alone, `n` is the denominator not the corpus size,
-   `decided` is the count of cases where the metric could have come out either
-   way, and `not_a_claim` states the generalisation the figure does **not**
-   support.
+   required fields rather than documentation.** The failure mode is not
+   fabrication — it is a true number licensing a false inference. **The
+   repository already has the worked example:** SPEC-004 AC-6 asserted hybrid
+   recall@1 > vector-only, measured 0.929 vs 0.857, and that margin was *one net
+   question out of fourteen* from a 2–1 split of three decided questions. It was
+   written up as evidence hybrid retrieval works. It was a coin flip, and KD-12
+   had to be amended to withdraw the claim while keeping the assertion. **The
+   number was never wrong; the inference was** — which is precisely why `n`,
+   `decided`, and an interval are structural rather than editorial. `n` is the
+   denominator, never the corpus size; `decided` is the count of cases where the
+   metric could have come out either way; `not_a_claim` states the
+   generalisation the figure does **not** support.
 
-2. **Refusal is scored as a capability, symmetric with answering.** CLAUDE.md
-   makes declining a tested capability and SPEC-006 Key decision 1 makes it a
-   200. So the harness reports a **2×2**, not an accuracy: answered-correctly,
-   answered-when-it-should-have-declined (the expensive error), declined-correctly,
-   declined-when-it-could-have-answered. A single "accuracy" figure would let a
-   system that never refuses and a system that always refuses land on the same
-   number, and the whole refusal design would become invisible to the metric
-   meant to justify it.
+2. **The methodology travels inside the artifact, because the reader is in a
+   browser and not in the repository.** A `METHODOLOGY.md` in the repo is
+   sufficient for a reviewer and useless to the visitor SPEC-009 is showing the
+   panel to, and "the details are on GitHub" is how a caveat gets separated from
+   the number it qualifies. So the report embeds `methodology.summary`,
+   `methodology.authoring`, and `methodology.limitations`, and **SPEC-009 renders
+   the limitations adjacent to the figures rather than behind a disclosure** — a
+   caveat one click away from a number is a caveat most readers never see.
 
-3. **Unanswerability is a claim about the corpus and is verified by retrieval,
-   not asserted by the author** (SPEC-003's cross-spec note, binding). With
-   overlapping regulatory material, a question authored as unanswerable from one
-   document may be answerable from another the author did not have in mind.
-   `unanswerable_verified_at` records the corpus state the verification ran
-   against, and **a case whose verification predates the current corpus is not
-   scored** — it is reported as stale, loudly, because silently scoring it turns a
-   corpus expansion into a fake refusal failure or, worse, a fake success.
+3. **The eval set is authored by the same person who built the retriever, this
+   cannot be fixed here, and the honest response is to name it and bound it.**
+   *This is the decision most likely to be criticised, and it should be.* The
+   failure mode is not dishonesty; it is that one mental model produced both
+   artifacts, so the questions are unconsciously written in the vocabulary the
+   chunker preserved, against the sections the breadcrumb design surfaces,
+   phrased the way the embedder likes. The set then measures the system against
+   its own assumptions and returns a flattering number that is entirely
+   true and entirely uninformative. Four concrete mechanisms, each with the countermeasure
+   actually available to a solo project:
 
-4. **A run is attributable or it is not a run.** `eval_runs` already carries
-   `git_sha`, `dataset_name`, `config`, `created_at`; the report adds the corpus
-   chunk count. Any figure that cannot name all four is not published. This is
-   what makes a before/after across corpus states a finding rather than two
-   numbers, and it is the same argument SPEC-003 AC-13 made for immutable
-   baselines — which this spec extends to reports.
+   | Mechanism | Countermeasure |
+   |---|---|
+   | Questions authored while looking at chunk boundaries | Author from the **source document**, before ingestion output is consulted; `authored_from` records which |
+   | A question rewritten after seeing a bad result | `edited_after_seeing_results: true` **invalidates** the case — it must be re-issued under a new `case_id`, not repaired |
+   | Clean sections chosen, messy ones (tables, cross-references) avoided | SPEC-003's cross-spec note already mandates near-miss and multi-source authoring; the report publishes the composition |
+   | Unanswerable questions chosen to be *obviously* unanswerable | Unanswerability is verified by retrieval (KD-4), and the report publishes the near-miss share |
 
-5. **50 golden questions is a number that predates any power analysis, and it is
-   not defended here.** SPEC-004 Key decision 12a says so explicitly: power comes
-   from the retrieval-only set, not from the golden set and not from more
-   documents. So the golden set is sized for *coverage of the failure modes*
-   (multi-source, citation-exact, paraphrase, unanswerable, near-miss) and the
-   report must not quote a golden-set difference as significant. **Flagged as the
-   decision most likely to be wrong**: if the intended use is comparing two
-   configurations end to end, 50 is too few and the honest fix is a power
-   calculation before authoring more, not after.
+   **The bound, stated because it cannot be removed:** none of this makes the set
+   blind, and a single-author eval set systematically overstates the system it
+   was written for. The report says so in `methodology.limitations`, in the panel,
+   in those words. **What would actually fix it** — questions authored by someone
+   who has not seen the retrieval code, or drawn from an external benchmark — is
+   named as the revisit condition rather than pretended at.
 
-6. **The corpus must pass SPEC-003 AC-10 before this harness reports anything —
-   inherited, not chosen here.** SPEC-004 Key decision 12a is binding: at 358
-   chunks recall@3 and recall@8 are 1.000 for both methods, so the metrics carry
-   no information, and only k=1 discriminates. Reporting against a saturated
-   corpus produces figures that are true, stable, and meaningless — the exact
-   thing Key decision 1 exists to prevent, arriving through the corpus rather
-   than through the arithmetic. **Consequence for sequencing:** this spec can be
-   written and its harness built, but its first published report waits on
-   de-saturation.
+4. **Unanswerability is a claim about the corpus, verified by retrieval, not
+   asserted by the author** (SPEC-003's cross-spec note, binding). With
+   overlapping regulatory material a question authored as unanswerable from one
+   document may be answerable from another. `unanswerable_verified_at` records
+   the corpus state the verification ran against, and **a case whose verification
+   predates the current corpus is not scored** — it is reported as stale, loudly.
+   Silently scoring it turns a corpus expansion into a fake refusal failure or,
+   worse, a fake success.
 
-7. **No CI regression gate in v1, and the reason is that a floor cannot be
-   honestly set yet.** The obvious design fails a build when a metric drops.
-   SPEC-004 AC-6 deliberately declined to set an absolute floor, on the grounds
-   that "a provisional number amended to match the first run would be a
-   measurement wearing a standard's clothes" — and that reasoning holds here with
-   more force, because a gate makes the number load-bearing for merges. **Revisit
-   when** the corpus is de-saturated and two consecutive runs at the same corpus
-   state have established run-to-run variance; the floor is then set below
-   observed variance, not at the last run's value.
+5. **An eval run spends the demo's budget, and the first draft of this spec said
+   it did not. Corrected here.** *(CLAUDE.md rule 7 — third instance, and the
+   first found in a Draft.)* The draft claimed "SPEC-006's ceiling does not apply
+   — this runs offline against the libraries, not through the API." **That is
+   false, and the mechanism is one line:** `Generator._write_query_log` writes a
+   `query_log` row whenever it holds a `session_factory`, `SpendGuard` sums
+   `cost_usd` over **every** row in the window, and `query_log` has **no column
+   distinguishing traffic**. The ceiling is not an API-layer feature that offline
+   code escapes; it reads a ledger the *library* writes. Running offline changes
+   nothing.
 
-8. **The RRF-vs-vector-only question is this harness's first job, and it is
-   currently open with a measured regression against it.** Measured 2026-07-26:
-   plain RRF loses to vector-only overall on paraphrase questions. Nothing has
-   been tuned since, deliberately, because tuning before a harness exists means
-   tuning against a number nobody can reproduce. The retrieval set adjudicates
-   it, and **the answer is allowed to be "vector-only wins"** — CLAUDE.md's
-   hybrid-retrieval rationale is a hypothesis this measures, not a commitment it
-   defends. If hybrid loses on a de-saturated corpus, the finding is published
-   and the stack decision is revisited by amendment.
+   **The arithmetic, which is why this matters more than a wording fix.** Fifty
+   golden questions at the observed ~$0.010 per query is ~$0.50 against a derived
+   daily ceiling of **$0.64** ($20/month ÷ 31). **One eval run consumes ~78 % of
+   the day's visitor budget, and a run that starts near the ceiling trips it —
+   taking the demo down, on a schedule, to measure how good the demo is.**
 
-9. **A golden run costs real money and is therefore explicit, budgeted, and
-   recorded.** 50 questions × generation is a live provider spend, and SPEC-006's
-   ceiling does not apply — this runs offline against the libraries, not through
-   the API. So the runner prints the estimated cost and requires a flag to spend,
-   the same shape SPEC-006 Key decision 12 chose for `/ingest` (dry-run by
-   default, because the destructive expensive call should be the one you ask
-   for), and the actual cost is a field on the report.
+   Today the harness has exactly two options and both are wrong: write rows and
+   consume the visitor ceiling indistinguishably, or write none and make eval
+   spend invisible to the only ledger the project has. So:
+
+   - **Proposed (SPEC-002): add `source` to `query_log`** — `visitor` | `eval` |
+     `cli`, not-null, defaulted to `visitor` so the migration is safe on existing
+     rows. One migration, one column, and it is the discriminator every option
+     below needs.
+   - **Proposed (SPEC-006 Key decision 16): the daily window filters to
+     `source = 'visitor'`; the monthly cap does not.** The daily ceiling's job is
+     shaping *visitor* burst, and an eval run must not close the demo for the
+     rest of the day. The monthly cap is the **invoice**, which includes eval
+     spend, so it counts everything — otherwise the number the owner committed to
+     silently stops meaning what they committed to.
+   - **Decided here (no amendment needed): an eval run refuses to start when the
+     monthly headroom is below its own estimate.** A scheduled eval on the 28th
+     of an expensive month must decline and say so, rather than be the thing that
+     exhausts the month. This is the reservation idea from SPEC-006 KD-16
+     amendment 5 at a coarser grain: estimate the worst case, check it against
+     headroom, refuse rather than overshoot.
+
+   **Until those amendments are approved**, the harness runs with
+   `session_factory=None` — its spend is recorded in the report and **not** in
+   `query_log` — and the report states that its cost is absent from the ledger.
+   That is the least-bad interim, and it is stated rather than left as a gap.
+
+6. **50 golden questions predates any power analysis, and is not defended here.**
+   SPEC-004 KD-12a says power comes from the retrieval-only set, not from the
+   golden set and not from more documents. So the golden set is sized for
+   *coverage of failure modes* — multi-source, citation-exact, paraphrase,
+   unanswerable, near-miss — and **the report must not quote a golden-set
+   difference between two configurations as significant.** Flagged: if the
+   intended use turns out to be config comparison, 50 is too few, and the honest
+   fix is a power calculation before authoring more, not after.
+
+7. **The corpus must pass SPEC-003 AC-10 before this reports anything — inherited
+   from SPEC-004 KD-12a, not chosen here.** Reporting against a saturated corpus
+   produces figures that are true, stable, and meaningless: the exact thing KD-1
+   exists to prevent, arriving through the corpus instead of the arithmetic.
+   Enforced with a named failure (AC-9), not documented — a binding constraint
+   living only in prose is one someone follows until they are in a hurry.
+
+8. **No CI regression gate in v1, because a floor cannot be set honestly yet.**
+   SPEC-004 AC-6 declined an absolute floor on the grounds that "a provisional
+   number amended to match the first run would be a measurement wearing a
+   standard's clothes", and that holds harder here, where a gate makes the number
+   load-bearing for merges. **Revisit when** the corpus is de-saturated and two
+   consecutive runs at the same corpus state have established run-to-run
+   variance; the floor then sits below observed variance, not at the last run.
+
+9. **Every guarantee this spec makes about quality carries a test or a stated
+   bound** (CLAUDE.md rule 7, applied to the spec most exposed to it). A quality
+   claim is the one kind of claim in this repository that reaches strangers, so
+   the rule is enforced mechanically rather than by review: AC-1 makes an
+   unwarranted figure unrenderable, and **AC-10 asserts that this document
+   contains no unqualified quality claim** — every sentence asserting the system
+   is good either names the figure that supports it or names its bound.
+
+10. **The RRF-vs-vector-only question is this harness's first job, and
+    "vector-only wins" is an allowed answer.** Measured 2026-07-26: plain RRF
+    loses to vector-only overall on paraphrase questions. Nothing has been tuned
+    since, deliberately — tuning before a harness exists means tuning against a
+    number nobody can reproduce. CLAUDE.md's hybrid-retrieval rationale is a
+    hypothesis this measures, not a commitment it defends; if hybrid loses on a
+    de-saturated corpus, the finding is published and the stack decision is
+    revisited by amendment.
 
 ## Acceptance criteria
 
-- **AC-1 (no bare scalar is publishable)** — Every figure in a report carries
-  `n`, `decided`, an interval, `corpus_chunks`, `git_sha`, `claim`, and
-  `not_a_claim`; a report containing a figure missing any of them fails to
-  render, asserted by constructing one. The renderer has no code path that emits
-  a value without its warrant — asserted structurally, not by inspecting output,
-  since the failure is an omission.
-- **AC-2 (the warrant is not decorative)** — Reconstructing SPEC-004's 2026-07-26
-  measurement as a report (recall@1 0.929 vs 0.857, three decided questions)
-  produces `decided: 3` and an interval spanning the difference, and its
-  `not_a_claim` states that it is not evidence hybrid retrieval works. The
-  historical over-claim is the fixture: if this harness would have published that
-  result as evidence, the field set is wrong.
-- **AC-3 (refusal is scored as a 2×2)** — A run reports all four cells. A system
-  that never refuses and one that always refuses produce visibly different
-  reports, asserted with two stub generators, since a metric that cannot separate
-  them is the metric this criterion exists to reject.
+- **AC-1 (no bare scalar is publishable)** — Every figure carries `n`, `decided`,
+  an interval, `corpus_chunks`, `git_sha`, `claim`, and `not_a_claim`; a report
+  containing a figure missing any of them fails to render, asserted by
+  constructing one. The renderer has **no code path** that emits a value without
+  its warrant — asserted structurally, since the failure is an omission and
+  checking figures that happen to be well-formed cannot prove it.
+- **AC-2 (the warrant is not decorative)** — Reconstructing SPEC-004's
+  2026-07-26 measurement as a report (recall@1 0.929 vs 0.857, three decided
+  questions) yields `decided: 3`, an interval spanning the difference, and a
+  `not_a_claim` stating it is not evidence hybrid retrieval works. **The
+  historical over-claim is the fixture**: if this harness would have published
+  that result as evidence, the field set is wrong. It is the only case in this
+  repository where an over-claim actually happened, so it is the only fixture
+  that tests the guard against something other than the author's imagination.
+- **AC-3 (refusal is scored as a 2×2, not an accuracy)** — A run reports all four
+  cells: answered-correctly, answered-when-it-should-have-declined, declined-
+  correctly, declined-when-it-could-have-answered. Asserted with two stub
+  generators — one that never refuses, one that always does — producing visibly
+  different reports. A single accuracy figure would let both land on the same
+  number and make the entire refusal design invisible to the metric meant to
+  justify it.
 - **AC-4 (a stale unanswerable case is not scored)** — A case whose
   `unanswerable_verified_at` predates the current corpus state is excluded and
-  reported as stale; asserted by moving the corpus state forward and re-running.
-  Scoring it either way — as a pass or a fail — is asserted **not** to happen.
-- **AC-5 (a run is attributable)** — Every `eval_results` row joins to an
-  `eval_runs` row carrying `git_sha`, `dataset_name`, `config`, and the corpus
-  chunk count; a run started with a dirty working tree records that fact.
-- **AC-6 (reports are immutable, like baselines)** — A second run at the same
-  git sha and corpus state does not overwrite the first report; the write guard
-  fails the run, reusing SPEC-004 AC-13's mechanism rather than a second one.
-- **AC-7 (the retrieval set runs without spending)** — `--set retrieval` makes
-  **zero** provider generation calls, asserted by counting calls on a fake
-  client, so it can run freely once the corpus is de-saturated.
-- **AC-8 (a golden run will not spend without being asked)** — The default is an
-  estimate and no spend; spending requires an explicit flag; the report records
-  the actual cost. Asserted by running the default and observing zero calls.
-- **AC-9 (the de-saturation prerequisite is enforced, not documented)** — Running
-  a report against a corpus that has not passed SPEC-003 AC-10 fails with a named
-  cause rather than producing figures. A binding constraint that only exists in
-  prose is one someone follows until they are in a hurry.
+  reported as stale. Asserted by moving the corpus state forward and re-running,
+  and asserted that it is scored **neither** as a pass nor as a fail.
+- **AC-5 (authoring provenance is enforced, not requested)** — A case with
+  `edited_after_seeing_results: true` is **rejected by the loader**, naming the
+  case id and the rule; a case missing `authored_from` is rejected. The
+  proportion authored before retrieval appears in `methodology`, so a set that
+  drifts toward post-hoc authoring is visible in its own report.
+- **AC-6 (the methodology reaches the reader)** — `methodology.limitations` is
+  non-empty and contains the single-author bound in words, asserted on the
+  rendered report rather than on the config that produced it. A report whose
+  limitations array is empty fails to render.
+- **AC-7 (a run is attributable, and reports are immutable)** — Every
+  `eval_results` row joins an `eval_runs` row carrying `git_sha`,
+  `dataset_name`, `config`, and the corpus chunk count; a dirty worktree is
+  recorded as such. A second run at the same git sha and corpus state does not
+  overwrite the first report — the write guard fails the run, reusing SPEC-004
+  AC-13's mechanism rather than a second one.
+- **AC-8 (spend is explicit, estimated, bounded, and attributed)** —
+  `--set retrieval` makes **zero** provider generation calls, asserted by
+  counting calls on a fake client. `--set golden` without `--spend` makes zero
+  calls and prints an estimate. A golden run whose estimate exceeds the remaining
+  **monthly** headroom refuses to start, naming the shortfall (KD-5). The actual
+  cost is a field on the report, and the report states whether that cost is
+  present in `query_log` or absent from it.
+- **AC-9 (the de-saturation prerequisite is enforced)** — Reporting against a
+  corpus that has not passed SPEC-003 AC-10 fails with a named cause rather than
+  producing figures.
+- **AC-10 (this spec makes no unqualified quality claim)** — A test over this
+  document asserts that every sentence claiming the system performs well cites a
+  figure or names a bound. Mechanical and deliberately crude: it exists because
+  the failure it guards is one the author cannot see in their own prose.
+- **AC-11 (the report contract cannot drift)** — `contracts/eval-report.schema.json`
+  is generated from the report model and regenerated in the test, failing on any
+  difference — the same guard `contracts/conditions.json` gets, for the same
+  reason: SPEC-009 binds to this shape, and a consumer reading a stale schema
+  fails silently in the direction of rendering nothing.
 
 ## Test plan
 
 `tests/test_evals_*.py`. The harness's own tests use **stub generators and the
-seeded synthetic corpus**, never the real corpus and never a provider — a test
-suite that spends money to run is a test suite that stops being run.
+seeded synthetic corpus** — never the real corpus, never a provider. A test suite
+that spends money to run is a test suite that stops being run.
 
-**The shape to be most suspicious of here is a report test that asserts on the
-report object rather than on the rendered report** (CLAUDE.md rule 3's closing
-sentence, and the sixth and seventh instances in its list). AC-1's structural
-assertion is deliberately about the absence of a code path, because "no figure
-lacks a warrant" cannot be proved by checking figures that happen to have one.
+**The shape to be most suspicious of here is a report test asserting on the
+report object rather than the rendered report** (CLAUDE.md rule 3, and the sixth
+and seventh entries in its list). AC-1 and AC-6 are therefore written against
+rendered output, and AC-1's structural half is about the absence of a code path,
+because "no figure lacks a warrant" cannot be proved by inspecting figures that
+have one.
 
 **Every acceptance criterion is verified by breaking the behaviour it covers.**
 The mutations that matter: emit a figure without `n`; score a stale unanswerable
-case instead of excluding it; let the retrieval set call the generator; let a
-second report overwrite the first; remove the de-saturation check.
+case instead of excluding it; accept a case edited after its results were seen;
+let the retrieval set call the generator; let a golden run start with insufficient
+monthly headroom; let a second report overwrite the first; empty the limitations
+array; remove the de-saturation check.
 
-**AC-2's fixture is a historical result, on purpose.** It is the only case in
-this repository where an over-claim actually happened and was caught, so it is
-the only fixture that tests the guard against something other than the author's
-imagination.
+**AC-3 needs two stub generators rather than one**, and that is the point of it:
+a metric that cannot separate never-refuses from always-refuses is the metric
+this criterion rejects, and a single stub cannot demonstrate separation.

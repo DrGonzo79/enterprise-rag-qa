@@ -179,6 +179,14 @@ class RequestContextMiddleware:
             ceiling = outcome.get("ceiling")
             if code == "budget_exhausted" and isinstance(ceiling, str):
                 self.metrics.observe_budget_trip(ceiling)
+            # Counted apart from a trip on purpose. Both refuse a visitor, and
+            # that is where the resemblance ends: a trip lasts until a UTC
+            # boundary, pressure lasts one generation. Summing them would cost
+            # the trip counter the meaning an operator pages on, and leaving
+            # pressure to the headroom gauges would make it unobservable — a
+            # 15s scrape cannot see a 3s spike.
+            if code == "budget_pressure":
+                self.metrics.observe_budget_pressure()
 
         # A readiness probe every 10s across three replicas is ~26,000 records a
         # day saying "still ok": volume that costs money to ship, buries what

@@ -2,6 +2,7 @@
 AC-15, AC-20, AC-21, AC-22, KD-16)."""
 
 import asyncio
+import calendar
 import logging
 import re
 import uuid
@@ -21,6 +22,7 @@ from api_harness import build_app, client_for, post, settings
 from rag_qa.api.budget import (
     CENT,
     PRESSURE_RETRY_AFTER_SECONDS,
+    Reservation,
     SpendGuard,
     derive_daily_limit,
     next_utc_month_start,
@@ -162,12 +164,18 @@ async def test_spend_is_scoped_to_the_utc_day(
     question = f"{marker} probe"
     yesterday = utc_day_start(datetime.now(UTC)) - timedelta(hours=1)
     await _log_spend(session_factory, marker, "9.00", yesterday)
-    app = build_app(session_factory=session_factory, daily_budget_usd=Decimal("5.00"))
+    # $5 of headroom above what today already holds, not an absolute $5: the
+    # first assertion is that today's window is *clear*, and an absolute ceiling
+    # would make that a statement about `query_log`'s history instead. Measured
+    # **once**, before the row below lands -- re-measuring afterwards would move
+    # the ceiling up by the very spend the second assertion is about.
+    ceiling = await _spend_so_far_today(session_factory) + Decimal("5.00")
+    app = build_app(session_factory=session_factory, daily_budget_usd=ceiling)
     try:
         # Yesterday's spend does not count against today's ceiling.
         assert (await post(app, "/query", {"question": question})).status_code == 200
         await _log_spend(session_factory, marker, "9.00", datetime.now(UTC))
-        app_today = build_app(session_factory=session_factory, daily_budget_usd=Decimal("5.00"))
+        app_today = build_app(session_factory=session_factory, daily_budget_usd=ceiling)
         assert (await post(app_today, "/query", {"question": question})).status_code == 503
     finally:
         # The successful call above logged its own row under the same marker.
@@ -194,7 +202,9 @@ async def test_local_delta_trips_inside_the_same_ttl_window(
     would wait a full TTL after crossing the limit, and one replica's overshoot
     would be a function of the TTL rather than of one query (KD-16 amendment 5)."""
 
-    guard = SpendGuard(session_factory, daily_limit_usd=Decimal("1.00"), refresh_seconds=1000.0)
+    guard = _empty_window_guard(
+        session_factory, daily_limit_usd=Decimal("1.00"), refresh_seconds=1000.0
+    )
     await guard.check()  # under the limit
     guard.record(Decimal("1.50"))
     with pytest.raises(BudgetExhausted):
@@ -485,6 +495,10 @@ async def test_monthly_window_sees_spend_the_daily_window_cannot(
         daily_only = SpendGuard(
             session_factory, daily_limit_usd=Decimal("5.00"), now=lambda: mid_month
         )
+        # mid_month is a different UTC day from the one ambient rows land on, so
+        # this window is empty by construction -- except on the 16th, which is
+        # why the assertion below is about a *cleared* window rather than a
+        # small one.
         await daily_only.check()  # today is clear — the daily ceiling sees nothing
 
         monthly = SpendGuard(
@@ -503,7 +517,7 @@ async def test_spend_before_this_month_does_not_count(
     marker = f"budget-{uuid.uuid4()}"
     last_month = utc_month_start(datetime.now(UTC)) - timedelta(hours=1)
     await _log_spend(session_factory, marker, "500.00", last_month)
-    app = build_app(session_factory=session_factory, monthly_budget_usd=Decimal("20.00"))
+    app = await _headroom_app(session_factory, monthly=Decimal("20.00"))
     try:
         response = await post(app, "/query", {"question": f"{marker} probe"})
     finally:
@@ -722,21 +736,68 @@ def _empty_window_guard(factory: async_sessionmaker[AsyncSession], **kw: Any) ->
     return SpendGuard(factory, now=lambda: future, **kw)
 
 
-async def _spend_so_far_today(factory: async_sessionmaker[AsyncSession]) -> Decimal:
-    """Today's recorded spend, so an HTTP test can size a ceiling relative to it.
+async def _spend_so_far(factory: async_sessionmaker[AsyncSession]) -> tuple[Decimal, Decimal]:
+    """(today, this month) as `query_log` already holds them.
 
     The app's guard reads the real clock and cannot be given a fake one through
-    `create_app`, so a test that needs "one worst-case query of headroom" has to
+    `create_app`, so an HTTP test that needs "N dollars of headroom" has to
     measure the floor rather than assume it is zero.
     """
+    now = datetime.now(UTC)
     async with factory() as session:
-        total = (
+        row = (
             await session.execute(
-                text("SELECT coalesce(sum(cost_usd), 0) FROM query_log WHERE created_at >= :day"),
-                {"day": utc_day_start(datetime.now(UTC))},
+                text(
+                    "SELECT coalesce(sum(cost_usd) FILTER (WHERE created_at >= :day), 0) AS day, "
+                    "       coalesce(sum(cost_usd), 0) AS month "
+                    "FROM query_log WHERE created_at >= :month"
+                ),
+                {"day": utc_day_start(now), "month": utc_month_start(now)},
             )
-        ).scalar_one()
-    return Decimal(str(total))
+        ).one()
+    return Decimal(str(row.day)), Decimal(str(row.month))
+
+
+async def _spend_so_far_today(factory: async_sessionmaker[AsyncSession]) -> Decimal:
+    return (await _spend_so_far(factory))[0]
+
+
+async def _headroom_app(
+    factory: async_sessionmaker[AsyncSession],
+    *,
+    daily: Decimal | None = None,
+    monthly: Decimal | None = None,
+    **kw: Any,
+) -> Any:
+    """An app whose ceiling is `headroom` **above what the window already
+    contains**, rather than an absolute figure that assumes an empty database.
+
+    Every HTTP test that expects a request to be *admitted* carries a premise:
+    that this UTC day (or month) has not already spent the ceiling the test
+    configures. Written as `daily_budget_usd=Decimal("5.00")` that premise is
+    unstated, unenforced, and drifts — `query_log` in the test database only
+    grows, so the test passes until one day it does not, for a reason that has
+    nothing to do with what it asserts. Stating it as headroom makes the premise
+    part of the setup instead of a fact about history.
+
+    (The guard-level tests solve the same problem differently, with
+    `_empty_window_guard` — an injected clock pointed at a window that is empty
+    by construction. That is not available here: `create_app` builds its own
+    `SpendGuard` on the real clock.)
+    """
+    day_total, month_total = await _spend_so_far(factory)
+    if daily is not None:
+        kw["daily_budget_usd"] = day_total + daily
+    if monthly is not None:
+        # A monthly-only budget implies a **derived** daily ceiling
+        # (`monthly / days-in-month`), so headroom here is two-dimensional:
+        # clearing the month's floor is not enough if today's floor still
+        # exceeds the daily figure derived from it. Found by flooding today's
+        # window with $50 and watching a monthly-headroom app trip on its
+        # derived $2.26 daily -- the premise was still hiding, one level down.
+        days = calendar.monthrange(datetime.now(UTC).year, datetime.now(UTC).month)[1]
+        kw["monthly_budget_usd"] = max(month_total + monthly, days * (day_total + monthly))
+    return build_app(session_factory=factory, **kw)
 
 
 # --- AC-20: the claim is held across the call and released however it ends -----
@@ -747,7 +808,7 @@ async def test_the_reservation_is_held_during_the_call_and_settled_to_actual_aft
 ) -> None:
     marker = f"budget-{uuid.uuid4()}"
     client = ObservingClient()
-    app = _budgeted_app(client, session_factory, daily_budget_usd=Decimal("5.00"))
+    app = await _headroom_app(session_factory, client=client, daily=Decimal("5.00"))
     guard: SpendGuard = app.state.rag.budget
     client.guard = guard
     try:
@@ -784,7 +845,7 @@ async def test_the_reservation_is_released_when_generation_fails(
     none of them, and these two leave the route by different `raise` statements.
     """
     client = RaisingClient(error)
-    app = _budgeted_app(client, session_factory, daily_budget_usd=Decimal("5.00"))
+    app = await _headroom_app(session_factory, client=client, daily=Decimal("5.00"))
     guard: SpendGuard = app.state.rag.budget
 
     response = await post(app, "/query", {"question": QUESTION})
@@ -801,7 +862,7 @@ async def test_a_disconnected_client_does_not_leave_a_claim_behind(
     torn down mid-await, inside the provider call, with no exception the route
     handles. Nothing but an unconditional `finally` releases here."""
     client = SlowClient(delay=5.0)
-    app = _budgeted_app(client, session_factory, daily_budget_usd=Decimal("5.00"))
+    app = await _headroom_app(session_factory, client=client, daily=Decimal("5.00"))
     guard: SpendGuard = app.state.rag.budget
 
     inflight = asyncio.create_task(post(app, "/query", {"question": QUESTION}))
@@ -821,7 +882,7 @@ async def test_a_stream_that_dies_after_its_first_frame_releases_its_reservation
     from rag_qa.api.routes import query as query_route
 
     client = FailingStreamClient()
-    app = _budgeted_app(client, session_factory, daily_budget_usd=Decimal("5.00"))
+    app = await _headroom_app(session_factory, client=client, daily=Decimal("5.00"))
     guard: SpendGuard = app.state.rag.budget
 
     async with (
@@ -845,7 +906,7 @@ async def test_a_cancelled_stream_releases_its_reservation(
     from rag_qa.api.routes import query as query_route
 
     client = HangingStreamClient()
-    app = _budgeted_app(client, session_factory, daily_budget_usd=Decimal("5.00"))
+    app = await _headroom_app(session_factory, client=client, daily=Decimal("5.00"))
     guard: SpendGuard = app.state.rag.budget
     before = set(query_route._background)
 
@@ -881,11 +942,11 @@ async def test_a_question_with_no_chunks_reserves_nothing(
 
     marker = f"budget-{uuid.uuid4()}"
     client = ObservingClient()
-    app = build_app(
-        StubRetriever(chunks=[]),
+    app = await _headroom_app(
+        session_factory,
+        retriever=StubRetriever(chunks=[]),
         client=client,
-        session_factory=session_factory,
-        daily_budget_usd=Decimal("5.00"),
+        daily=Decimal("5.00"),
     )
     guard: SpendGuard = app.state.rag.budget
     client.guard = guard
@@ -1235,3 +1296,92 @@ async def test_metrics_publishes_committed_headroom_beside_remaining(
     rendered = metrics.render()
     assert "rag_qa_budget_reserved_usd 0.25" in rendered
     assert 'rag_qa_budget_remaining_usd{ceiling="daily"} 5.00' in rendered
+
+
+async def test_concurrent_reserves_cannot_admit_against_the_same_stale_read(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """The bound holds only if test-and-add cannot yield in the middle.
+
+    `ceiling + one worst-case query` is arithmetic over a comparison and an
+    increment. If anything suspends between them, N coroutines read the same
+    outstanding total, all decide there is room, and all take it — the in-flight
+    blind spot rebuilt inside the mechanism that closed it, and invisible,
+    because every individual request behaved correctly.
+
+    Today no line in `_admit` awaits, so this passes whether or not the property
+    is *structural*. It is `def` rather than `async def` for exactly that reason,
+    and this test is verified by making it `async` and inserting a bare
+    `await asyncio.sleep(0)` between the check and the increment: all fifty are
+    admitted and the assertion below fails.
+    """
+    ceiling = Decimal("1.00")
+    worst_case = ceiling  # one claim fills the ceiling exactly
+    guard = _empty_window_guard(session_factory, daily_limit_usd=ceiling, refresh_seconds=1000.0)
+    # Primed, so `reserve()` does not suspend on a refresh: the race under test
+    # is the one *after* the totals are read, and a cold cache would also make
+    # fifty concurrent requests open fifty connections.
+    await guard.check()
+
+    outcomes = await asyncio.gather(
+        *(guard.reserve(worst_case) for _ in range(50)), return_exceptions=True
+    )
+
+    admitted = [o for o in outcomes if isinstance(o, Reservation)]
+    refused = [o for o in outcomes if isinstance(o, BaseException)]
+    assert len(admitted) == 1, f"{len(admitted)} requests admitted against a one-request ceiling"
+    assert len(refused) == 49
+    assert all(isinstance(o, BudgetPressure) for o in refused)
+    assert guard.reserved == worst_case
+
+
+def test_the_critical_section_cannot_acquire_a_suspension_point() -> None:
+    """The enforcement, asserted rather than trusted to review.
+
+    A comment saying "do not await here" is advice; a synchronous function is a
+    structure. Adding an await inside `_admit` requires making it `async` and
+    changing its caller, which is a diff a reviewer sees — the same argument
+    `snapshot()` makes for staying `def` so a scrape cannot learn to query.
+    """
+    import inspect
+
+    assert not inspect.iscoroutinefunction(SpendGuard._admit)
+    assert not inspect.iscoroutinefunction(SpendGuard.snapshot)
+    assert not inspect.iscoroutinefunction(SpendGuard.record)
+
+
+async def test_pressure_refusals_get_their_own_counter_not_the_trip_counter(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """A gauge scraped every 15s cannot see a three-second spike, so a demo
+    refusing a third of its arrivals to reservation pressure reads as healthy on
+    `budget_remaining`. The counter is the only series that can observe it — and
+    it is emitted from zero, so `absent()` on it means "this replica is not
+    reporting" rather than "nothing has happened yet"."""
+    marker = f"budget-{uuid.uuid4()}"
+    question = f"{marker} probe"
+    ceiling = await _spend_so_far_today(session_factory) + Generator(FakeLLMClient()).max_cost(
+        question, CHUNKS
+    )
+    client = SlowClient(delay=0.3)
+    app = _budgeted_app(client, session_factory, daily_budget_usd=ceiling)
+    metrics = app.state.rag.metrics
+
+    # The series exists before anything has happened to it.
+    assert "rag_qa_budget_pressure_total 0" in metrics.render()
+
+    try:
+        first = asyncio.create_task(post(app, "/query", {"question": question}))
+        await asyncio.sleep(0.1)
+        refused = await post(app, "/query", {"question": question})
+        await first
+    finally:
+        await _cleanup(session_factory, marker)
+
+    assert refused.status_code == 503
+    assert refused.json()["error"]["code"] == "budget_pressure"
+    assert metrics.budget_pressure_refusals == 1
+    assert "rag_qa_budget_pressure_total 1" in metrics.render()
+    # ...and it did not land in either of the counters that mean something else.
+    assert metrics.budget_trips == {}
+    assert metrics.requests_shed == 0

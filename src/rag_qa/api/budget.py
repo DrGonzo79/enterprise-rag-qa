@@ -315,11 +315,34 @@ class SpendGuard:
         if not self.enabled:
             return self._reservation(Decimal("0"))
         now = await self._current(now=self._now())
-        # Order matters: money already spent is `budget_exhausted` and resets at
-        # a known instant; money merely claimed is `budget_pressure` and resets
-        # when those calls return. Asking in the other order would label an
-        # exhausted budget as transient pressure and promise a retry that cannot
-        # succeed until midnight.
+        return self._admit(now, amount)
+
+    def _admit(self, now: datetime, amount: Decimal) -> Reservation:
+        """Test the ceilings and take the claim — **synchronously, and that is
+        the enforcement rather than a convention.**
+
+        The bound `ceiling + one worst-case query` holds only if reading
+        `recorded + outstanding` and adding the new claim happen with no
+        suspension point between them. Today that would be true of an `async`
+        version too, by cooperative scheduling — nothing here awaits. But
+        "nothing here awaits" is a property of the current lines, not of the
+        function, and it is one `await` from being false: a log call made
+        asynchronous, a metric shipped over the network, a database read for a
+        per-key limit. Fifty coroutines would then pass the same stale
+        comparison and admit together, which is the in-flight blind spot this
+        whole mechanism exists to close, rebuilt inside the fix.
+
+        A `def` cannot await. So the critical section cannot acquire a
+        suspension point without changing this signature and its caller, which
+        is a change a reviewer sees. Same argument as `snapshot()`, applied to
+        the other property that silently depends on not yielding.
+
+        The two checks are ordered: money already spent is `budget_exhausted`
+        and resets at a known instant; money merely claimed is `budget_pressure`
+        and resets when those calls return. The other order would label an
+        exhausted budget as transient pressure and promise a retry that cannot
+        succeed until midnight.
+        """
         self._enforce(now, counting_reservations=False)
         self._enforce(now, counting_reservations=True)
         self._reserved += amount

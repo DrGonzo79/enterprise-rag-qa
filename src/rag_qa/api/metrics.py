@@ -43,6 +43,14 @@ class Metrics:
         # answering -- could not be read from the endpoint an operator reads.
         self.errors: Counter[str] = Counter()
         self.budget_trips: Counter[str] = Counter()
+        # Separate from `budget_trips`, and separate from the headroom gauges.
+        # A trip means the demo is out of money until a UTC boundary; pressure
+        # means it is out of *uncommitted* money for a few seconds. A gauge
+        # sampled every 15s cannot see a 3s spike at all, so a deployment
+        # refusing a third of its arrivals to reservation pressure looks
+        # identical to a healthy one on `budget_remaining` -- a counter is the
+        # only series that can observe it.
+        self.budget_pressure_refusals = 0
         self.requests_shed = 0
         self.budget_remaining: dict[str, Decimal] = {}
         self.budget_snapshot_age: float | None = None
@@ -75,6 +83,18 @@ class Metrics:
 
     def observe_budget_trip(self, ceiling: str) -> None:
         self.budget_trips[ceiling] += 1
+
+    def observe_budget_pressure(self) -> None:
+        """Unlabelled, so the series exists from process start at zero.
+
+        `budget_trips_total` carries a `ceiling` label and therefore does not
+        exist until something trips, which makes `absent()` on it mean "nothing
+        has happened yet" rather than "this replica is not reporting". For a
+        refusal that visitors experience, those two must be distinguishable, so
+        this one is always emitted. Which ceiling was under pressure is in the
+        WARNING record, where it is operator context rather than an alert
+        dimension."""
+        self.budget_pressure_refusals += 1
 
     def set_budget_snapshot(self, snapshot: "BudgetSnapshot | None") -> None:
         self.budget_remaining = dict(snapshot.remaining) if snapshot else {}
@@ -144,6 +164,10 @@ class Metrics:
             "# HELP rag_qa_requests_shed_total Requests shed at the concurrency bound.",
             "# TYPE rag_qa_requests_shed_total counter",
             f"rag_qa_requests_shed_total {self.requests_shed}",
+            "# HELP rag_qa_budget_pressure_total Requests refused because remaining "
+            "headroom was committed to answers in flight.",
+            "# TYPE rag_qa_budget_pressure_total counter",
+            f"rag_qa_budget_pressure_total {self.budget_pressure_refusals}",
             "# HELP rag_qa_telemetry_failures_total Completion records that could not be emitted.",
             "# TYPE rag_qa_telemetry_failures_total counter",
             f"rag_qa_telemetry_failures_total {self.telemetry_failures}",

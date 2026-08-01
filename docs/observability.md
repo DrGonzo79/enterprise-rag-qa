@@ -141,6 +141,7 @@ in-process; `query_log` is the authoritative ledger, offline.
 | `rag_qa_cost_usd_total` | Spend since process start |
 | `rag_qa_errors_total` | **Which** failure, not merely which status |
 | `rag_qa_budget_trips_total` | Has the demo stopped answering, and which ceiling stopped it |
+| `rag_qa_budget_pressure_total` | Is it refusing people because the headroom is *committed* rather than spent |
 | `rag_qa_requests_shed_total` | Is the concurrency bound being reached |
 | `rag_qa_budget_remaining_usd` | Headroom before it stops — money **spent**, not money claimed |
 | `rag_qa_budget_reserved_usd` | Headroom **committed** to answers currently being generated |
@@ -179,11 +180,14 @@ rag_qa_budget_snapshot_age_seconds > 900
 absent(rag_qa_budget_snapshot_age_seconds)
 
 # Requests are being refused because the remaining budget is committed to
-# answers in flight, not because it is spent. Clears in seconds on its own, so
-# a rate rather than a trip -- sustained pressure means the ceiling is now the
-# admission control, and the ceiling is too small for the traffic.
-rate(rag_qa_errors_total{code="budget_pressure"}[15m]) > 0.1
-absent(rag_qa_errors_total)
+# answers in flight, not because it is spent. A *share of arrivals*, not a raw
+# rate: what matters is how many visitors were turned away, and 0.5/s is fine
+# at 100 rps and an outage at 1 rps.
+  rate(rag_qa_budget_pressure_total[15m])
+/ rate(rag_qa_requests_total{endpoint="/query"}[15m]) > 0.05
+# ...and, separately, the counter is not being reported at all. This pair works
+# because the series is emitted from zero -- see below.
+absent(rag_qa_budget_pressure_total)
 
 # Committed headroom has caught up with remaining headroom: the next request is
 # refused with budget_pressure. Two series rather than one, deliberately -- see
@@ -213,7 +217,27 @@ crossing an absolute value.
 demo is out of money until a UTC boundary; pressure means it is momentarily out
 of *uncommitted* money and will answer again as soon as the current answers
 finish. Paging on them together would cost the trip counter the one meaning it
-has.
+has. **The rule for telling them apart, and for what to do about each:**
+
+| | `budget_trips_total` | `budget_pressure_total` |
+|---|---|---|
+| What ran out | Money | Uncommitted money |
+| Clears | At the UTC day or month boundary | When the answers in flight return — seconds |
+| What the visitor sees | The explanatory panel, with a countdown | "Retry shortly", with no countdown |
+| Any occurrence | Page. The demo is down until a boundary. | Expected under burst; not by itself a problem |
+| Sustained | The budget is too small, or something is burning it | **The ceiling is now the admission control** — traffic has outgrown the budget, and every refusal is a visitor turned away |
+
+**Why a counter and not just the gauges.** `rag_qa_budget_reserved_usd` rises and
+falls with each in-flight answer, and a scrape every 15 s cannot observe a spike
+that lasts three seconds. A deployment refusing a third of its arrivals to
+reservation pressure therefore looks *identical* to a healthy one on the
+headroom gauges. The counter is the only series that sees it, which is why the
+refusal has one of its own rather than living only in
+`rag_qa_errors_total{code="budget_pressure"}` — that series is real and is
+counted, but it is label-created on first occurrence, so `absent()` on it means
+"nothing has happened yet" and cannot be distinguished from "this replica has
+stopped reporting". `rag_qa_budget_pressure_total` is emitted from process start
+at zero precisely so that its `absent()` pair says something true.
 
 **`rag_qa_telemetry_failures_total` is best-effort and is not the authoritative
 count.** It is incremented inside the same `except` that reports the failure,

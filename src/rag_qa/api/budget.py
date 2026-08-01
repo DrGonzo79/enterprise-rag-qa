@@ -16,14 +16,32 @@ Both ceilings bound the quantity actually at risk — dollars. They must be
 so the authoritative totals come from `query_log`; they are cached with a short
 TTL so the hot path does not pay a query per request, and the in-process delta
 since the last refresh is added, so the breaker trips inside the window that
-crosses the limit rather than waiting for a refresh. The resulting overshoot is
-bounded and computable — at most spend_rate x TTL x replicas — rather than hoped
-for. Both windows come from **one** statement, so the second ceiling costs no
-second connection (the refresh is not in `RESERVED_CONNECTIONS`).
+crosses the limit rather than waiting for a refresh. Both windows come from
+**one** statement, so the second ceiling costs no second connection (the refresh
+is not in `RESERVED_CONNECTIONS`).
 
-Tripping produces 503 `budget_exhausted`, never a canned answer: under the
-ceiling the question was never asked, so this is transport-level (KD-1), and a
-fake answer would teach a viewer that the system answered when it did not.
+**Three quantities, not two, and the third is what makes the bound exact**
+(KD-16 amendment 5). The cached total is what `query_log` said at the last
+refresh; the recorded delta is what this process has spent since; and the
+*reservation* is what this process has committed to spend but not yet spent. A
+check that counted only the first two was blind to every request between its
+budget check and its provider response — which is every request currently being
+answered. That blindness is not bounded by the TTL (it exists at TTL zero) and
+is not bounded by KD-10's semaphore (released before the provider call by
+design), so it grew with arrival rate against a ceiling of cents. With the
+reservation counted, **one replica can spend at most `ceiling + one worst-case
+query`**, computable from `max_tokens` and the rate table with no term that
+grows with traffic. The remaining overshoot is cross-replica staleness —
+`(N-1) x TTL x arrival rate x per-query cost` — which is zero at today's single
+container and is deferred to SPEC-010 with the deploy that would create it.
+
+Tripping produces 503, never a canned answer: under the ceiling the question was
+never asked, so this is transport-level (KD-1), and a fake answer would teach a
+viewer that the system answered when it did not. **Which** 503 depends on what
+crossed the line: `budget_exhausted` when the money is gone (it comes back at a
+known instant, so `Retry-After` is a real clock), `budget_pressure` when the
+money is merely claimed by requests in flight (it comes back when they settle,
+seconds from now, and rendering that as the midnight reset would be false).
 """
 
 import calendar
@@ -38,7 +56,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from rag_qa.api.conditions import spec_for
-from rag_qa.api.errors import BudgetExhausted
+from rag_qa.api.errors import BudgetExhausted, BudgetPressure
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +79,14 @@ CENT = Decimal("0.01")
 # week with no error until the monthly trips is a footgun, and silently
 # accepting it would be the ceiling failing at exactly its job.
 MAX_DAILY_BURST_MULTIPLE = 2
+
+# How long a caller is told to wait after a reservation-pressure refusal. The
+# condition clears when the requests in flight settle — a generation, not a
+# window — so there is no boundary to count down to and `reset: shortly` is what
+# the client is told. This number exists because `Retry-After` still has to be
+# some number of seconds; it is deliberately in the range of one generation
+# rather than a guess at a queue length.
+PRESSURE_RETRY_AFTER_SECONDS = 5
 
 
 def utc_day_start(now: datetime) -> datetime:
@@ -128,10 +154,62 @@ class BudgetSnapshot:
     runs, so an idle replica's snapshot ages without bound — and other replicas
     may be spending the shared budget the whole time. The age is what lets an
     operator tell "headroom is $4" from "headroom was $4, forty minutes ago".
+
+    `remaining` deliberately keeps its original meaning — ceiling minus money
+    actually spent — and `reserved` is published beside it rather than subtracted
+    from it. Folding reservations into `remaining` would silently change what an
+    existing alert threshold means, which is a quiet way to make a dashboard lie;
+    an operator who wants committed headroom subtracts the two series, and one
+    who wants spend reads the one that has always meant spend.
     """
 
     remaining: dict[str, Decimal]
     age_seconds: float
+    reserved: Decimal = Decimal("0")
+
+
+class Reservation:
+    """Headroom claimed for one provider call, released however the call ends.
+
+    **The only correct use is `try: ... finally: release()`**, with `settle()` on
+    the success path inside it. `release()` after `settle()` is a no-op, which is
+    what lets the `finally` be unconditional — and an unconditional `finally` is
+    the only shape that covers the paths nobody enumerated: a provider exception,
+    a translated `ApiError`, a cancellation when the client disconnects, a stream
+    that dies after its first frame. A reservation leaked on one of those is not
+    a small bug: it is permanent, invisible, and makes the replica refuse traffic
+    it has the budget for until the process restarts.
+
+    `settle()` records the cost **unconditionally** and gives the claim back
+    **once**. The asymmetry is deliberate: double-counting spend refuses requests
+    early, while losing spend lets the ceiling be exceeded, and only one of those
+    two failures is safe to prefer.
+    """
+
+    __slots__ = ("_discharge", "_open", "_record", "amount")
+
+    def __init__(
+        self,
+        *,
+        amount: Decimal,
+        record: Callable[[Decimal], None],
+        discharge: Callable[[Decimal], None],
+    ) -> None:
+        self.amount = amount
+        self._record = record
+        self._discharge = discharge
+        self._open = True
+
+    def settle(self, cost_usd: Decimal) -> None:
+        """Replace the reserved worst case with what the answer actually cost."""
+        self._record(cost_usd)
+        self.release()
+
+    def release(self) -> None:
+        """Give the claim back. Idempotent, so a `finally` can be unconditional."""
+        if self._open:
+            self._open = False
+            self._discharge(self.amount)
 
 
 class SpendGuard:
@@ -156,6 +234,11 @@ class SpendGuard:
         self._day_total = Decimal("0")
         self._month_total = Decimal("0")
         self._local_delta = Decimal("0")
+        # Worst-case cost of every provider call this replica has admitted and
+        # not yet seen return. Unlike `_local_delta` this survives a refresh:
+        # a refreshed `query_log` total contains everything recorded and nothing
+        # reserved, because a reserved request has not written its row yet.
+        self._reserved = Decimal("0")
         self._refreshed_at: float | None = None
         self._cached_day: datetime | None = None
         self._cached_month: datetime | None = None
@@ -167,6 +250,16 @@ class SpendGuard:
     def enabled(self) -> bool:
         configured = self._daily_limit is not None or self._monthly_limit is not None
         return configured and self._session_factory is not None
+
+    @property
+    def reserved(self) -> Decimal:
+        """Worst-case cost committed to provider calls still in flight."""
+        return self._reserved
+
+    @property
+    def recorded(self) -> Decimal:
+        """Spend counted since the last refresh — money gone, not money claimed."""
+        return self._local_delta
 
     def daily_limit_for(self, now: datetime) -> Decimal | None:
         """The daily ceiling in force, with an override capped at 2x derived."""
@@ -188,12 +281,58 @@ class SpendGuard:
         return capped, f" (burst override; ${derived} derived from ${self._monthly_limit}/month)"
 
     async def check(self) -> None:
-        """Raise BudgetExhausted if either ceiling has been reached."""
+        """Raise BudgetExhausted if either ceiling has been reached.
+
+        Reservations are deliberately **not** counted here. This runs before
+        retrieval, where the cheapest possible shed lives, and it answers one
+        question: is the money gone? Whether the remaining money is already
+        claimed is a different question with a different answer for the caller,
+        and it cannot be asked yet — the prompt does not exist until retrieval
+        has run, so neither does the amount to claim.
+        """
         if not self.enabled:
             return
-        assert self._session_factory is not None
+        now = await self._current(now=self._now())
+        self._enforce(now, counting_reservations=False)
 
-        now = self._now()
+    async def reserve(self, amount: Decimal) -> Reservation:
+        """Claim `amount` of headroom for one provider call.
+
+        Called after retrieval and before generation, so `amount` can be a true
+        upper bound on *this* request rather than a guess about a typical one.
+
+        **The incoming reservation is not counted against itself.** The trip
+        condition reads what is already spent plus what is already claimed; the
+        request being admitted is added afterwards. Counting it would mean a
+        ceiling smaller than one worst-case query refuses every request forever —
+        an outage manufactured by the guard rather than by the budget — and it
+        would do so most readily on exactly the small budgets this is for. What
+        the exclusion leaves is the single-query overshoot that check-before-spend
+        has always had and cannot not have: the bound is `ceiling + one worst
+        case`, which is computable from configuration and does not grow with
+        traffic.
+        """
+        if not self.enabled:
+            return self._reservation(Decimal("0"))
+        now = await self._current(now=self._now())
+        # Order matters: money already spent is `budget_exhausted` and resets at
+        # a known instant; money merely claimed is `budget_pressure` and resets
+        # when those calls return. Asking in the other order would label an
+        # exhausted budget as transient pressure and promise a retry that cannot
+        # succeed until midnight.
+        self._enforce(now, counting_reservations=False)
+        self._enforce(now, counting_reservations=True)
+        self._reserved += amount
+        return self._reservation(amount)
+
+    def _reservation(self, amount: Decimal) -> Reservation:
+        """Bound methods rather than a back-reference, so a `Reservation` can
+        settle and release without reaching into the guard's internals."""
+        return Reservation(amount=amount, record=self.record, discharge=self._discharge)
+
+    async def _current(self, *, now: datetime) -> datetime:
+        """Refresh the cached totals if they are stale, and hand `now` back."""
+        assert self._session_factory is not None
         day, month = utc_day_start(now), utc_month_start(now)
         stale = (
             self._refreshed_at is None
@@ -203,31 +342,35 @@ class SpendGuard:
         )
         if stale:
             await self._refresh(day, month)
+        return now
+
+    def _enforce(self, now: datetime, *, counting_reservations: bool) -> None:
+        committed = self._local_delta + (self._reserved if counting_reservations else Decimal("0"))
 
         # The monthly ceiling is checked first: when both are exhausted, telling
         # a visitor "resets at midnight" would be false, and a Retry-After that
         # expires into another 503 is worse than an honest long one.
-        if self._monthly_limit is not None and self._month_total + self._local_delta >= (
-            self._monthly_limit
-        ):
+        if self._monthly_limit is not None and self._month_total + committed >= self._monthly_limit:
             self._trip(
                 ceiling="monthly",
                 limit=self._monthly_limit,
-                spent=self._month_total + self._local_delta,
+                spent=self._month_total + committed,
                 origin="",
                 resets_at=next_utc_month_start(now),
                 retry_after=seconds_until_utc_month_end(now),
+                pressure=counting_reservations,
             )
 
         daily_limit, origin = self._daily_shape(now)
-        if daily_limit is not None and self._day_total + self._local_delta >= daily_limit:
+        if daily_limit is not None and self._day_total + committed >= daily_limit:
             self._trip(
                 ceiling="daily",
                 limit=daily_limit,
-                spent=self._day_total + self._local_delta,
+                spent=self._day_total + committed,
                 origin=origin,
-                resets_at=day + timedelta(days=1),
+                resets_at=utc_day_start(now) + timedelta(days=1),
                 retry_after=seconds_until_utc_midnight(now),
+                pressure=counting_reservations,
             )
 
     def _trip(
@@ -239,6 +382,7 @@ class SpendGuard:
         origin: str,
         resets_at: datetime,
         retry_after: int,
+        pressure: bool,
     ) -> None:
         """Figures to the log, a figure-free message to the caller.
 
@@ -248,7 +392,34 @@ class SpendGuard:
         budget, and is a side channel around the admin scope on `/metrics`. The
         caller is told *that* the demo is not answering and *when* it resumes,
         which is everything they can act on.
+
+        **The pressure branch says less, and that is the honest amount to say.**
+        The budget is not spent, so `resets_at` describes nothing the caller is
+        waiting for: the condition clears when the calls in flight return. The
+        message carries no instant, `Retry-After` is a few seconds rather than a
+        countdown to midnight, and `reset: shortly` (from `CONDITIONS`) tells a
+        client not to render a clock at all. The operator still gets the reset
+        instant in the log record, because for *them* it is context.
         """
+        if pressure:
+            logger.warning(
+                "spend ceiling committed by requests in flight",
+                extra={
+                    "ceiling": ceiling,
+                    "limit_usd": str(limit),
+                    "spent_usd": str(self._month_total + self._local_delta),
+                    "committed_usd": str(spent),
+                    "reserved_usd": str(self._reserved),
+                    "origin": origin.strip() or "configured",
+                    "resets_at": resets_at.isoformat(),
+                },
+            )
+            raise BudgetPressure(
+                spec_for("budget_pressure").public_message,
+                retry_after=PRESSURE_RETRY_AFTER_SECONDS,
+                ceiling=ceiling,
+            )
+
         logger.warning(
             "spend ceiling reached",
             extra={
@@ -294,12 +465,20 @@ class SpendGuard:
                 Decimal("0"), self._monthly_limit - self._month_total - self._local_delta
             )
         return BudgetSnapshot(
-            remaining=headroom, age_seconds=max(0.0, self._monotonic() - self._refreshed_at)
+            remaining=headroom,
+            age_seconds=max(0.0, self._monotonic() - self._refreshed_at),
+            reserved=self._reserved,
         )
 
     def record(self, cost_usd: Decimal) -> None:
         """Count spend that has not reached query_log's cached totals yet."""
         self._local_delta += cost_usd
+
+    def _discharge(self, amount: Decimal) -> None:
+        """Give back a claim. Never clamped at zero: a negative total would mean
+        a reservation was released twice, and clamping would hide the arithmetic
+        error that produced it behind a plausible-looking number."""
+        self._reserved -= amount
 
     async def _refresh(self, day: datetime, month: datetime) -> None:
         assert self._session_factory is not None
@@ -307,6 +486,13 @@ class SpendGuard:
             row = (await session.execute(_SPEND_WINDOWS, {"day": day, "month": month})).one()
         self._day_total = Decimal(str(row.day_total))
         self._month_total = Decimal(str(row.month_total))
+        # The recorded delta is cleared and the reservations are not, and the
+        # asymmetry is the whole correctness of this line. Everything recorded
+        # has already written its `query_log` row, so the freshly-read total
+        # contains it and keeping the delta would count it twice. Nothing
+        # reserved has written a row yet — that is what "reserved" means — so
+        # clearing it would forget every call in flight and re-open the exact
+        # blind spot reservations exist to close.
         self._local_delta = Decimal("0")
         self._cached_day = day
         self._cached_month = month

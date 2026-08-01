@@ -77,6 +77,30 @@ class BudgetExhausted(ApiError):
         self.ceiling = ceiling
 
 
+class BudgetPressure(ApiError):
+    """The remaining headroom is claimed by provider calls still in flight
+    (KD-16 amendment 5). A sibling of `BudgetExhausted`, not a variant of it.
+
+    Separate because `envelope()` reads `presentation` and `reset` from
+    `CONDITIONS` keyed on the code alone — deliberately, so a client keeps no
+    copy of the taxonomy. That design makes the code the *only* place a
+    different rendering can come from, so a condition that clears in seconds
+    cannot share a code with one that clears at midnight without inheriting its
+    clock. `ceiling` rides along for the same reason it does on
+    `BudgetExhausted`: the failure signal labels by window, the caller is told
+    neither.
+    """
+
+    status_code = 503
+    code = "budget_pressure"
+
+    def __init__(
+        self, message: str, *, retry_after: int | None = None, ceiling: str = "daily"
+    ) -> None:
+        super().__init__(message, retry_after=retry_after)
+        self.ceiling = ceiling
+
+
 class IngestInProgress(ApiError):
     status_code = 409
     code = "ingest_in_progress"

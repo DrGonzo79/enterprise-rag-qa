@@ -113,6 +113,15 @@ def test_a_window_reset_is_only_claimed_where_a_clock_exists() -> None:
     # which number the ceiling is, not when the window rolls over.
     assert spec_for("budget_exhausted").reset is Reset.WINDOW
 
+    # Its sibling has no clock at all, and that is the whole reason it is a
+    # separate code (KD-16 amendment 5): the money is committed rather than
+    # spent, so it comes back when the answers in flight settle. `envelope()`
+    # renders from the code alone, so sharing one would mean sharing the
+    # midnight countdown — a `Retry-After` that expires into a served request or
+    # into another refusal, depending on nothing the caller can see.
+    assert spec_for("budget_pressure").reset is Reset.SHORTLY
+    assert spec_for("budget_pressure").presentation is Presentation.TRANSIENT
+
 
 def test_only_the_budget_gets_the_explanatory_state() -> None:
     """KD-16 binds SPEC-009 to a specific panel for a specific reason — the demo
@@ -127,6 +136,7 @@ def test_refusals_are_the_ways_the_service_declines_work_it_would_do() -> None:
     is the same object the client renderings hang off, which is the point."""
     assert set(REFUSALS) == {
         "budget_exhausted",
+        "budget_pressure",
         "overloaded",
         "embedder_mismatch",
         "empty_corpus",

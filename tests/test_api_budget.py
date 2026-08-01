@@ -1,9 +1,13 @@
 """Monthly cap, derived daily ceiling, and the circuit breaker (SPEC-006 AC-14,
-KD-16)."""
+AC-15, AC-20, AC-21, AC-22, KD-16)."""
 
+import asyncio
 import logging
 import re
 import uuid
+from collections.abc import AsyncIterator, Sequence
+from contextlib import asynccontextmanager
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
@@ -13,9 +17,10 @@ import pytest
 from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
-from api_harness import build_app, post, settings
+from api_harness import build_app, client_for, post, settings
 from rag_qa.api.budget import (
     CENT,
+    PRESSURE_RETRY_AFTER_SECONDS,
     SpendGuard,
     derive_daily_limit,
     next_utc_month_start,
@@ -25,9 +30,14 @@ from rag_qa.api.budget import (
     utc_month_start,
 )
 from rag_qa.api.deps import ConfigurationError
+from rag_qa.api.errors import BudgetExhausted, BudgetPressure, Overloaded
 from rag_qa.db.models import QueryLog
+from rag_qa.generation.clients.base import LLMResult, TextChunk, Usage
+from rag_qa.generation.pricing import compute_cost
 from rag_qa.generation.prompt import PROMPT_VERSION
-from test_generation_service import FakeLLMClient
+from rag_qa.generation.service import Generator
+from rag_qa.retrieval.types import RetrievedChunk
+from test_generation_service import CHUNKS, FakeLLMClient
 
 QUESTION = "What applies?"
 
@@ -181,9 +191,8 @@ async def test_local_delta_trips_inside_the_same_ttl_window(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     """Spend since the last refresh counts immediately — otherwise the breaker
-    would wait a full TTL after crossing the limit, and the overshoot would be
-    unbounded rather than bounded by spend_rate x TTL x replicas."""
-    from rag_qa.api.errors import BudgetExhausted
+    would wait a full TTL after crossing the limit, and one replica's overshoot
+    would be a function of the TTL rather than of one query (KD-16 amendment 5)."""
 
     guard = SpendGuard(session_factory, daily_limit_usd=Decimal("1.00"), refresh_seconds=1000.0)
     await guard.check()  # under the limit
@@ -467,7 +476,6 @@ async def test_monthly_window_sees_spend_the_daily_window_cannot(
     add up. Spend sits at the start of the month and the clock is moved to
     mid-month, so today's window is empty by construction on any calendar date.
     """
-    from rag_qa.api.errors import BudgetExhausted
 
     marker = f"budget-{uuid.uuid4()}"
     month_start = utc_month_start(datetime.now(UTC))
@@ -594,3 +602,636 @@ async def test_the_503_body_names_no_figures_and_the_log_names_all_of_them(
     assert Decimal(fields["spent_usd"]) >= Decimal("9.00")
     assert fields["resets_at"]
     assert fields["request_id"] == response.headers["x-request-id"]
+
+
+# --- reservations: the in-flight overshoot (AC-20, AC-21, AC-22, KD-16 am. 5) --
+#
+# The blind spot these close: `check()` ran before the provider call and
+# `record()` after it, so every request being answered right now was invisible to
+# every check happening right now. Not bounded by the TTL (it exists at TTL zero)
+# and not bounded by KD-10's semaphore (released before the provider call by
+# design) — so it grew with arrival rate against a ceiling of cents.
+
+
+class ObservingClient(FakeLLMClient):
+    """Reads the guard from *inside* the provider call.
+
+    The only vantage point from which "a reservation is held while the call is in
+    flight" is a real instant. Asserting before and after the request would prove
+    only that the number returns to zero, which a guard that never reserved
+    anything would also satisfy.
+    """
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.guard: SpendGuard | None = None
+        self.reserved_during_call: Decimal | None = None
+
+    async def complete(self, system: str, user: str, max_tokens: int) -> LLMResult:
+        assert self.guard is not None
+        self.reserved_during_call = self.guard.reserved
+        return await super().complete(system, user, max_tokens)
+
+
+class RaisingClient(FakeLLMClient):
+    """Fails the way a provider fails: during the call, after the reservation."""
+
+    def __init__(self, error: BaseException, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self._error = error
+
+    async def complete(self, system: str, user: str, max_tokens: int) -> LLMResult:
+        self.calls.append((system, user, max_tokens))
+        raise self._error
+
+
+class SlowClient(FakeLLMClient):
+    """Holds the call open long enough for a second request to meet the first."""
+
+    def __init__(self, delay: float = 0.2, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self._delay = delay
+
+    async def complete(self, system: str, user: str, max_tokens: int) -> LLMResult:
+        await asyncio.sleep(self._delay)
+        return await super().complete(system, user, max_tokens)
+
+
+class FailingStreamClient(FakeLLMClient):
+    """Emits a frame, then dies — the shape that reaches the pump's except."""
+
+    @asynccontextmanager
+    async def stream(
+        self, system: str, user: str, max_tokens: int
+    ) -> AsyncIterator[AsyncIterator[TextChunk | Usage]]:
+        self.calls.append((system, user, max_tokens))
+
+        async def events() -> AsyncIterator[TextChunk | Usage]:
+            yield TextChunk("ANSWERED\nPartial")
+            raise RuntimeError("provider dropped the stream")
+
+        yield events()
+
+
+class HangingStreamClient(FakeLLMClient):
+    """Emits a frame and then never finishes, so the pump can be cancelled while
+    it genuinely holds a reservation."""
+
+    @asynccontextmanager
+    async def stream(
+        self, system: str, user: str, max_tokens: int
+    ) -> AsyncIterator[AsyncIterator[TextChunk | Usage]]:
+        self.calls.append((system, user, max_tokens))
+
+        async def events() -> AsyncIterator[TextChunk | Usage]:
+            yield TextChunk("ANSWERED\nPartial")
+            await asyncio.Event().wait()
+
+        yield events()
+
+
+class WorstCaseClient(FakeLLMClient):
+    """Reports the largest usage this call could possibly have billed: every
+    prompt token the project's own tokenizer finds, and the full output
+    allowance. What `max_cost` claims to bound, actually happening."""
+
+    async def complete(self, system: str, user: str, max_tokens: int) -> LLMResult:
+        from rag_qa.ingest.chunker import count_tokens
+
+        self._prompt_tokens = count_tokens(system) + count_tokens(user)
+        self._completion_tokens = max_tokens
+        return await super().complete(system, user, max_tokens)
+
+
+def _budgeted_app(
+    client: FakeLLMClient, factory: async_sessionmaker[AsyncSession], **kw: Any
+) -> Any:
+    return build_app(client=client, session_factory=factory, **kw)
+
+
+def _empty_window_guard(factory: async_sessionmaker[AsyncSession], **kw: Any) -> SpendGuard:
+    """A guard whose UTC windows are empty whatever `query_log` already holds.
+
+    Reservation arithmetic is about exact quantities — "reserved is back to
+    exactly zero", "admitted x worst_case <= ceiling + worst_case" — so these
+    tests cannot be written against whatever spend the database happens to
+    contain from earlier tests or an earlier run. Pointing the clock at a future
+    UTC month gives a window that is empty by construction rather than by luck.
+    """
+    future = datetime.now(UTC) + timedelta(days=400)
+    return SpendGuard(factory, now=lambda: future, **kw)
+
+
+async def _spend_so_far_today(factory: async_sessionmaker[AsyncSession]) -> Decimal:
+    """Today's recorded spend, so an HTTP test can size a ceiling relative to it.
+
+    The app's guard reads the real clock and cannot be given a fake one through
+    `create_app`, so a test that needs "one worst-case query of headroom" has to
+    measure the floor rather than assume it is zero.
+    """
+    async with factory() as session:
+        total = (
+            await session.execute(
+                text("SELECT coalesce(sum(cost_usd), 0) FROM query_log WHERE created_at >= :day"),
+                {"day": utc_day_start(datetime.now(UTC))},
+            )
+        ).scalar_one()
+    return Decimal(str(total))
+
+
+# --- AC-20: the claim is held across the call and released however it ends -----
+
+
+async def test_the_reservation_is_held_during_the_call_and_settled_to_actual_after(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    marker = f"budget-{uuid.uuid4()}"
+    client = ObservingClient()
+    app = _budgeted_app(client, session_factory, daily_budget_usd=Decimal("5.00"))
+    guard: SpendGuard = app.state.rag.budget
+    client.guard = guard
+    try:
+        response = await post(app, "/query", {"question": f"{marker} probe"})
+    finally:
+        await _cleanup(session_factory, marker)
+
+    assert response.status_code == 200
+    # Held while the provider call was in flight...
+    assert client.reserved_during_call is not None
+    assert client.reserved_during_call > 0
+    # ...and given back exactly, not approximately.
+    assert guard.reserved == Decimal("0")
+    # Settled down to what was actually spent, not left at the worst case.
+    actual = Decimal(response.json()["usage"]["cost_usd"])
+    assert guard.recorded == actual
+    assert client.reserved_during_call > actual  # the reservation was the bound
+
+
+@pytest.mark.parametrize(
+    ("error", "status"),
+    [
+        (RuntimeError("provider exploded"), 502),
+        (Overloaded("shed inside generation", retry_after=1), 503),
+    ],
+    ids=["provider-exception", "translated-api-error"],
+)
+async def test_the_reservation_is_released_when_generation_fails(
+    session_factory: async_sessionmaker[AsyncSession], error: Exception, status: int
+) -> None:
+    """A dead request holding a phantom debit makes the replica under-serve until
+    the process restarts — silently, and worse the longer it runs. Each path is
+    asserted on its own, because a release written on the success path covers
+    none of them, and these two leave the route by different `raise` statements.
+    """
+    client = RaisingClient(error)
+    app = _budgeted_app(client, session_factory, daily_budget_usd=Decimal("5.00"))
+    guard: SpendGuard = app.state.rag.budget
+
+    response = await post(app, "/query", {"question": QUESTION})
+
+    assert response.status_code == status
+    assert client.calls != [], "the provider call must have been attempted"
+    assert guard.reserved == Decimal("0")
+
+
+async def test_a_disconnected_client_does_not_leave_a_claim_behind(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Cancellation is the shape a client disconnect takes: the server task is
+    torn down mid-await, inside the provider call, with no exception the route
+    handles. Nothing but an unconditional `finally` releases here."""
+    client = SlowClient(delay=5.0)
+    app = _budgeted_app(client, session_factory, daily_budget_usd=Decimal("5.00"))
+    guard: SpendGuard = app.state.rag.budget
+
+    inflight = asyncio.create_task(post(app, "/query", {"question": QUESTION}))
+    await asyncio.sleep(0.2)
+    assert guard.reserved > 0, "the request must actually be mid-call when cancelled"
+
+    inflight.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await inflight
+
+    assert guard.reserved == Decimal("0")
+
+
+async def test_a_stream_that_dies_after_its_first_frame_releases_its_reservation(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    from rag_qa.api.routes import query as query_route
+
+    client = FailingStreamClient()
+    app = _budgeted_app(client, session_factory, daily_budget_usd=Decimal("5.00"))
+    guard: SpendGuard = app.state.rag.budget
+
+    async with (
+        client_for(app) as http,
+        http.stream("POST", "/query", json={"question": QUESTION, "stream": True}) as r,
+    ):
+        body = "".join([chunk async for chunk in r.aiter_text()])
+
+    await asyncio.gather(*list(query_route._background), return_exceptions=True)
+    assert "upstream_error" in body  # the failure did reach the client, in-band
+    assert guard.reserved == Decimal("0")
+
+
+async def test_a_cancelled_stream_releases_its_reservation(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """The client-disconnect shape. Generation deliberately outlives the
+    connection (the tokens were spent whether or not anyone listened), so the
+    reservation is owned by the pump task and has to survive the teardown of the
+    response — and be released when the task itself is torn down."""
+    from rag_qa.api.routes import query as query_route
+
+    client = HangingStreamClient()
+    app = _budgeted_app(client, session_factory, daily_budget_usd=Decimal("5.00"))
+    guard: SpendGuard = app.state.rag.budget
+    before = set(query_route._background)
+
+    # The request is driven from a task rather than awaited: httpx's ASGI
+    # transport collects the whole response before returning, so a stream that
+    # has not finished cannot be observed from the calling side at all.
+    request = asyncio.create_task(post(app, "/query", {"question": QUESTION, "stream": True}))
+    for _ in range(200):
+        await asyncio.sleep(0.01)
+        if guard.reserved > 0:
+            break
+    # The pump is mid-generation, and the claim is real right now.
+    assert guard.reserved > 0, "the request must be holding a claim before it is torn down"
+
+    pending = [t for t in query_route._background if t not in before]
+    assert pending, "the pump task must be the thing holding the claim"
+    for task in pending:
+        task.cancel()
+    await asyncio.gather(*pending, return_exceptions=True)
+
+    assert guard.reserved == Decimal("0")
+    # The cancelled pump still closed the stream, so the caller is not hung.
+    assert (await request).status_code == 200
+
+
+async def test_a_question_with_no_chunks_reserves_nothing(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """SPEC-005 KD-6 answers a zero-chunk question without a provider call, so
+    holding headroom for it would refuse other callers on behalf of spend that
+    cannot happen."""
+    from api_harness import StubRetriever
+
+    marker = f"budget-{uuid.uuid4()}"
+    client = ObservingClient()
+    app = build_app(
+        StubRetriever(chunks=[]),
+        client=client,
+        session_factory=session_factory,
+        daily_budget_usd=Decimal("5.00"),
+    )
+    guard: SpendGuard = app.state.rag.budget
+    client.guard = guard
+    try:
+        response = await post(app, "/query", {"question": f"{marker} probe"})
+    finally:
+        await _cleanup(session_factory, marker)
+
+    assert response.status_code == 200
+    assert response.json()["verdict"] == "insufficient_evidence"
+    assert client.calls == []
+    assert guard.reserved == Decimal("0")
+    assert Generator(FakeLLMClient()).max_cost(QUESTION, []) == Decimal("0")
+
+
+def _citation_dense_chunks(count: int = 40, repeats: int = 24) -> list[RetrievedChunk]:
+    """Chunks whose text tokenizes far denser than prose does.
+
+    Ordinary prose runs about four bytes per token, which is exactly the ratio a
+    plausible-looking *estimate* would use — so a bound exercised only against
+    prose passes whether it is a bound or an estimate. Regulatory text is not
+    uniformly prose either: citation-dense passages, article-number tables, and
+    the breadcrumb separator all tokenize denser than the average, which is
+    where an estimate would quietly under-reserve.
+    """
+    body = "› §1(a)(ii) – Art. 6(2); Annex III, point 5(b). " * repeats
+    return [
+        replace(CHUNKS[0], chunk_id=uuid.uuid4(), ordinal=index, text=body)
+        for index in range(count)
+    ]
+
+
+@pytest.mark.parametrize(
+    "chunks", [CHUNKS, _citation_dense_chunks()], ids=["prose", "citation-dense"]
+)
+async def test_the_reserved_bound_is_never_below_what_the_call_actually_billed(
+    chunks: Sequence[RetrievedChunk],
+) -> None:
+    """The bound, proved against a call that actually bills the worst case rather
+    than against the arithmetic that produced the bound. `max_cost` promises
+    `ceiling + one worst case`; if a real call can exceed it, that promise is the
+    same shape as the one this amendment replaced.
+
+    **The citation-dense case exists because the prose case could not fail.**
+    Mutating the byte bound into `len(prompt) // 4` — a perfectly plausible
+    estimate — left this test green: with four short chunks the output term
+    dominates so completely that the input term could be wrong by any factor and
+    the total still cleared the actual cost. That is CLAUDE.md rule 3's failure
+    shape exactly, and it was found by breaking the behaviour rather than by
+    reading the test.
+    """
+    client = WorstCaseClient()
+    generator = Generator(client)
+    answer = await generator.answer(QUESTION, chunks)
+
+    assert generator.max_cost(QUESTION, chunks) >= answer.cost_usd
+    assert answer.completion_tokens == 4096  # the output cap really was billed
+
+
+async def test_the_input_half_of_the_bound_is_actually_under_test() -> None:
+    """The guard on the test above: with the dense chunks, what the call bills
+    for *input* exceeds what it bills for output, so the input bound is load
+    bearing rather than hidden behind the output cap."""
+    chunks = _citation_dense_chunks()
+    client = WorstCaseClient()
+    answer = await Generator(client).answer(QUESTION, chunks)
+
+    input_cost = compute_cost(answer.generator_identity, answer.prompt_tokens, 0)
+    output_cost = compute_cost(answer.generator_identity, 0, answer.completion_tokens)
+    assert input_cost > output_cost, "the input term must dominate or the bound is untested"
+
+
+def test_the_byte_bound_holds_for_the_tokenizer_this_project_uses() -> None:
+    """Why bytes rather than a tokenizer: every BPE merge replaces two tokens
+    with one, so no encoding can exceed the UTF-8 byte count. Asserted against
+    real corpus-shaped text, including non-ASCII — the breadcrumb separator in
+    every chunk is a multi-byte character, which is exactly where a
+    character-count version of this bound would have been wrong."""
+    from rag_qa.generation.prompt import SYSTEM_PROMPT, render_context
+    from rag_qa.ingest.chunker import count_tokens
+
+    prompt = SYSTEM_PROMPT + render_context(QUESTION, CHUNKS)
+    assert "›" in prompt  # multi-byte, so bytes > characters here
+    assert count_tokens(prompt) <= len(prompt.encode("utf-8"))
+
+
+# --- AC-21: what a refresh clears, and what it must not ------------------------
+
+
+async def test_reservations_survive_a_refresh_and_recorded_spend_does_not(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Getting this backwards fails in both directions and silently: keeping the
+    delta double-counts spend that the refreshed total already contains, and
+    clearing the reservations forgets every call in flight — which is the blind
+    spot reservations exist to close, re-opened once per TTL."""
+    marker = f"budget-{uuid.uuid4()}"
+    clock = [1000.0]
+    future = datetime.now(UTC) + timedelta(days=400)
+    await _log_spend(session_factory, marker, "1.00", future)
+    try:
+        guard = SpendGuard(
+            session_factory,
+            daily_limit_usd=Decimal("5.00"),
+            refresh_seconds=30.0,
+            now=lambda: future,
+            monotonic=lambda: clock[0],
+        )
+        await guard.check()
+        assert guard.refresh_count == 1
+        before = guard.snapshot(future)
+        assert before is not None and before.remaining["daily"] == Decimal("4.00")
+
+        reservation = await guard.reserve(Decimal("0.50"))
+        guard.record(Decimal("0.02"))
+        # That recorded spend has reached query_log, as it has by the time
+        # `record()` is called on the serving path: the generator writes its row
+        # before the route sees the answer.
+        await _log_spend(session_factory, marker, "0.02", future)
+
+        clock[0] += 31.0  # past the TTL: the next check refreshes
+        await guard.check()
+        assert guard.refresh_count == 2
+
+        assert guard.reserved == Decimal("0.50"), "a call in flight was forgotten"
+        assert guard.recorded == Decimal("0"), "spend already in query_log was counted twice"
+
+        # And the total is right, counted exactly once: the ledger grew by $0.02
+        # and headroom fell by $0.02, not by $0.04.
+        after = guard.snapshot(future)
+        assert after is not None
+        assert after.remaining["daily"] == before.remaining["daily"] - Decimal("0.02")
+        assert after.reserved == Decimal("0.50")
+
+        reservation.settle(Decimal("0.01"))
+        assert guard.reserved == Decimal("0")
+        assert guard.recorded == Decimal("0.01")
+    finally:
+        await _cleanup(session_factory, marker)
+
+
+async def test_settle_and_release_are_both_idempotent_and_never_lose_spend(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """`finally: release()` runs after `settle()` on the success path, so the
+    second call must give nothing back a second time — a negative reserved total
+    would let the ceiling be exceeded by however many requests double-released."""
+    guard = _empty_window_guard(
+        session_factory, daily_limit_usd=Decimal("5.00"), refresh_seconds=1000.0
+    )
+    reservation = await guard.reserve(Decimal("0.30"))
+    assert guard.reserved == Decimal("0.30")
+
+    reservation.settle(Decimal("0.01"))
+    reservation.release()
+    reservation.release()
+
+    assert guard.reserved == Decimal("0")
+    assert guard.recorded == Decimal("0.01")
+
+
+# --- AC-22: pressure is not exhaustion -----------------------------------------
+
+
+async def test_reserve_distinguishes_committed_headroom_from_spent_money(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """The distinction has to be made where the condition is chosen, because
+    `envelope()` renders from the code alone — so a wrong choice here cannot be
+    corrected downstream."""
+    guard = _empty_window_guard(
+        session_factory, daily_limit_usd=Decimal("1.00"), refresh_seconds=1000.0
+    )
+
+    await guard.reserve(Decimal("0.60"))
+    await guard.reserve(Decimal("0.60"))  # admitted: outstanding was 0.60 < 1.00
+
+    # Nothing has been spent. The money is claimed, not gone.
+    assert guard.recorded == Decimal("0")
+    with pytest.raises(BudgetPressure) as pressure:
+        await guard.reserve(Decimal("0.10"))
+    assert pressure.value.ceiling == "daily"
+    assert pressure.value.retry_after == PRESSURE_RETRY_AFTER_SECONDS
+
+    # Now the money really is gone, on the same guard, at the same instant.
+    guard.record(Decimal("1.50"))
+    with pytest.raises(BudgetExhausted):
+        await guard.reserve(Decimal("0.10"))
+
+
+async def test_a_request_is_never_refused_by_its_own_reservation(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """A ceiling smaller than one worst-case query must still answer one question
+    at a time. Counting the incoming claim against itself would refuse every
+    request forever — an outage manufactured by the guard rather than by the
+    budget, and most readily on the small budgets this is for."""
+    guard = _empty_window_guard(
+        session_factory, daily_limit_usd=Decimal("0.01"), refresh_seconds=1000.0
+    )
+    reservation = await guard.reserve(Decimal("5.00"))  # far above the ceiling
+    reservation.settle(Decimal("0.001"))
+    # ...and again, because the first one settled cheaply.
+    await guard.reserve(Decimal("5.00"))
+
+
+async def test_one_replica_cannot_exceed_the_ceiling_by_more_than_one_worst_case(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """The claim that replaced "at most spend_rate x TTL x replicas".
+
+    It is arithmetic over the guard's own admissions rather than a statement
+    about traffic: no term here grows with arrival rate, which is the property
+    the old sentence claimed and did not have.
+    """
+    ceiling = Decimal("1.00")
+    worst_case = Decimal("0.07")
+    guard = _empty_window_guard(session_factory, daily_limit_usd=ceiling, refresh_seconds=1000.0)
+
+    admitted = 0
+    while True:
+        try:
+            await guard.reserve(worst_case)
+        except (BudgetPressure, BudgetExhausted):
+            break
+        admitted += 1
+
+    assert admitted > 0
+    # Every admitted request could bill its worst case and the day still lands
+    # within one query of the ceiling.
+    assert admitted * worst_case <= ceiling + worst_case
+    # And the bound is tight rather than trivially satisfied by refusing early:
+    # admitting one fewer would have left headroom unspent.
+    assert (admitted + 1) * worst_case > ceiling
+
+
+async def test_pressure_over_http_says_shortly_and_never_the_midnight_clock(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Rendering this as `budget_exhausted` would hand a visitor a countdown to
+    UTC midnight for a condition that clears in seconds — the same untruthfulness
+    the fourth review round removed, arriving through a new door."""
+    marker = f"budget-{uuid.uuid4()}"
+    question = f"{marker} probe"
+    # A ceiling exactly one worst-case query above what today has already spent.
+    # Both terms are measured rather than guessed: the worst case so that a rate
+    # change cannot quietly turn this into a test of nothing, and the floor so
+    # that the app's guard -- which reads the real clock and cannot be given a
+    # fake one -- sees headroom for the first request and none for the second.
+    worst_case = Generator(FakeLLMClient()).max_cost(question, CHUNKS)
+    assert worst_case > 0
+    ceiling = await _spend_so_far_today(session_factory) + worst_case
+
+    client = SlowClient(delay=0.3)
+    app = _budgeted_app(client, session_factory, daily_budget_usd=ceiling)
+    try:
+        first = asyncio.create_task(post(app, "/query", {"question": question}))
+        await asyncio.sleep(0.1)  # the first request is inside the provider call
+        second = await post(app, "/query", {"question": question})
+        first_response = await first
+    finally:
+        await _cleanup(session_factory, marker)
+
+    assert first_response.status_code == 200
+    assert second.status_code == 503
+    error = second.json()["error"]
+    assert error["code"] == "budget_pressure"
+    assert error["presentation"] == "transient"
+    assert error["reset"] == "shortly"
+    assert int(second.headers["retry-after"]) == PRESSURE_RETRY_AFTER_SECONDS
+    # No instant is quoted, and no figure either (AC-18's rule is not per-code).
+    assert "resets at" not in error["message"]
+    assert_no_figures(error["message"])
+    # One provider call, not two: the refusal happened before the second one.
+    assert len(client.calls) == 1
+
+
+async def test_an_exhausted_budget_still_says_window_with_the_real_clock(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """The other half of the pair: adding a transient sibling must not soften the
+    condition that genuinely does reset at a known instant."""
+    marker = f"budget-{uuid.uuid4()}"
+    await _log_spend(session_factory, marker, "9.00", datetime.now(UTC))
+    app = build_app(session_factory=session_factory, daily_budget_usd=Decimal("5.00"))
+    try:
+        response = await post(app, "/query", {"question": QUESTION})
+    finally:
+        await _cleanup(session_factory, marker)
+
+    error = response.json()["error"]
+    assert error["code"] == "budget_exhausted"
+    assert error["presentation"] == "explanatory"
+    assert error["reset"] == "window"
+    assert int(response.headers["retry-after"]) == pytest.approx(
+        seconds_until_utc_midnight(datetime.now(UTC)), abs=5
+    )
+
+
+async def test_pressure_is_counted_in_the_failure_signal_but_is_not_a_trip(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """SPEC-008's counters: `rag_qa_budget_trips_total` means the demo ran out of
+    money, and diluting it with a three-second condition would cost it the one
+    meaning an operator pages on."""
+    marker = f"budget-{uuid.uuid4()}"
+    question = f"{marker} probe"
+    ceiling = await _spend_so_far_today(session_factory) + Generator(FakeLLMClient()).max_cost(
+        question, CHUNKS
+    )
+    client = SlowClient(delay=0.3)
+    app = _budgeted_app(client, session_factory, daily_budget_usd=ceiling)
+    metrics = app.state.rag.metrics
+    try:
+        first = asyncio.create_task(post(app, "/query", {"question": question}))
+        await asyncio.sleep(0.1)
+        await post(app, "/query", {"question": question})
+        await first
+    finally:
+        await _cleanup(session_factory, marker)
+
+    assert metrics.errors["budget_pressure"] == 1
+    assert metrics.budget_trips == {}
+    assert metrics.requests_shed == 0  # nor is it a concurrency shed
+
+
+async def test_metrics_publishes_committed_headroom_beside_remaining(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """`remaining` keeps meaning money spent, so an alert threshold written
+    against it keeps its meaning; committed headroom is a second series."""
+    guard = _empty_window_guard(
+        session_factory, daily_limit_usd=Decimal("5.00"), refresh_seconds=1000.0
+    )
+    await guard.check()
+    await guard.reserve(Decimal("0.25"))
+
+    snapshot = guard.snapshot(datetime.now(UTC))
+    assert snapshot is not None
+    assert snapshot.reserved == Decimal("0.25")
+    assert snapshot.remaining["daily"] == Decimal("5.00")  # nothing has been spent
+
+    from rag_qa.api.metrics import Metrics
+
+    metrics = Metrics()
+    metrics.set_budget_snapshot(snapshot)
+    rendered = metrics.render()
+    assert "rag_qa_budget_reserved_usd 0.25" in rendered
+    assert 'rag_qa_budget_remaining_usd{ceiling="daily"} 5.00' in rendered

@@ -63,7 +63,14 @@ class Reset(StrEnum):
     """Clears on its own at a known instant; `Retry-After` is accurate."""
 
     SHORTLY = "shortly"
-    """Retryable soon, with no precise time worth quoting."""
+    """Retryable soon, with no precise time worth quoting.
+
+    `budget_pressure` is the member's clearest case (KD-16 amendment 5): the
+    demo's remaining budget is claimed by answers still being generated, so the
+    condition clears when those return — seconds — and the one instant the
+    system *does* know, the UTC reset, is the wrong one to quote. A `window`
+    rendering there would hand a visitor a countdown to midnight for something
+    that resolves before they finish reading it."""
 
     OPERATOR = "operator"
     """Clears only when an operator changes something. No countdown exists."""
@@ -108,6 +115,15 @@ CONDITIONS: dict[str, ConditionSpec] = dict(
             Presentation.EXPLANATORY,
             Reset.WINDOW,
             "the demo's spending limit for this window has been reached",
+            refusal=True,
+        ),
+        _spec(
+            "budget_pressure",
+            503,
+            Presentation.TRANSIENT,
+            Reset.SHORTLY,
+            "the demo's remaining spending headroom is committed to answers already in "
+            "progress; retry shortly",
             refusal=True,
         ),
         _spec(

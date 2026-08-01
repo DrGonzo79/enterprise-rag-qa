@@ -4,7 +4,7 @@ import logging
 import time
 import uuid
 from collections.abc import AsyncIterator, Sequence
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -26,6 +26,12 @@ from rag_qa.retrieval.types import RetrievedChunk
 logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_TOKENS = 4096
+
+# Tokens the provider adds around the messages themselves — role framing, any
+# begin/end markers — which the prompt text does not contain and the byte bound
+# below therefore cannot see. Generous on purpose: it is a constant, and the
+# quantity it guards is a bound.
+MESSAGE_STRUCTURE_TOKENS = 64
 
 NO_EVIDENCE_TEXT = (
     "No supporting excerpts were retrieved for this question, so it cannot be "
@@ -62,6 +68,43 @@ class Generator:
     def identity(self) -> str:
         """provider:model, from the client — never a constant (KD-1)."""
         return self._client.identity
+
+    def max_cost(
+        self, question: str, chunks: Sequence[RetrievedChunk], *, when: date | None = None
+    ) -> Decimal:
+        """The most this answer could possibly cost, for SPEC-006's reservation.
+
+        **An upper bound, not an estimate**, because it is used to promise that a
+        replica cannot exceed its spend ceiling, and a promise resting on a
+        typical case is not one. Two halves:
+
+        - **Output** is bounded by `max_tokens`, which the provider enforces.
+        - **Input** is bounded by the prompt's UTF-8 byte count. A byte-level BPE
+          tokenizer starts from single bytes and every merge replaces two tokens
+          with one, so no encoding of a string can contain more tokens than the
+          string has bytes. That holds without running a tokenizer here and
+          without assuming a local tokenizer agrees with the provider's — the
+          assumption that would otherwise sit underneath the whole guarantee.
+
+        It is loose: English prose runs about four bytes per token, so the input
+        side over-claims roughly fourfold. Loose in the safe direction — the cost
+        is admitting fewer concurrent requests, never exceeding the ceiling — and
+        the reservation is released down to the real cost as soon as the call
+        returns, so the looseness lasts one generation rather than one day.
+
+        **Zero chunks reserves nothing:** `answer()` refuses without a provider
+        call, so there is no spend to hold headroom against.
+        """
+        if not chunks:
+            return Decimal("0")
+        prompt = SYSTEM_PROMPT + render_context(question, chunks)
+        prompt_tokens = len(prompt.encode("utf-8")) + MESSAGE_STRUCTURE_TOKENS
+        return compute_cost(
+            self._client.identity,
+            prompt_tokens,
+            self._max_tokens,
+            when=when or datetime.now(UTC).date(),
+        )
 
     # --- non-streaming --------------------------------------------------------
 

@@ -46,6 +46,7 @@ class Metrics:
         self.requests_shed = 0
         self.budget_remaining: dict[str, Decimal] = {}
         self.budget_snapshot_age: float | None = None
+        self.budget_reserved: Decimal | None = None
         # A systematic telemetry failure is invisible by construction if the only
         # report is through the machinery that is failing, so it gets a counter
         # of its own alongside the plain-logger record.
@@ -78,6 +79,7 @@ class Metrics:
     def set_budget_snapshot(self, snapshot: "BudgetSnapshot | None") -> None:
         self.budget_remaining = dict(snapshot.remaining) if snapshot else {}
         self.budget_snapshot_age = snapshot.age_seconds if snapshot else None
+        self.budget_reserved = snapshot.reserved if snapshot else None
 
     def observe_answer(
         self, verdict: str, prompt_tokens: int, completion_tokens: int, cost_usd: Decimal
@@ -156,6 +158,16 @@ class Metrics:
                 lines.append(
                     f'rag_qa_budget_remaining_usd{{ceiling="{_escape(ceiling)}"}} {amount}'
                 )
+
+        if self.budget_reserved is not None:
+            lines += [
+                # Published beside `remaining` rather than folded into it: an
+                # alert threshold on remaining keeps the meaning it was written
+                # with, and refusals start when this crosses that one.
+                "# HELP rag_qa_budget_reserved_usd Headroom committed to answers in flight.",
+                "# TYPE rag_qa_budget_reserved_usd gauge",
+                f"rag_qa_budget_reserved_usd {self.budget_reserved}",
+            ]
 
         if self.budget_snapshot_age is not None:
             lines += [

@@ -8,12 +8,14 @@ import asyncio
 import logging
 import time
 from collections.abc import AsyncIterator, Sequence
+from decimal import Decimal
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 
 from rag_qa.api.auth import Scope, require
+from rag_qa.api.budget import Reservation
 from rag_qa.api.context import current_request_id, record_outcome
 from rag_qa.api.deps import AppState
 from rag_qa.api.errors import (
@@ -111,37 +113,85 @@ async def query(request: Request, payload: QueryRequest) -> Any:
     if not payload.question.strip():
         raise ValidationFailed("question must not be blank")
     # Before the provider call: a breaker that trips after paying for the answer
-    # is not a breaker (KD-16).
+    # is not a breaker (KD-16). This is the cheap shed — is the money gone? —
+    # and it runs before retrieval so an exhausted budget costs an embedding
+    # call and two connections less than it otherwise would.
     await state.budget.check()
 
     started = time.perf_counter()
     chunks = await _retrieve(state, payload)
 
+    # The second half of the ceiling, and it has to be here rather than beside
+    # the check above: the amount to claim is an upper bound on *this* prompt,
+    # and the prompt does not exist until retrieval has run (KD-16 amendment 5).
+    # The window it covers — reserve here, settle when the provider returns — is
+    # also the whole of the exposure, since retrieval is milliseconds and
+    # generation is seconds.
+    reservation = await _reserve(state, payload, chunks)
+
     if not payload.stream:
         try:
-            answer = await state.generator.answer(payload.question, chunks)
-        except ApiError:
-            raise
-        except Exception as exc:
-            translated = translate(exc)
-            if translated is not None:
-                raise translated from exc
-            # The provider is the upstream boundary; a transport failure there is
-            # 502, and only the exception *type* crosses back to the caller.
-            raise UpstreamError(f"provider call failed ({type(exc).__name__})") from exc
-        state.budget.record(answer.cost_usd)
-        state.metrics.observe_answer(
-            str(answer.verdict), answer.prompt_tokens, answer.completion_tokens, answer.cost_usd
-        )
-        state.metrics.observe_query_latency(time.perf_counter() - started)
-        record_outcome(verdict=str(answer.verdict))
-        return QueryResponse.build(answer, chunks, current_request_id())
+            try:
+                answer = await state.generator.answer(payload.question, chunks)
+            except ApiError:
+                raise
+            except Exception as exc:
+                translated = translate(exc)
+                if translated is not None:
+                    raise translated from exc
+                # The provider is the upstream boundary; a transport failure
+                # there is 502, and only the exception *type* crosses back to
+                # the caller.
+                raise UpstreamError(f"provider call failed ({type(exc).__name__})") from exc
+            reservation.settle(answer.cost_usd)
+            state.metrics.observe_answer(
+                str(answer.verdict), answer.prompt_tokens, answer.completion_tokens, answer.cost_usd
+            )
+            state.metrics.observe_query_latency(time.perf_counter() - started)
+            record_outcome(verdict=str(answer.verdict))
+            return QueryResponse.build(answer, chunks, current_request_id())
+        finally:
+            # Unconditional, and a no-op after `settle`. The paths that matter
+            # are the ones not written above: a translated ApiError, an
+            # UpstreamError, and cancellation when the caller disconnects mid
+            # generation — each of which leaves the claim held forever without
+            # this line, and none of which a success-path release would cover.
+            reservation.release()
+
+    # The pump owns the reservation from the moment it exists, because
+    # generation deliberately outlives the client connection: a body iterator
+    # that is never driven would strand the claim, and the task always runs.
+    queue: asyncio.Queue[tuple[str, Any]] = asyncio.Queue()
+    try:
+        events = state.generator.stream_answer(payload.question, chunks)
+        task = asyncio.create_task(_pump(state, events, queue, started, reservation))
+    except BaseException:
+        reservation.release()
+        raise
+    _background.add(task)
+    task.add_done_callback(_background.discard)
 
     return StreamingResponse(
-        _sse_body(state, payload, chunks, started),
+        _sse_body(state, queue),
         media_type="text/event-stream",
         headers=dict(SSE_HEADERS),
     )
+
+
+async def _reserve(
+    state: AppState, payload: QueryRequest, chunks: Sequence[RetrievedChunk]
+) -> Reservation:
+    """Claim the worst case this answer could cost, before it is spent.
+
+    The bound is only computed when a ceiling is configured — with no budget
+    there is nothing to reserve against, and rendering the prompt a second time
+    to measure it would be work done for no one.
+    """
+    assert state.generator is not None
+    amount = (
+        state.generator.max_cost(payload.question, chunks) if state.budget.enabled else Decimal("0")
+    )
+    return await state.budget.reserve(amount)
 
 
 async def _pump(
@@ -149,14 +199,21 @@ async def _pump(
     events: AsyncIterator[AnswerEvent],
     queue: "asyncio.Queue[tuple[str, Any]]",
     started: float,
+    reservation: Reservation,
 ) -> None:
-    """Drive generation independently of the client connection."""
+    """Drive generation independently of the client connection.
+
+    Owns the reservation for the whole of the provider call, and releases it in
+    the `finally` that already existed for the queue sentinel — the one place
+    reached by a clean finish, a stream that dies mid-answer, and cancellation
+    when this task is torn down.
+    """
     try:
         async for event in events:
             queue.put_nowait(("event", event))
             if isinstance(event, AnswerComplete):
                 answer = event.answer
-                state.budget.record(answer.cost_usd)
+                reservation.settle(answer.cost_usd)
                 state.metrics.observe_answer(
                     str(answer.verdict),
                     answer.prompt_tokens,
@@ -180,18 +237,22 @@ async def _pump(
         )
         queue.put_nowait(("error", exc))
     finally:
+        # Before the sentinel, so the claim is already gone by the time anything
+        # downstream can observe the stream as finished. Reached by a clean
+        # finish, by a stream that dies after the first frame, and by
+        # cancellation when the task is torn down — which is the disconnect
+        # shape, and the one no success-path release would have covered.
+        reservation.release()
         queue.put_nowait(("done", None))
 
 
-async def _sse_body(
-    state: AppState, payload: QueryRequest, chunks: Sequence[RetrievedChunk], started: float
-) -> AsyncIterator[str]:
-    assert state.generator is not None
-    queue: asyncio.Queue[tuple[str, Any]] = asyncio.Queue()
-    events = state.generator.stream_answer(payload.question, chunks)
-    task = asyncio.create_task(_pump(state, events, queue, started))
-    _background.add(task)
-    task.add_done_callback(_background.discard)
+async def _sse_body(state: AppState, queue: "asyncio.Queue[tuple[str, Any]]") -> AsyncIterator[str]:
+    """Render frames from whatever the pump has produced.
+
+    Creating the pump task is the caller's job, not this generator's: a
+    `StreamingResponse` body that is never driven would never run this function
+    at all, and the task holds the reservation.
+    """
 
     async def frames() -> AsyncIterator[str]:
         while True:

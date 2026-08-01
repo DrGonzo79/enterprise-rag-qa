@@ -142,7 +142,8 @@ in-process; `query_log` is the authoritative ledger, offline.
 | `rag_qa_errors_total` | **Which** failure, not merely which status |
 | `rag_qa_budget_trips_total` | Has the demo stopped answering, and which ceiling stopped it |
 | `rag_qa_requests_shed_total` | Is the concurrency bound being reached |
-| `rag_qa_budget_remaining_usd` | Headroom before it stops |
+| `rag_qa_budget_remaining_usd` | Headroom before it stops — money **spent**, not money claimed |
+| `rag_qa_budget_reserved_usd` | Headroom **committed** to answers currently being generated |
 | `rag_qa_budget_snapshot_age_seconds` | How old that headroom figure is |
 | `rag_qa_telemetry_failures_total` | Completion records that could not be emitted |
 
@@ -177,10 +178,42 @@ absent(rag_qa_budget_remaining_usd)
 rag_qa_budget_snapshot_age_seconds > 900
 absent(rag_qa_budget_snapshot_age_seconds)
 
+# Requests are being refused because the remaining budget is committed to
+# answers in flight, not because it is spent. Clears in seconds on its own, so
+# a rate rather than a trip -- sustained pressure means the ceiling is now the
+# admission control, and the ceiling is too small for the traffic.
+rate(rag_qa_errors_total{code="budget_pressure"}[15m]) > 0.1
+absent(rag_qa_errors_total)
+
+# Committed headroom has caught up with remaining headroom: the next request is
+# refused with budget_pressure. Two series rather than one, deliberately -- see
+# below.
+rag_qa_budget_reserved_usd >= min by (ceiling) (rag_qa_budget_remaining_usd)
+absent(rag_qa_budget_reserved_usd)
+
 # Telemetry itself is failing. Best-effort by construction (see below), so any
 # non-zero rate is worth looking at rather than a threshold.
 increase(rag_qa_telemetry_failures_total[15m]) > 0
 ```
+
+**`remaining` means money spent; `reserved` means money claimed — and they are
+two series on purpose.** Every request debits its worst-case cost before the
+provider call and settles to the actual cost afterwards (SPEC-006 Key decision
+16, amendment 5), which is what bounds a replica at `ceiling + one worst-case
+query` regardless of how much traffic arrives. Folding reservations into
+`rag_qa_budget_remaining_usd` would have silently changed what an existing
+alert threshold on it means, so they are published side by side: subtract them
+for committed headroom, read `remaining` alone for spend. **`reserved` is
+expected to be jumpy** — it rises with every in-flight answer and falls as each
+returns — so alert on the *relationship* between the two, never on `reserved`
+crossing an absolute value.
+
+**A `budget_pressure` refusal is not a budget trip, and
+`rag_qa_budget_trips_total` deliberately does not count it.** A trip means the
+demo is out of money until a UTC boundary; pressure means it is momentarily out
+of *uncommitted* money and will answer again as soon as the current answers
+finish. Paging on them together would cost the trip counter the one meaning it
+has.
 
 **`rag_qa_telemetry_failures_total` is best-effort and is not the authoritative
 count.** It is incremented inside the same `except` that reports the failure,

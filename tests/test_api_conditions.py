@@ -211,3 +211,54 @@ async def test_the_schema_tells_clients_how_to_fail_on_an_unknown_member() -> No
     assert "unrecognised" in detail["presentation"]["description"]
     assert "shortly" in detail["reset"]["description"]
     assert "unrecognised" in detail["reset"]["description"]
+
+
+# --- the exported contract (SPEC-009 AC-2's input) ----------------------------
+
+
+def test_the_exported_contract_is_regenerated_and_compared_not_trusted() -> None:
+    """A checked-in copy of the taxonomy is the two-list problem relocated.
+
+    SPEC-009 needs the *set of codes* to prove every condition it can receive has
+    a rendering, and that set is not in `openapi.json` — the schema publishes the
+    enum members of `presentation` and `reset`, not the codes. So something
+    crosses the language boundary, and the moment it does, the question is what
+    fails when `CONDITIONS` gains a member and the copy does not.
+
+    **Without this test the answer is: nothing.** The frontend's coverage test
+    would enumerate a stale list, find every entry in it rendered, and pass —
+    while the new condition reached no branch at all. That is the same shape as a
+    test whose fixture makes its subject unreachable, one repository away.
+
+    So the export is regenerated here and compared byte for byte. A drifted
+    export is a red build, not a missing frontend branch.
+    """
+    from scripts.export_conditions import EXPORT_PATH, render
+
+    assert EXPORT_PATH.exists(), (
+        "contracts/conditions.json is missing; run: uv run python -m scripts.export_conditions"
+    )
+    assert EXPORT_PATH.read_text() == render(), (
+        "contracts/conditions.json is stale — the condition registry changed and the "
+        "export did not. Run: uv run python -m scripts.export_conditions"
+    )
+
+
+def test_the_exported_contract_carries_every_field_a_client_renders_from() -> None:
+    """Enumerable in both directions: every registry entry is exported, and the
+    export invents nothing. The `status` and `refusal` fields ride along for the
+    same reason SPEC-008 counts by code — an operator-side consumer reads them —
+    but `presentation` and `reset` are the two the frontend actually renders."""
+    import json
+
+    from scripts.export_conditions import EXPORT_PATH
+
+    exported = json.loads(EXPORT_PATH.read_text())["conditions"]
+    assert set(exported) == set(CONDITIONS)
+    for code, spec in CONDITIONS.items():
+        assert exported[code] == {
+            "status": spec.status,
+            "presentation": str(spec.presentation),
+            "reset": str(spec.reset),
+            "refusal": spec.refusal,
+        }

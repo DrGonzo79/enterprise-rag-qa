@@ -17,6 +17,7 @@ import json
 from collections.abc import AsyncIterator, Mapping
 from typing import Any
 
+from rag_qa.api.conditions import spec_for
 from rag_qa.api.schemas import UsageOut
 from rag_qa.generation.types import (
     AnswerEvent,
@@ -41,8 +42,30 @@ def data_frame(payload: Mapping[str, Any]) -> str:
 
 def error_frame(code: str, message: str) -> str:
     """Terminal frame for a failure after the headers went out with a 200 —
-    the status can no longer be changed, so the failure has to be in-band."""
-    return data_frame({"type": "error", "code": code, "message": message})
+    the status can no longer be changed, so the failure has to be in-band.
+
+    **Carries `presentation` and `reset`, from the same registry `envelope()`
+    reads** (KD-16, amendment 6). Without them this was the one path where a
+    client could not render the condition off the wire: the HTTP status was
+    already spent, the headers were long gone, and the two fields that exist so
+    a frontend need not keep its own copy of the taxonomy were absent from the
+    only message it would ever receive. The only way to render it specifically
+    was a client-side `code` → rendering map — precisely the second list the
+    registry exists to make impossible. `Retry-After` has no in-band equivalent
+    and is deliberately not invented here: a `window` condition mid-stream still
+    tells the client *that* it resets on a clock, and the retried request will
+    carry the real header.
+    """
+    spec = spec_for(code)
+    return data_frame(
+        {
+            "type": "error",
+            "code": code,
+            "message": message,
+            "presentation": str(spec.presentation),
+            "reset": str(spec.reset),
+        }
+    )
 
 
 def event_payload(event: AnswerEvent) -> dict[str, Any]:

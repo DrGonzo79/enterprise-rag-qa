@@ -12,8 +12,8 @@ cross-spec note (which is binding on this spec), the condition registry in
 CLAUDE.md's stack and scope-cut ladder. Where a decision was not already bound,
 it is proposed here and flagged.
 
-**Approval is blocked on two things outside this spec, and neither is a
-detail.** Read these before the Key decisions:
+**Approval is blocked on one thing outside this spec, and it is not a detail.**
+Read it before the Key decisions:
 
 1. **Where the read key lives (SPEC-010).** A browser cannot keep a secret, so a
    page that calls `/query` directly ships the key in JavaScript — which makes
@@ -23,10 +23,11 @@ detail.** Read these before the Key decisions:
    because where a key lives is deployment topology. **This spec cannot be
    approved until SPEC-010 settles it**, since a frontend built against one of
    those answers is not trivially portable to another. See Key decision 8.
-2. **A terminal SSE error frame carries no rendering (SPEC-006, proposed).** See
-   Key decision 4 and the *Blocked* note under it: the wire contract this spec
-   is supposed to read its renderings off does not currently carry them on the
-   one path where the status code is already gone.
+**Resolved since drafting:** the terminal SSE error frame carried no rendering,
+which was the second blocker. It was proposed here rather than applied — the
+first thing filed under CLAUDE.md rule 4's unprompted-amendment clause — and
+approved on review as SPEC-006 Key decision 16 amendment 6. Key decision 4 and
+AC-8 below are written to the fixed contract.
 
 **Three further dependencies are named rather than assumed**, and all are on
 things that do not exist yet: the eval report (SPEC-007, unwritten), the
@@ -149,28 +150,23 @@ decision 4, and this line is deliberately not written as though it were closed.
    partial answer would be a small lie in the other direction; presenting it as
    complete is the lie this avoids.
 
-   **Blocked — the frame cannot currently be rendered this way, and this is the
-   one place KD-16's cross-spec note promises something the registry does not
-   deliver.** `error_frame()` emits `{"type":"error","code":…,"message":…}` and
-   nothing else: no `presentation`, no `reset`, and no `Retry-After`, because
-   the headers left long ago. So on the single path where the HTTP status is
-   already unavailable, the two fields that exist *so a client need not keep its
-   own copy of the taxonomy* are also unavailable — and the only way to render
-   the frame specifically is a client-side `code` → rendering map, which is
-   exactly the second list Key decision 1 forbids. The gap is narrow (one
-   frame, one code path) and it is exactly where the taxonomy seam was supposed
-   to pay off.
+   **The frame carries its own rendering, as of SPEC-006 Key decision 16
+   amendment 6** *(proposed in this draft 2026-08-01, approved and applied
+   2026-08-02)*. `error_frame()` previously emitted `code` and `message` alone,
+   which made this the one path where a client could not read a condition's
+   rendering off the wire: the HTTP status was already spent, the headers were
+   gone, and this frame is the only message the client ever receives about the
+   failure. The two options that left — render every mid-stream failure
+   generically, or keep a local `code` → rendering map — were a loss of
+   information and a violation of Key decision 1 respectively. The frame now
+   carries `presentation` and `reset` from `spec_for(code)`, the same source
+   `envelope()` uses, so the two renderings of one condition cannot disagree.
 
-   **Proposed amendment to SPEC-006 (not applied — CLAUDE.md rule 4: an
-   amendment proposed unprompted stops at proposed).** Add `presentation` and
-   `reset` to the terminal error frame, from `spec_for(code)`, the same source
-   `envelope()` already uses — about three lines in `sse.py`, no new concept,
-   and it makes the frame self-describing exactly like the HTTP body. **Without
-   it**, this spec's only honest option is to render every mid-stream failure as
-   generic `degraded`/`shortly`, which is the published unknown-member fallback
-   and is *correct* but throws away information the server had. AC-8 is written
-   against the amendment; if it is declined, AC-8 changes to assert the generic
-   rendering and this decision says so instead.
+   **`Retry-After` still has no in-band equivalent, and none is invented.** A
+   `window` condition mid-stream tells the client *that* it resets on a clock
+   without saying when; the retry carries the real header. So the renderer takes
+   `retryAfter: number | null` and this path passes `null` — which is exactly the
+   case `countdown` was made nullable for, rather than a gap.
 
 5. **`budget_exhausted` renders the explanatory panel — this is bound by SPEC-006
    Key decision 16, not chosen here.** Pre-recorded question/answer pairs
@@ -260,21 +256,27 @@ decision 4, and this line is deliberately not written as though it were closed.
   A test enumerates every condition code the API can produce and asserts each
   yields a `ConditionView` with a non-empty heading; a rendering no condition can
   produce fails the same test. This is AC-17's reachability argument on the
-  client side, and it is what keeps the two halves from drifting.
+  client side.
 
-  **The codes come from a captured fixture, not from the OpenAPI document, and
-  the distinction is worth stating because the obvious wording is wrong.**
-  `openapi.json` publishes the *enum members* of `presentation` and `reset` — it
-  does **not** publish the set of `code` values, which live only in
-  `rag_qa/api/conditions.py`. An earlier draft of this criterion said "enumerates
-  `CONDITIONS` from the OpenAPI document", which is not satisfiable. It is also
-  not needed: the client renders from `presentation` and `reset` and never
-  branches on `code`, so the code list is a **test** input for coverage, not a
-  runtime input. The capture script writes it alongside the response fixtures,
-  and a code added server-side without a rendering fails this test on the next
-  capture. **KD-16's "read the rendering off the wire" is satisfied** — every
-  error carries its own rendering — but "the whole taxonomy is on the wire" was
-  never true and this spec does not depend on it.
+  **The codes come from `contracts/conditions.json`, and that file is
+  regenerate-and-compare, not a checked-in fixture.** `openapi.json` publishes
+  the *enum members* of `presentation` and `reset` — it does **not** publish the
+  set of `code` values, which live only in `rag_qa/api/conditions.py`. An earlier
+  draft said "enumerates `CONDITIONS` from the OpenAPI document", which is not
+  satisfiable. It is also not needed at runtime: the client renders from
+  `presentation` and `reset` and never branches on `code`, so the code set is a
+  **test** input for coverage.
+
+  **But a captured copy is the two-list problem relocated into the build**, and
+  the question that settles it is what fails when `CONDITIONS` gains a member and
+  the copy does not. Answered on the server side by SPEC-006 AC-26: the export is
+  generated by `scripts/export_conditions.py` and regenerated in
+  `tests/test_api_conditions.py`, which fails on any difference — so a drifted
+  export is a red build, not a frontend branch that silently never exists. **This
+  criterion additionally requires the frontend build to consume that same
+  generated file** rather than a copy of its own, and CI to run the Python gate
+  that guards it before the node job — a stale export must fail once, loudly, in
+  the place that can name the cause.
 - **AC-3 (a refusal is not an error)** — A 200 response with
   `verdict: "insufficient_evidence"` renders in the answer panel with the
   retrieved excerpts present, and produces **no** element carrying the error
@@ -303,16 +305,15 @@ decision 4, and this line is deliberately not written as though it were closed.
   control, and name the operator action.
 - **AC-8 (a mid-stream failure keeps the partial answer and marks it)** — A
   stream that emits `verdict`, two `text` frames, and then a terminal `error`
-  frame leaves both text fragments on screen, **marked incomplete**, with a
-  condition rendered beneath them; a stream that simply ends with no `complete`
-  frame renders the same way. **Conditional on the SPEC-006 amendment proposed
-  in Key decision 4:** if the frame gains `presentation` and `reset`, the
-  condition is rendered through `view()` like any other and this criterion also
-  asserts the tone matches the code's registry entry. If the amendment is
-  declined, this criterion instead asserts the failure renders as
-  `degraded`/`shortly` — the published unknown-member fallback — and that **no
-  code-to-rendering map exists in the source** (AC-1's lint rule already forbids
-  it, and this is where it would be tempting to add an exception).
+  frame leaves both text fragments on screen, **marked incomplete**, with the
+  condition rendered beneath them **through `view()`** — `tone` from the frame's
+  `presentation`, `retryable` from its `reset`, and `countdown: null`, since no
+  `Retry-After` exists in-band. Asserted to match what the same code renders as
+  from an HTTP envelope, so the two paths cannot diverge. A stream that ends with
+  no `complete` frame renders the same way, with the generic `degraded`/`shortly`
+  fallback, since there is no frame to read a rendering from at all. **No
+  code-to-rendering map exists in the source** — AC-1's lint rule forbids it, and
+  this is the criterion where an exception would have been tempting.
 - **AC-9 (no dollar figure reaches the DOM)** — For a successful answer, a
   budget trip, and a pressure refusal, the rendered output contains no `$` and no
   decimal amount. This is Key decision 10 and AC-18's rule at the last place it

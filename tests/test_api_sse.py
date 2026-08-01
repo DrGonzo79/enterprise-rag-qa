@@ -192,3 +192,72 @@ async def test_failure_after_the_first_frame_is_an_in_band_error_event() -> None
     assert events[0]["type"] == "verdict"
     assert events[-1]["type"] == "error"
     assert [event for event in events if event["type"] == "complete"] == []
+
+
+# --- the terminal error frame carries its own rendering (KD-16 amendment 6) ----
+
+
+def test_the_terminal_error_frame_carries_presentation_and_reset() -> None:
+    """The one path where a client could not read the rendering off the wire.
+
+    Headers went out with a 200 and cannot be retracted (KD-3), so a mid-stream
+    failure arrives only as this frame. Before this it carried `code` and
+    `message` alone — which left a frontend two options, both bad: render every
+    mid-stream failure generically, or keep a local `code` → rendering map, which
+    is the second list `conditions.py` exists to make impossible. The fields come
+    from `spec_for`, the same source `envelope()` uses, so the two renderings of
+    one condition cannot disagree.
+    """
+    import json
+
+    from rag_qa.api.conditions import spec_for
+    from rag_qa.api.sse import error_frame
+
+    frame = error_frame("upstream_error", "provider unreachable")
+    payload = json.loads(frame.removeprefix("data: "))
+    spec = spec_for("upstream_error")
+
+    assert payload["type"] == "error"
+    assert payload["code"] == "upstream_error"
+    assert payload["presentation"] == str(spec.presentation)
+    assert payload["reset"] == str(spec.reset)
+
+
+def test_every_condition_renders_the_same_in_a_frame_as_in_an_envelope() -> None:
+    """Asserted across the whole registry rather than on one code: the failure
+    this prevents is a *second* source of truth appearing, and one example cannot
+    show that two sources agree everywhere."""
+    import json
+
+    from rag_qa.api.conditions import CONDITIONS
+    from rag_qa.api.errors import ApiError, envelope
+    from rag_qa.api.sse import error_frame
+
+    for code in CONDITIONS:
+        frame = json.loads(error_frame(code, "x").removeprefix("data: "))
+        error = ApiError("x")
+        error.code = code
+        _, body, _ = envelope(error, "req-1")
+        assert frame["presentation"] == body["error"]["presentation"], code
+        assert frame["reset"] == body["error"]["reset"], code
+
+
+async def test_a_stream_failure_delivers_the_rendering_over_the_wire() -> None:
+    """End to end, not at the framing helper: a client reading the byte stream
+    receives the fields it renders from."""
+    import json
+
+    from api_harness import build_app, sse_frames
+    from test_api_budget import FailingStreamClient
+
+    app = build_app(client=FailingStreamClient())
+    _, frames = await sse_frames(app, {"question": "What applies?", "stream": True})
+
+    errors = [
+        json.loads(f.removeprefix("data: "))
+        for f in frames
+        if f.startswith("data: ") and '"type": "error"' in f
+    ]
+    assert len(errors) == 1
+    assert errors[0]["presentation"] == "transient"  # upstream_error
+    assert errors[0]["reset"] == "shortly"

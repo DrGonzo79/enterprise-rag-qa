@@ -1385,3 +1385,66 @@ async def test_pressure_refusals_get_their_own_counter_not_the_trip_counter(
     # ...and it did not land in either of the counters that mean something else.
     assert metrics.budget_trips == {}
     assert metrics.requests_shed == 0
+
+
+async def test_a_cold_cache_serves_a_burst_with_one_query_not_one_each(
+    pooled_engine: AsyncEngine,
+) -> None:
+    """Staleness detection and the query are two steps with an await between
+    them, so N requests arriving on an unrefreshed replica each read "stale"
+    before any of them writes a result — N aggregates, N connections, against a
+    refresh deliberately outside `RESERVED_CONNECTIONS` because it was assumed
+    to be one checkout per TTL.
+
+    **A cold cache is not an edge case, it is a deploy.** A rolling restart moves
+    live traffic onto a process whose cache is empty by definition, so the
+    assumption fails exactly when a replica is handed a burst.
+
+    Both quantities are asserted, because they are different claims: one
+    *statement* is the arithmetic KD-10 depends on, and one *checkout* is the
+    resource it is protecting. Verified by removing the re-check inside the lock
+    (twenty statements, serialized) and by removing the lock entirely.
+    """
+    statements: list[str] = []
+    checkouts: list[object] = []
+
+    def on_statement(*args: Any) -> None:
+        if "query_log" in args[2]:
+            statements.append(args[2])
+
+    def on_checkout(*args: Any) -> None:
+        checkouts.append(args[0])
+
+    guard = SpendGuard(
+        async_sessionmaker(pooled_engine, expire_on_commit=False),
+        daily_limit_usd=Decimal("100000"),
+        refresh_seconds=1000.0,
+    )
+    assert guard.refresh_count == 0, "the cache must be cold — that is the case under test"
+
+    event.listen(pooled_engine.sync_engine, "before_cursor_execute", on_statement)
+    event.listen(pooled_engine.sync_engine, "checkout", on_checkout)
+    try:
+        await asyncio.gather(*(guard.reserve(Decimal("0.001")) for _ in range(20)))
+    finally:
+        event.remove(pooled_engine.sync_engine, "before_cursor_execute", on_statement)
+        event.remove(pooled_engine.sync_engine, "checkout", on_checkout)
+
+    assert guard.refresh_count == 1, "twenty cold requests refreshed more than once"
+    assert len(statements) == 1, f"{len(statements)} aggregates for one cold burst"
+    assert len(checkouts) == 1, f"{len(checkouts)} connections for one cold burst"
+    # ...and all twenty were served from the single result.
+    assert guard.reserved == Decimal("0.020")
+
+
+async def test_single_flight_did_not_move_the_suspension_point_into_admit() -> None:
+    """The two properties are adjacent and pull in opposite directions: the
+    refresh *must* await and share one result; the test-and-add must never
+    await. Fixing the first by putting a lock around the second would serialize
+    admissions behind a database query and reopen nothing — but it would make
+    the structural guarantee depend on lock ordering rather than on a signature.
+    """
+    import inspect
+
+    assert not inspect.iscoroutinefunction(SpendGuard._admit)
+    assert inspect.iscoroutinefunction(SpendGuard._current)

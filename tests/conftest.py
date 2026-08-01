@@ -530,3 +530,95 @@ def session_factory(pooled_engine: AsyncEngine) -> async_sessionmaker[AsyncSessi
     from sqlalchemy.ext.asyncio import async_sessionmaker
 
     return async_sessionmaker(pooled_engine, expire_on_commit=False)
+
+
+# --- query_log hygiene: one shared sweep, and an independent check on it -------
+#
+# Tests that build an app with a `session_factory` write a `query_log` row per
+# `/query`, and cleaning up was left to whichever file remembered. Most did not:
+# 184 rows had accumulated from 2026-07-26 onward, growing by every full run.
+# Ambient rows no longer threaten correctness — the budget tests now measure
+# their floor or use an empty window rather than assuming an empty table — but
+# unbounded growth in a shared database is a thing someone inherits.
+#
+# Two fixtures rather than one, deliberately. The sweep is the mechanism; the
+# count check is a *separate* verifier that does not share its implementation, so
+# breaking the sweep fails the check rather than silently doing nothing. A
+# cleanup that also reports its own success is the vacuous shape this repository
+# keeps finding.
+
+
+def _is_test_database(url: str) -> bool:
+    """The dev `rag` database holds the real ingested corpus. CI injects
+    `…/rag` for a throwaway service container, so the name alone cannot decide —
+    which is why the sweep below is id-scoped rather than name-scoped, and this
+    guard only gates the *bulk* path."""
+    return url.rsplit("/", 1)[1].startswith("rag_test")
+
+
+async def _query_log_ids(engine: AsyncEngine) -> set[str]:
+    from sqlalchemy import text as sa_text
+
+    async with engine.connect() as conn:
+        rows = await conn.execute(sa_text("SELECT id::text FROM query_log"))
+        return {row[0] for row in rows}
+
+
+@pytest.fixture(scope="session", autouse=True)
+async def query_log_sweep(
+    migrated_engine: AsyncEngine, query_log_count_is_unchanged: None
+) -> AsyncIterator[None]:
+    """Delete exactly the `query_log` rows this session created.
+
+    **Id-scoped, not predicate-scoped, and that is a stronger guarantee than the
+    database-name guard it replaces.** A name check permits deleting rows it did
+    not create as long as the database is called `rag_test`; this cannot delete
+    any row it did not observe appear. It is therefore safe to run against the
+    same `…/rag` URL CI injects, which a name guard would have skipped — leaving
+    the one environment that runs the whole suite every time uncleaned.
+    """
+    from sqlalchemy import text as sa_text
+
+    before = await _query_log_ids(migrated_engine)
+    yield
+    after = await _query_log_ids(migrated_engine)
+    created = after - before
+    if not created:
+        return
+    async with migrated_engine.begin() as conn:
+        await conn.execute(
+            sa_text("DELETE FROM query_log WHERE id::text = ANY(:ids)"), {"ids": sorted(created)}
+        )
+
+
+@pytest.fixture(scope="session", autouse=True)
+async def query_log_count_is_unchanged(migrated_engine: AsyncEngine) -> AsyncIterator[None]:
+    """A full run must leave `query_log` the size it found it.
+
+    Independent of the sweep on purpose: it counts rather than tracking ids, so
+    it also catches what the sweep structurally cannot — a row written with a
+    `created_at` in the past that some test inserted and failed to remove, and
+    any future sweep that quietly stops running. Deleting the sweep's body makes
+    this fail; that is the check being real rather than ceremonial.
+
+    **The sweep depends on this fixture rather than the reverse**, which is what
+    puts this teardown *after* the sweep's. Fixture teardown is LIFO, so the
+    dependency arrow and the check order are opposites — written the intuitive
+    way round, this counted the rows before anything had been deleted and
+    reported every swept row as a leak. Found by running it.
+    """
+    from sqlalchemy import text as sa_text
+
+    async def count() -> int:
+        async with migrated_engine.connect() as conn:
+            return (await conn.execute(sa_text("SELECT count(*) FROM query_log"))).scalar_one()
+
+    before = await count()
+    yield
+    after = await count()
+    assert after == before, (
+        f"the suite leaked {after - before} query_log row(s) "
+        f"({before} -> {after}). Every test that writes rows must remove them; the "
+        "session sweep in conftest.py handles rows it saw created, so a leak here is "
+        "a row it could not attribute — check for explicit created_at timestamps."
+    )

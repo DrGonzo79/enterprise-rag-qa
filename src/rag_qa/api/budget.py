@@ -44,6 +44,7 @@ money is merely claimed by requests in flight (it comes back when they settle,
 seconds from now, and rendering that as the midnight reset would be false).
 """
 
+import asyncio
 import calendar
 import logging
 import time
@@ -240,6 +241,10 @@ class SpendGuard:
         # reserved, because a reserved request has not written its row yet.
         self._reserved = Decimal("0")
         self._refreshed_at: float | None = None
+        # Constructed here rather than lazily: `asyncio.Lock()` no longer binds
+        # to a loop at construction, so a guard built outside the running loop
+        # (which `create_app` is) still gets a usable one.
+        self._refresh_lock = asyncio.Lock()
         self._cached_day: datetime | None = None
         self._cached_month: datetime | None = None
         # Exposed so AC-14 can assert one aggregate per TTL window, not one per
@@ -353,18 +358,43 @@ class SpendGuard:
         settle and release without reaching into the guard's internals."""
         return Reservation(amount=amount, record=self.record, discharge=self._discharge)
 
-    async def _current(self, *, now: datetime) -> datetime:
-        """Refresh the cached totals if they are stale, and hand `now` back."""
-        assert self._session_factory is not None
-        day, month = utc_day_start(now), utc_month_start(now)
-        stale = (
+    def _stale(self, day: datetime, month: datetime) -> bool:
+        return (
             self._refreshed_at is None
             or self._cached_day != day
             or self._cached_month != month
             or (self._monotonic() - self._refreshed_at) >= self._refresh_seconds
         )
-        if stale:
-            await self._refresh(day, month)
+
+    async def _current(self, *, now: datetime) -> datetime:
+        """Refresh the cached totals if they are stale, and hand `now` back.
+
+        **Single-flight, and the case that needs it is a cold start** (KD-16,
+        amendment 6). Staleness detection and the query are two steps with an
+        await between them, so N requests arriving on an unrefreshed replica
+        each read "stale" before any of them writes a result: N aggregate
+        queries, N connections, against a refresh deliberately kept outside
+        `RESERVED_CONNECTIONS` (KD-10) precisely because it was assumed to be
+        one checkout per TTL. A boot is exactly when a replica is handed a
+        burst — a rolling deploy moves live traffic onto a process whose cache
+        is empty by definition — so the assumption fails at the worst moment
+        and takes the connection arithmetic with it.
+
+        The lock plus the **re-check inside it** is what makes it one query
+        rather than N serialized ones: the followers wake up, find the leader's
+        result already cached, and issue nothing. Without the re-check this
+        would be a queue, not a single flight — same N queries, now with the
+        latency added end to end.
+
+        The suspension point stays here, outside `_admit`, which remains
+        synchronous. This function may await; the test-and-add may not.
+        """
+        assert self._session_factory is not None
+        day, month = utc_day_start(now), utc_month_start(now)
+        if self._stale(day, month):
+            async with self._refresh_lock:
+                if self._stale(day, month):
+                    await self._refresh(day, month)
         return now
 
     def _enforce(self, now: datetime, *, counting_reservations: bool) -> None:

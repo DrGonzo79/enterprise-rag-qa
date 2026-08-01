@@ -143,10 +143,24 @@ in-process; `query_log` is the authoritative ledger, offline.
 | `rag_qa_budget_trips_total` | Has the demo stopped answering, and which ceiling stopped it |
 | `rag_qa_requests_shed_total` | Is the concurrency bound being reached |
 | `rag_qa_budget_remaining_usd` | Headroom before it stops |
+| `rag_qa_budget_snapshot_age_seconds` | How old that headroom figure is |
+| `rag_qa_telemetry_failures_total` | Completion records that could not be emitted |
 
-The last four exist because a budget trip, a shed, and an embedder mismatch were
+Those exist because a budget trip, a shed, and an embedder mismatch were
 otherwise all `status="503"` — three very different operational situations
 counted as one number.
+
+**The headroom figure is cached and never refreshed by a scrape.** `/metrics`
+must open no database connection (Key decision 9), and the budget refresh is
+deliberately outside the reserved-connection accounting, so a monitor polling
+every 15 s would contend for exactly the connections the concurrency bound
+protects. The snapshot therefore comes from whatever the last `/query` refreshed
+— which on an idle replica ages without bound while other replicas keep spending
+the shared budget. `rag_qa_budget_snapshot_age_seconds` is how you tell
+"headroom is $4" from "headroom was $4, forty minutes ago". Both series are
+**absent** until the first refresh: a fresh replica's totals are zero, and
+publishing the full ceiling as headroom would announce plenty of budget at the
+moment the process knows least.
 
 ## Joining it up
 

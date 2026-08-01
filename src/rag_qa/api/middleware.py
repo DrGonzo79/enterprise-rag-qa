@@ -9,6 +9,7 @@ responses in a way that interferes with SSE.
 import logging
 import time
 from collections.abc import Awaitable, Callable, MutableMapping
+from contextlib import suppress
 from typing import Any
 
 from starlette.datastructures import Headers, MutableHeaders
@@ -158,7 +159,15 @@ class RequestContextMiddleware:
         try:
             self._record(scope, status, duration_ms, outcome)
         except Exception:
+            # Reported on this module's own logger, never through
+            # `request_logger` or a `Metrics` call that may be the thing failing:
+            # a telemetry outage whose only symptom is a missing telemetry record
+            # is invisible exactly when it matters. The counter is a second
+            # channel for the same reason, guarded so a broken `Metrics` cannot
+            # turn the report into a second exception.
             logger.exception("failed to record the completion of %s", scope.get("path"))
+            with suppress(Exception):
+                self.metrics.telemetry_failures += 1
 
     def _record(self, scope: Scope, status: int, duration_ms: float, outcome: Outcome) -> None:
         route = route_label(scope)

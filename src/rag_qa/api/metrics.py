@@ -12,10 +12,13 @@ Division of labor: this answers "what is happening now, per replica";
 """
 
 from collections import Counter
-from collections.abc import Mapping
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from rag_qa.api.conditions import spec_for
+
+if TYPE_CHECKING:
+    from rag_qa.api.budget import BudgetSnapshot
 
 LATENCY_BUCKETS_SECONDS: tuple[float, ...] = (0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10)
 
@@ -42,6 +45,11 @@ class Metrics:
         self.budget_trips: Counter[str] = Counter()
         self.requests_shed = 0
         self.budget_remaining: dict[str, Decimal] = {}
+        self.budget_snapshot_age: float | None = None
+        # A systematic telemetry failure is invisible by construction if the only
+        # report is through the machinery that is failing, so it gets a counter
+        # of its own alongside the plain-logger record.
+        self.telemetry_failures = 0
 
     def observe_request(self, endpoint: str, status: int) -> None:
         self.requests[(endpoint, status)] += 1
@@ -67,8 +75,9 @@ class Metrics:
     def observe_budget_trip(self, ceiling: str) -> None:
         self.budget_trips[ceiling] += 1
 
-    def set_budget_remaining(self, headroom: Mapping[str, Decimal]) -> None:
-        self.budget_remaining = dict(headroom)
+    def set_budget_snapshot(self, snapshot: "BudgetSnapshot | None") -> None:
+        self.budget_remaining = dict(snapshot.remaining) if snapshot else {}
+        self.budget_snapshot_age = snapshot.age_seconds if snapshot else None
 
     def observe_answer(
         self, verdict: str, prompt_tokens: int, completion_tokens: int, cost_usd: Decimal
@@ -133,6 +142,9 @@ class Metrics:
             "# HELP rag_qa_requests_shed_total Requests shed at the concurrency bound.",
             "# TYPE rag_qa_requests_shed_total counter",
             f"rag_qa_requests_shed_total {self.requests_shed}",
+            "# HELP rag_qa_telemetry_failures_total Completion records that could not be emitted.",
+            "# TYPE rag_qa_telemetry_failures_total counter",
+            f"rag_qa_telemetry_failures_total {self.telemetry_failures}",
         ]
 
         if self.budget_remaining:
@@ -144,4 +156,11 @@ class Metrics:
                 lines.append(
                     f'rag_qa_budget_remaining_usd{{ceiling="{_escape(ceiling)}"}} {amount}'
                 )
+
+        if self.budget_snapshot_age is not None:
+            lines += [
+                "# HELP rag_qa_budget_snapshot_age_seconds Age of the cached spend totals.",
+                "# TYPE rag_qa_budget_snapshot_age_seconds gauge",
+                f"rag_qa_budget_snapshot_age_seconds {self.budget_snapshot_age:.3f}",
+            ]
         return "\n".join(lines) + "\n"

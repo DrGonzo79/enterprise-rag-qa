@@ -28,7 +28,8 @@ PROMETHEUS_CONTENT_TYPE = "text/plain; version=0.0.4; charset=utf-8"
 )
 async def metrics(request: Request) -> Response:
     state: AppState = request.app.state.rag
-    # Cached totals only — `remaining` reads what the guard already refreshed, so
-    # a scrape still opens no connection (KD-9, AC-12).
-    state.metrics.set_budget_remaining(state.budget.remaining(datetime.now(UTC)))
+    # Cached totals only. `snapshot` is synchronous by design, so a scrape cannot
+    # query however the guard evolves (KD-9, AC-12), and it returns None before
+    # the first refresh rather than publishing an unspent ceiling as headroom.
+    state.metrics.set_budget_snapshot(state.budget.snapshot(datetime.now(UTC)))
     return Response(content=state.metrics.render(), media_type=PROMETHEUS_CONTENT_TYPE)

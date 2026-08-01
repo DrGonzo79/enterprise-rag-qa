@@ -45,8 +45,19 @@ async def test_a_scrape_opens_no_database_connection(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     """Monitoring must never compete with serving for the scarcest resource
-    (KD-9) — and the RESERVED arithmetic in KD-10 depends on this being zero."""
-    app = build_app(session_factory=session_factory)
+    (KD-9) — and the RESERVED arithmetic in KD-10 depends on this being zero.
+
+    **The app must have a budget configured, and the guard must have refreshed.**
+    The earlier version of this test built an app with no ceiling, so the code
+    that could have opened a connection — the headroom snapshot — never ran, and
+    the assertion was true for a reason unrelated to the behaviour it names
+    (CLAUDE.md rule 3, sixth instance). A `/query` first, so `_refresh` has
+    populated the cache and the scrape has a real snapshot to serve.
+    """
+    from decimal import Decimal
+
+    app = build_app(session_factory=session_factory, monthly_budget_usd=Decimal("20.00"))
+    assert (await post(app, "/query", {"question": "What applies?"})).status_code == 200
     engine = session_factory.kw["bind"]
     checkouts = 0
 
@@ -61,7 +72,23 @@ async def test_a_scrape_opens_no_database_connection(
         event.remove(engine.sync_engine, "checkout", on_checkout)
 
     assert response.status_code == 200
-    assert checkouts == 0
+    assert checkouts == 0, "a scrape must not compete with serving for connections"
+    # ...and the scrape really did publish the headroom, so the zero above is a
+    # statement about that code path rather than about its absence.
+    assert 'rag_qa_budget_remaining_usd{ceiling="daily"}' in response.text
+    assert "rag_qa_budget_snapshot_age_seconds" in response.text
+
+
+async def test_headroom_is_withheld_until_the_cache_has_been_populated() -> None:
+    """A fresh replica's totals are zero, so a naive reading would publish the
+    full ceiling as headroom — announcing "plenty of budget" at the moment the
+    process knows least. No snapshot is honest; a wrong number is not."""
+    from decimal import Decimal
+
+    app = build_app(monthly_budget_usd=Decimal("20.00"))  # no session factory
+    body = (await get(app, "/metrics", key=ADMIN_KEY)).text
+    assert "rag_qa_budget_remaining_usd" not in body
+    assert "rag_qa_budget_snapshot_age_seconds" not in body
 
 
 async def test_errors_are_counted_by_status() -> None:

@@ -30,6 +30,7 @@ import calendar
 import logging
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import ROUND_DOWN, Decimal
 
@@ -117,6 +118,20 @@ def derive_daily_limit(monthly_limit_usd: Decimal, now: datetime) -> Decimal:
     """
     days = calendar.monthrange(now.astimezone(UTC).year, now.astimezone(UTC).month)[1]
     return max(CENT, (monthly_limit_usd / days).quantize(CENT, rounding=ROUND_DOWN))
+
+
+@dataclass(frozen=True)
+class BudgetSnapshot:
+    """What `/metrics` may publish about spend without touching the database.
+
+    `age_seconds` is not decoration. The cache refreshes only when `check()`
+    runs, so an idle replica's snapshot ages without bound — and other replicas
+    may be spending the shared budget the whole time. The age is what lets an
+    operator tell "headroom is $4" from "headroom was $4, forty minutes ago".
+    """
+
+    remaining: dict[str, Decimal]
+    age_seconds: float
 
 
 class SpendGuard:
@@ -250,8 +265,26 @@ class SpendGuard:
             ceiling=ceiling,
         )
 
-    def remaining(self, now: datetime) -> dict[str, Decimal]:
-        """Headroom per configured ceiling, for the admin-scoped gauge."""
+    def snapshot(self, now: datetime) -> "BudgetSnapshot | None":
+        """Headroom from the cached totals, or None if there is nothing cached.
+
+        **Strictly cache-only, and synchronous so it cannot become otherwise.**
+        `/metrics` calls this, and SPEC-006 Key decision 9 requires a scrape to
+        open no connection: the budget refresh is deliberately outside
+        `RESERVED_CONNECTIONS` (Key decision 10), so a monitor scraping every 15s
+        would contend for exactly the connections the semaphore's divisor
+        protects. A `def` rather than an `async def` is the enforcement — a
+        synchronous method cannot await a session, so no future edit can quietly
+        make a scrape query without changing the signature and every caller.
+
+        **Returning None before the first refresh is the point.** The totals
+        start at zero, so a naive reading would publish the full ceiling as
+        headroom on a fresh replica — announcing "plenty of budget" at the exact
+        moment the process knows least, and in the direction that gets acted on.
+        No snapshot is honest; a wrong number is not.
+        """
+        if self._refreshed_at is None:
+            return None
         headroom: dict[str, Decimal] = {}
         daily_limit, _ = self._daily_shape(now)
         if daily_limit is not None:
@@ -260,7 +293,9 @@ class SpendGuard:
             headroom["monthly"] = max(
                 Decimal("0"), self._monthly_limit - self._month_total - self._local_delta
             )
-        return headroom
+        return BudgetSnapshot(
+            remaining=headroom, age_seconds=max(0.0, self._monotonic() - self._refreshed_at)
+        )
 
     def record(self, cost_usd: Decimal) -> None:
         """Count spend that has not reached query_log's cached totals yet."""

@@ -330,9 +330,17 @@ async def test_observability_doc_matches_what_is_actually_emitted(
     emitted: set[str] = set()
 
     def absorb(sink: Any) -> None:
+        """A key counts as emitted only when some record carries a **non-empty**
+        value for it. Asserting mere presence would let a field that is always
+        `""` or `null` satisfy a check that means to prove it is populated —
+        `request_id` is exactly that on a `uvicorn.error` record, so the weaker
+        assertion would pass while the trace was unjoinable."""
         for raw in sink.getvalue().splitlines():
-            if raw.strip():
-                emitted.update(json.loads(raw))
+            if not raw.strip():
+                continue
+            for key, value in json.loads(raw).items():
+                if value not in (None, "", [], {}):
+                    emitted.add(key)
 
     # 1. A real retrieval and a healthy completion record.
     app = build_app(
@@ -508,3 +516,40 @@ def test_uvicorn_protocol_errors_stay_and_are_routed_through_the_formatter() -> 
     assert [line["msg"] for line in lines] == ["Invalid HTTP request received."]
     assert lines[0]["logger"] == "uvicorn.error"
     assert lines[0]["request_id"] == ""  # correct: the request never reached us
+
+
+async def test_a_total_telemetry_failure_is_visible_and_harmless() -> None:
+    """Swallowing is right for the response and wrong for the operator if the
+    only report goes through the machinery that is failing."""
+    from rag_qa.api.middleware import RequestContextMiddleware
+
+    def always_raise(*_args: Any, **_kwargs: Any) -> None:
+        raise RuntimeError("telemetry is entirely down")
+
+    original = RequestContextMiddleware._record
+    RequestContextMiddleware._record = always_raise  # type: ignore[method-assign]
+    try:
+        app = build_app()
+        with captured_logs() as sink:
+            response = await post(app, "/query", QUESTION)
+            body = (await get(app, "/metrics", key=ADMIN_KEY)).text
+    finally:
+        RequestContextMiddleware._record = original  # type: ignore[method-assign]
+
+    # The response is untouched.
+    assert response.status_code == 200
+    assert response.json()["verdict"] == "answered"
+
+    # The failure is reported on the plain module logger, not the telemetry one.
+    lines = [json.loads(x) for x in sink.getvalue().splitlines() if x.strip()]
+    failures = [line for line in lines if line["msg"].startswith("failed to record")]
+    assert failures, "a total telemetry failure produced no report"
+    assert failures[0]["logger"] == "rag_qa.api.middleware"
+    assert failures[0]["level"] == "ERROR"
+    assert failures[0]["error"]["type"] == "RuntimeError"
+    assert not records(sink), "the completion record cannot be its own failure report"
+
+    # ...and a counter carries it, so a systematic outage is visible as a rate.
+    # One, not two: the scrape's own completion record fails in its finally,
+    # after the body it is being asked for has already been rendered.
+    assert "rag_qa_telemetry_failures_total 1" in body

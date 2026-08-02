@@ -689,6 +689,41 @@ reader who has not opened the repository:
     outcome, recorded either way. Nothing in this spec now asks a corpus to
     promise that a comparison will succeed.
 
+    #### The general rule, which is what finding 3 was an instance of
+
+    **A pre-registration whose stop condition contains a term about the result
+    can only be satisfied by getting the answer you wanted.** Not "is more likely
+    to be" — *only*. The gate opens when the result comes out one particular way
+    and stays shut otherwise, so the design is incapable of reporting the other
+    answer at all. What it reports instead is "not ready to measure", which reads
+    as a statement about the instrument and is in fact a statement about the
+    finding it declined to have.
+
+    **The test, and it is mechanical: for every term in a pre-registration, ask
+    whether it could be evaluated the day before the run.** Corpus size, `k`,
+    question count, chunker config, embedder identity, α, the test, its sidedness
+    — all yes, all legitimate. A *p*-value, a discordant count, a recall figure
+    from the run being gated, "the comparison is answerable" — all no. Anything
+    in the second list is a finding wearing a pre-condition's clothes.
+
+    **Where a quantity is genuinely needed for planning but is only knowable
+    afterwards, it does not go in the pre-registration at all — it goes in a
+    separate sizing study whose output feeds one.** This is the legitimate home
+    for the discordance rate `r`, and the difference is not bureaucratic: a
+    sizing study is allowed to look at data because it makes no claim, and its
+    cases are excluded from the analysis it sizes precisely so that looking
+    cannot contaminate anything. A pre-registration that swallows the sizing
+    question instead has to *guess* the quantity — which is how `assumed_
+    discordance: 0.05` got into prereg-2 — and a guessed planning constant is the
+    same defect one level down from a guessed threshold.
+
+    **Why this belongs as a rule rather than a note about KD-12.** The failure is
+    not that 25 was too big. A threshold of 3 would have been reachable and just
+    as wrong, because the defect is *categorical*: the condition referred to the
+    outcome. A rule stated as "25 was unreachable" invites the fix "use a smaller
+    number", which preserves the error. Stated as "no term about the result", it
+    forbids the whole class.
+
     **`questions` is frozen WITHIN a pre-registration, not forever, and the
     distinction is load-bearing.** Freezing it across the rungs of one ladder run
     is what makes those rungs comparable; freezing it across all time is what made
@@ -698,6 +733,78 @@ reader who has not opened the repository:
     this: each baseline artifact carries a sha256 of the question set, and
     `tests/test_baseline_artifacts.py::test_the_frozen_levers_agree_across_every_rung`
     fails when two artifacts in the same pre-registration disagree on it.
+
+    ---
+
+    ### Amendment 2 — the pilot sizing study, pre-registered before authoring *(2026-08-02, owner-asked)*
+
+    **Written and committed before a single pilot question exists.** The git
+    history is the evidence and it is the whole point: a sizing study whose
+    design is recorded after its data would size nothing.
+
+    **Why a pilot at all — it removes the assumption that made option (a)
+    unacceptable.** Amendment 1 rejected sizing `N` from a rate because the rate
+    did not exist, then carried `assumed_discordance: 0.05` as a planning
+    constant. That is the same defect at lower stakes and it should not survive.
+    A sizing study is the legitimate way to obtain `r`: it is allowed to look at
+    data because it makes no claim, and its cases are excluded from the analysis
+    it sizes so that looking cannot contaminate anything.
+
+    **It also answers a prior question that would make the sizing moot.** The
+    Rung 1 probe (SPEC-003, 2026-08-02) found 683 added chunks moving `recall@8`
+    by nothing and only 4 of 26 gold ranks moving at all — which points at the
+    *question set* rather than the corpus. If deliberately hard questions
+    de-saturate at 358 chunks, the corpus ladder is not the lever and SPEC-003
+    Key decision 13 is wrong about more than Tier 1.
+
+    ```
+    pilot_id:            pilot-1
+    preregistered_at:    2026-08-02
+    purpose:             SIZING STUDY. Not a quality measurement.
+    size:                12–15 questions
+    corpus:              the existing 358 chunks, unchanged. Nothing is fetched.
+    k:                   8
+    authoring_rule:      written from corpus text WITHOUT an expected section in
+                         hand. The gold label is determined by verification after
+                         the question exists, never chosen before it.
+    target_shapes:       (a) the answer spans two sections
+                         (b) the obvious lexical match is the wrong chunk
+                         (c) near-miss — a plausible section does not contain the
+                             answer
+    measures:            recall@8 (hybrid, vector-only), discordant pairs, and r
+                         = discordant / n
+    excluded_from:       the confirmatory set, permanently and by id.
+    reports:             N = 6 / r_measured, with the power table recomputed at
+                         the measured rate.
+    ```
+
+    **Three bounds on what the pilot's number will be worth, stated now so they
+    cannot be added or dropped after seeing it:**
+
+    1. **No figure from the pilot is a quality result.** At n = 12–15 a recall
+       figure has an interval wide enough to contain almost anything. The pilot
+       reports `r` and a direction; it licenses no claim about how good retrieval
+       is, and none of its numbers may appear in the published report.
+    2. **`r` is measured *for this authoring recipe*, not for questions in
+       general.** The recipe deliberately targets hard shapes, so `r` from it is
+       an upper estimate for a naturally-authored set. **If the confirmatory set
+       is authored to a different recipe, `r` does not transfer and must be
+       re-measured** — and if it is authored to the same recipe, that recipe is
+       itself now a pre-registered design choice rather than a preference.
+    3. **The labels are machine-drafted and human-unverified until the owner
+       confirms them.** SPEC-004's cross-spec note binds: *"the label is ground
+       truth and is never machine-accepted — an auto-labeled retrieval set
+       measures the labeler, not the retriever."* Every `r` this study produces
+       is provisional on that verification, and the questions are presented for
+       review with their gold sections and the reason each was labelled as it
+       was.
+
+    **The exclusion is not a formality.** A pilot that measures the rate and then
+    contributes its cases to the analysis it sized is the same substitution
+    amendment 1 exists to prevent, wearing a new name: the cases that set the
+    threshold would be among the cases judged against it, and they were selected
+    for being hard. Pilot ids are recorded in the artifact and the confirmatory
+    set asserts it shares none of them.
 
     **Consequence, stated so it is not discovered later: `baseline-358-chunks.json`
     is a prereg-1 artifact and is not comparable to any prereg-2 rung.** Rung 0

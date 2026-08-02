@@ -403,4 +403,14 @@ Run under the narrow approval of 2026-08-02: the seven documents are a **probe s
 
 **Cost:** 878,578 embedding tokens, **$0.0176**. Half of that was waste — each candidate was embedded twice, once alone and once in the combined run — and the probe now caches vectors by `source_uri`, so a re-run costs ~$0.0088.
 
+#### Selection decision — 2026-08-02, owner: NOTHING IS FETCHED, and none of the seven is selected
+
+**The reason is the denominator, not the candidates.** `density` is top-8 appearances measured against the current 26 questions. Finding 2 above puts those questions under suspicion — if they are lexical bullseyes authored with the expected section in hand, **the table measures the questions' blind spots rather than the documents' competitiveness**, and the ranking would reorder against harder questions. A selection made on a number whose premise is the thing under test is not a selection.
+
+**The 94 additional retrieval questions prereg-2 calls for are also not authored yet**, and deliberately: they would be more of the style suspected of causing the saturation, so the set would be **saturated by construction** — hours spent manufacturing the defect.
+
+**What runs instead: a pilot sizing study at 358 chunks** (SPEC-007 Key decision 12, amendment 2), pre-registered before authoring. It answers the prior question — questions or corpus — and produces a measured `r` in place of prereg-2's assumed 0.05. Both the fetch and the authoring wait on it, because either could be wasted work depending on how it comes out.
+
+**Rung 1's seven documents stay `probe-candidate` in the registry.** They are fetched to `corpus/` and excluded from ingestion by two independent gates; they are not deleted, since re-probing them against harder questions is exactly the follow-up the pilot may license.
+
 **The ladder stops here pending approval, not pending evidence.** The evidence for escalating to Rung 1 is complete and recorded above. What is missing is the approval to fetch — see the Status block: the corpus-expansion amendment is still **DRAFT**, and its own text says nothing is fetched until it is approved and Rung 1's probe output is reviewed.

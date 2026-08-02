@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import datetime
+from enum import StrEnum
 from typing import Any
 
 from pgvector.sqlalchemy import Vector
@@ -78,6 +79,25 @@ class Chunk(Base):
     )
 
 
+class SpendSource(StrEnum):
+    """Who spent the money on a `query_log` row (SPEC-002 migration 0005).
+
+    The discriminator the two ceilings need. SPEC-006 Key decision 16 amendment 7
+    scopes the **daily** window to `visitor` — its job is shaping visitor burst,
+    and an evaluation run must not close the demo for the rest of the day — while
+    the **monthly** cap counts every source, because the monthly figure is the
+    invoice and the invoice includes every call this project makes.
+
+    `VISITOR` is the default everywhere on purpose: it is the value that presses
+    *both* ceilings, so a writer that forgets to tag itself is treated as the
+    most constrained kind of traffic rather than the least.
+    """
+
+    VISITOR = "visitor"
+    EVAL = "eval"
+    CLI = "cli"
+
+
 class QueryLog(Base):
     __tablename__ = "query_log"
 
@@ -99,6 +119,10 @@ class QueryLog(Base):
     answer_text: Mapped[str] = mapped_column(Text, nullable=False)
     verdict: Mapped[str] = mapped_column(Text, nullable=False)
     prompt_version: Mapped[str] = mapped_column(Text, nullable=False)
+    # SPEC-002 migration 0005. Which ceiling this row presses -- see SpendSource.
+    source: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=SpendSource.VISITOR.value
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=sql_text("now()")
     )

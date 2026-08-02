@@ -58,6 +58,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from rag_qa.api.conditions import spec_for
 from rag_qa.api.errors import BudgetExhausted, BudgetPressure
+from rag_qa.db.models import SpendSource
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +66,8 @@ logger = logging.getLogger(__name__)
 # month's rows rather than a second query. Adding the monthly ceiling must not
 # add a connection consumer — see concurrency.RESERVED_CONNECTIONS.
 _SPEND_WINDOWS = text(
-    "SELECT coalesce(sum(cost_usd) FILTER (WHERE created_at >= :day), 0) AS day_total, "
+    "SELECT coalesce(sum(cost_usd) FILTER "
+    "       (WHERE created_at >= :day AND source = :visitor), 0) AS day_total, "
     "       coalesce(sum(cost_usd), 0) AS month_total "
     "FROM query_log WHERE created_at >= :month"
 )
@@ -212,6 +214,26 @@ class Reservation:
             self._open = False
             self._discharge(self.amount)
 
+    def __enter__(self) -> "Reservation":
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        """Release on **any** exit, including `BaseException`.
+
+        The request path holds a reservation across one `await` and writes its
+        own `finally`. A long-running job — SPEC-007's evaluation run — holds one
+        across minutes, with the settle far from the reserve, and the exception
+        it will actually meet is `KeyboardInterrupt`, which is not an `Exception`
+        and which someone will produce, because an eval run is exactly the thing
+        a person ctrl-Cs when they see the first few results. `__exit__` runs for
+        `BaseException` too, so `with` is the shape that survives it.
+
+        A `SIGKILL` is not covered and does not need to be: the reservation lives
+        in this process, so a process that dies takes its claim with it. The
+        dangerous signal is the one the process survives.
+        """
+        self.release()
+
 
 class SpendGuard:
     """Off unless a limit is configured; when off it opens no connection."""
@@ -234,12 +256,20 @@ class SpendGuard:
         self._monotonic = monotonic
         self._day_total = Decimal("0")
         self._month_total = Decimal("0")
+        # Both the recorded delta and the reservations fork by window, because
+        # the windows no longer measure the same traffic (KD-16 amendment 7).
+        # `_daily_*` presses both ceilings; `_monthly_only_*` presses only the
+        # monthly one. `recorded + outstanding` stopped being a single sum the
+        # moment eval spend became a thing the invoice counts and the demo's
+        # burst limit does not.
         self._local_delta = Decimal("0")
+        self._local_delta_monthly_only = Decimal("0")
         # Worst-case cost of every provider call this replica has admitted and
         # not yet seen return. Unlike `_local_delta` this survives a refresh:
         # a refreshed `query_log` total contains everything recorded and nothing
         # reserved, because a reserved request has not written its row yet.
         self._reserved = Decimal("0")
+        self._reserved_monthly_only = Decimal("0")
         self._refreshed_at: float | None = None
         # Constructed here rather than lazily: `asyncio.Lock()` no longer binds
         # to a loop at construction, so a guard built outside the running loop
@@ -258,13 +288,20 @@ class SpendGuard:
 
     @property
     def reserved(self) -> Decimal:
-        """Worst-case cost committed to provider calls still in flight."""
+        """Worst-case cost committed to calls still in flight, both windows."""
+        return self._reserved + self._reserved_monthly_only
+
+    @property
+    def reserved_against_daily(self) -> Decimal:
+        """The part of `reserved` that presses the daily ceiling — visitor traffic
+        only. An evaluation run's claim is real money and is deliberately absent
+        here (KD-16 amendment 7)."""
         return self._reserved
 
     @property
     def recorded(self) -> Decimal:
         """Spend counted since the last refresh — money gone, not money claimed."""
-        return self._local_delta
+        return self._local_delta + self._local_delta_monthly_only
 
     def daily_limit_for(self, now: datetime) -> Decimal | None:
         """The daily ceiling in force, with an override capped at 2x derived."""
@@ -300,7 +337,9 @@ class SpendGuard:
         now = await self._current(now=self._now())
         self._enforce(now, counting_reservations=False)
 
-    async def reserve(self, amount: Decimal) -> Reservation:
+    async def reserve(
+        self, amount: Decimal, *, source: SpendSource = SpendSource.VISITOR
+    ) -> Reservation:
         """Claim `amount` of headroom for one provider call.
 
         Called after retrieval and before generation, so `amount` can be a true
@@ -318,11 +357,11 @@ class SpendGuard:
         traffic.
         """
         if not self.enabled:
-            return self._reservation(Decimal("0"))
+            return self._reservation(Decimal("0"), source)
         now = await self._current(now=self._now())
-        return self._admit(now, amount)
+        return self._admit(now, amount, source)
 
-    def _admit(self, now: datetime, amount: Decimal) -> Reservation:
+    def _admit(self, now: datetime, amount: Decimal, source: SpendSource) -> Reservation:
         """Test the ceilings and take the claim — **synchronously, and that is
         the enforcement rather than a convention.**
 
@@ -350,13 +389,20 @@ class SpendGuard:
         """
         self._enforce(now, counting_reservations=False)
         self._enforce(now, counting_reservations=True)
-        self._reserved += amount
-        return self._reservation(amount)
+        if source is SpendSource.VISITOR:
+            self._reserved += amount
+        else:
+            self._reserved_monthly_only += amount
+        return self._reservation(amount, source)
 
-    def _reservation(self, amount: Decimal) -> Reservation:
+    def _reservation(self, amount: Decimal, source: SpendSource) -> Reservation:
         """Bound methods rather than a back-reference, so a `Reservation` can
         settle and release without reaching into the guard's internals."""
-        return Reservation(amount=amount, record=self.record, discharge=self._discharge)
+        return Reservation(
+            amount=amount,
+            record=lambda cost: self.record(cost, source=source),
+            discharge=lambda held: self._discharge(held, source),
+        )
 
     def _stale(self, day: datetime, month: datetime) -> bool:
         return (
@@ -398,11 +444,29 @@ class SpendGuard:
         return now
 
     def _enforce(self, now: datetime, *, counting_reservations: bool) -> None:
-        committed = self._local_delta + (self._reserved if counting_reservations else Decimal("0"))
+        """The two windows no longer read the same quantity (KD-16 amendment 7).
+
+        `recorded + outstanding` was one sum while every row was visitor traffic.
+        With a `source` discriminator it forks, and the fork is asymmetric rather
+        than parallel: an evaluation run's spend and its outstanding claim press
+        the **monthly** cap — that is the invoice — and press the **daily** one
+        not at all, because the daily ceiling exists to shape visitor burst and
+        an eval must not close the demo for the rest of the day. Visitor traffic
+        presses both. Getting this backwards in either direction is silent: an
+        eval that pressed the daily ceiling would take the demo down exactly as
+        before, and one invisible to the monthly cap would spend the invoice
+        without the invoice noticing.
+        """
+        monthly_committed = self._local_delta + self._local_delta_monthly_only
+        daily_committed = self._local_delta
+        if counting_reservations:
+            monthly_committed += self._reserved + self._reserved_monthly_only
+            daily_committed += self._reserved
 
         # The monthly ceiling is checked first: when both are exhausted, telling
         # a visitor "resets at midnight" would be false, and a Retry-After that
         # expires into another 503 is worse than an honest long one.
+        committed = monthly_committed
         if self._monthly_limit is not None and self._month_total + committed >= self._monthly_limit:
             self._trip(
                 ceiling="monthly",
@@ -415,6 +479,7 @@ class SpendGuard:
             )
 
         daily_limit, origin = self._daily_shape(now)
+        committed = daily_committed
         if daily_limit is not None and self._day_total + committed >= daily_limit:
             self._trip(
                 ceiling="daily",
@@ -515,7 +580,11 @@ class SpendGuard:
             headroom["daily"] = max(Decimal("0"), daily_limit - self._day_total - self._local_delta)
         if self._monthly_limit is not None:
             headroom["monthly"] = max(
-                Decimal("0"), self._monthly_limit - self._month_total - self._local_delta
+                Decimal("0"),
+                self._monthly_limit
+                - self._month_total
+                - self._local_delta
+                - self._local_delta_monthly_only,
             )
         return BudgetSnapshot(
             remaining=headroom,
@@ -523,20 +592,31 @@ class SpendGuard:
             reserved=self._reserved,
         )
 
-    def record(self, cost_usd: Decimal) -> None:
+    def record(self, cost_usd: Decimal, *, source: SpendSource = SpendSource.VISITOR) -> None:
         """Count spend that has not reached query_log's cached totals yet."""
-        self._local_delta += cost_usd
+        if source is SpendSource.VISITOR:
+            self._local_delta += cost_usd
+        else:
+            self._local_delta_monthly_only += cost_usd
 
-    def _discharge(self, amount: Decimal) -> None:
+    def _discharge(self, amount: Decimal, source: SpendSource = SpendSource.VISITOR) -> None:
         """Give back a claim. Never clamped at zero: a negative total would mean
         a reservation was released twice, and clamping would hide the arithmetic
         error that produced it behind a plausible-looking number."""
-        self._reserved -= amount
+        if source is SpendSource.VISITOR:
+            self._reserved -= amount
+        else:
+            self._reserved_monthly_only -= amount
 
     async def _refresh(self, day: datetime, month: datetime) -> None:
         assert self._session_factory is not None
         async with self._session_factory() as session:
-            row = (await session.execute(_SPEND_WINDOWS, {"day": day, "month": month})).one()
+            row = (
+                await session.execute(
+                    _SPEND_WINDOWS,
+                    {"day": day, "month": month, "visitor": SpendSource.VISITOR.value},
+                )
+            ).one()
         self._day_total = Decimal(str(row.day_total))
         self._month_total = Decimal(str(row.month_total))
         # The recorded delta is cleared and the reservations are not, and the
@@ -547,6 +627,7 @@ class SpendGuard:
         # clearing it would forget every call in flight and re-open the exact
         # blind spot reservations exist to close.
         self._local_delta = Decimal("0")
+        self._local_delta_monthly_only = Decimal("0")
         self._cached_day = day
         self._cached_month = month
         self._refreshed_at = self._monotonic()

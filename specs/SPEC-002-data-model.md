@@ -1,6 +1,6 @@
 # SPEC-002 — Data Model & Migrations
 
-**Status:** Approved — 2026-07-25
+**Status:** Approved — 2026-07-25 (amended 2026-08-02, owner-approved: `query_log.source`, migration 0005 — see the `query_log` section)
 **Date:** 2026-07-25
 **Depends on:** SPEC-001
 
@@ -57,7 +57,14 @@ Define the complete persistent schema — documents, chunks (dense + full-text i
 | `completion_tokens` | integer | not null |
 | `cost_usd` | numeric(10,6) | not null — computed at query time (point-in-time pricing; token counts alone can't reconstruct it after price changes) |
 | `retrieved_chunk_ids` | uuid[] | not null |
+| `source` | text | not null, default `'visitor'` — who spent it: `visitor` \| `eval` \| `cli` (migration 0005) |
 | `created_at` | timestamptz | not null, default now |
+
+*(SPEC-005 migration 0004 additionally adds `answer_text`, `verdict`, and `prompt_version`.)*
+
+**`source` — added 2026-08-02, migration 0005 (amendment, owner-approved).** `query_log` is the spend ledger SPEC-006 Key decision 16 reads, and `SpendGuard` sums `cost_usd` over every row in the window. With no way to tell traffic apart, an evaluation run had two options and both were wrong: write rows and consume the **visitor** ceiling indistinguishably — 50 questions at ~$0.65 against a derived daily ceiling of $0.64, so the run closes the demo in order to measure it — or write none, and make eval spend invisible to the only ledger this project has. The column is the discriminator both ceilings need; SPEC-006 Key decision 16 amendment 7 scopes the **daily** window to `visitor` and leaves the **monthly** cap counting everything, because the monthly figure is the invoice.
+
+**A column rather than a second table**, because a second table forks the ledger and turns "what did this cost me" into a union query nobody remembers to write. **Backfilled to `visitor`**, which is a claim about history rather than a convenient default: every row predating the migration came from `POST /query`, since the API is the only thing that has ever held a `session_factory` in a deployment. The `server_default` is kept afterwards so an unmigrated writer cannot produce a NULL, and the default value is deliberately the one that presses *both* ceilings — an untagged row is treated as the most constrained kind of traffic, never the least. A **partial index** on `created_at where source = 'visitor'` serves the daily filter, which runs on the refresh path once per TTL.
 
 **`eval_runs`** / **`eval_results`**
 

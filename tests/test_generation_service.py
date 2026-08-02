@@ -669,7 +669,10 @@ async def test_migration_0004_roundtrip_preserves_existing_rows() -> None:
     assert {r["is_nullable"] for r in nullable} == {"NO"}
     assert len(nullable) == 3
 
-    await asyncio.to_thread(_run, "downgrade", "-1")
+    # By revision, not by "-1". This test names migration 0004 and asserts what
+    # *0004* removes; a relative step meant that as long as 0004 was head, and
+    # quietly became a test of whatever landed next the day 0005 was added.
+    await asyncio.to_thread(_run, "downgrade", "0003")
 
     conn = await asyncpg.connect(raw_url)
     try:

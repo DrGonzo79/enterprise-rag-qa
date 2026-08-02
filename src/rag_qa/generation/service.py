@@ -9,7 +9,7 @@ from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from rag_qa.db.models import QueryLog
+from rag_qa.db.models import QueryLog, SpendSource
 from rag_qa.generation.citations import AnswerParser, chunk_ids, parse_answer
 from rag_qa.generation.clients.base import LLMClient, StopKind, TextChunk
 from rag_qa.generation.pricing import compute_cost
@@ -59,10 +59,17 @@ class Generator:
         client: LLMClient,
         session_factory: async_sessionmaker[AsyncSession] | None = None,
         max_tokens: int = DEFAULT_MAX_TOKENS,
+        source: SpendSource = SpendSource.VISITOR,
     ) -> None:
         self._client = client
         self._session_factory = session_factory
         self._max_tokens = max_tokens
+        # Which ceiling this generator's spend presses (SPEC-002 migration 0005).
+        # Defaulted to VISITOR because that is the value that presses *both*, so
+        # a caller who forgets to say is treated as the most constrained kind of
+        # traffic rather than the least — and because the API, which is every
+        # caller today, genuinely is visitor traffic.
+        self._source = source
 
     @property
     def identity(self) -> str:
@@ -285,6 +292,7 @@ class Generator:
                     answer_text=answer.text,
                     verdict=str(answer.verdict),
                     prompt_version=answer.prompt_version,
+                    source=self._source.value,
                     # Set explicitly rather than left to the server default: this
                     # is the timestamp cost_usd was priced at, and recompute
                     # reads it back as the authority (KD-16).

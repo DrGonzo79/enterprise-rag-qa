@@ -33,7 +33,7 @@ from rag_qa.api.budget import (
 )
 from rag_qa.api.deps import ConfigurationError
 from rag_qa.api.errors import BudgetExhausted, BudgetPressure, Overloaded
-from rag_qa.db.models import QueryLog
+from rag_qa.db.models import QueryLog, SpendSource
 from rag_qa.generation.clients.base import LLMResult, TextChunk, Usage
 from rag_qa.generation.pricing import compute_cost
 from rag_qa.generation.prompt import PROMPT_VERSION
@@ -58,7 +58,11 @@ def assert_no_figures(message: str) -> None:
 
 
 async def _log_spend(
-    factory: async_sessionmaker[AsyncSession], marker: str, cost: str, created_at: datetime
+    factory: async_sessionmaker[AsyncSession],
+    marker: str,
+    cost: str,
+    created_at: datetime,
+    source: SpendSource = SpendSource.VISITOR,
 ) -> None:
     async with factory() as session:
         session.add(
@@ -75,6 +79,7 @@ async def _log_spend(
                 answer_text="x",
                 verdict="answered",
                 prompt_version=PROMPT_VERSION,
+                source=source.value,
                 created_at=created_at,
             )
         )
@@ -1448,3 +1453,180 @@ async def test_single_flight_did_not_move_the_suspension_point_into_admit() -> N
 
     assert not inspect.iscoroutinefunction(SpendGuard._admit)
     assert inspect.iscoroutinefunction(SpendGuard._current)
+
+
+# --- two ceilings, two kinds of traffic (KD-16 amendment 7) --------------------
+#
+# `recorded + outstanding` stopped being one sum. An eval's spend and its
+# outstanding claim press the monthly cap -- that is the invoice -- and press the
+# daily one not at all, because the daily ceiling shapes visitor burst and an
+# eval must not close the demo for the rest of the day. Both directions are
+# asserted, because both failures are silent and they fail opposite ways.
+
+
+async def test_an_eval_reservation_cannot_trip_the_daily_ceiling(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Direction one. Without the fork, a 50-question run reserving its worst
+    case would exhaust a $0.64 derived daily ceiling on its own and take the demo
+    down for the rest of the day -- to measure how good the demo is."""
+    guard = _empty_window_guard(
+        session_factory,
+        daily_limit_usd=Decimal("0.64"),
+        monthly_limit_usd=Decimal("20.00"),
+        refresh_seconds=1000.0,
+    )
+    await guard.check()
+
+    # An eval claims far more than the whole day's visitor ceiling.
+    evaluation = await guard.reserve(Decimal("3.90"), source=SpendSource.EVAL)
+    assert guard.reserved == Decimal("3.90")
+    assert guard.reserved_against_daily == Decimal("0")
+
+    # A visitor arriving mid-run is served: the daily window never saw the claim.
+    visitor = await guard.reserve(Decimal("0.01"))
+    assert guard.reserved_against_daily == Decimal("0.01")
+
+    visitor.settle(Decimal("0.008"))
+    evaluation.settle(Decimal("0.65"))
+    assert guard.reserved == Decimal("0")
+
+
+async def test_an_eval_reservation_is_not_invisible_to_the_monthly_cap(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Direction two, and the one that would cost real money. The monthly figure
+    is the invoice; an eval run that the invoice cannot see spends it anyway."""
+    guard = _empty_window_guard(
+        session_factory,
+        daily_limit_usd=Decimal("0.64"),
+        monthly_limit_usd=Decimal("20.00"),
+        refresh_seconds=1000.0,
+    )
+    await guard.check()
+
+    await guard.reserve(Decimal("20.00"), source=SpendSource.EVAL)
+    # The month is now committed, so a *visitor* is refused -- by the monthly
+    # ceiling, not the daily one, and with the monthly reset.
+    with pytest.raises(BudgetPressure) as pressure:
+        await guard.reserve(Decimal("0.01"))
+    assert pressure.value.ceiling == "monthly"
+
+
+async def test_eval_spend_presses_the_month_and_not_the_day_once_recorded(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """The same fork on the *recorded* side. A settled eval is money gone, and it
+    has to leave the daily headroom untouched and the monthly headroom lower."""
+    guard = _empty_window_guard(
+        session_factory,
+        daily_limit_usd=Decimal("0.64"),
+        monthly_limit_usd=Decimal("20.00"),
+        refresh_seconds=1000.0,
+    )
+    await guard.check()
+    before = guard.snapshot(datetime.now(UTC))
+    assert before is not None
+
+    guard.record(Decimal("0.65"), source=SpendSource.EVAL)
+
+    after = guard.snapshot(datetime.now(UTC))
+    assert after is not None
+    assert after.remaining["daily"] == before.remaining["daily"], "an eval closed the demo"
+    assert after.remaining["monthly"] == before.remaining["monthly"] - Decimal("0.65")
+
+
+async def test_the_daily_window_reads_only_visitor_rows(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """The other half of the fork lives in SQL, and a test on the in-process
+    deltas alone would never touch it: a row already in `query_log` and tagged
+    `eval` must be in the month's total and out of the day's."""
+    marker = f"budget-{uuid.uuid4()}"
+    future = datetime.now(UTC) + timedelta(days=400)
+    await _log_spend(session_factory, marker, "4.00", future, source=SpendSource.EVAL)
+    await _log_spend(session_factory, marker, "0.10", future, source=SpendSource.VISITOR)
+    try:
+        guard = SpendGuard(
+            session_factory,
+            daily_limit_usd=Decimal("5.00"),
+            monthly_limit_usd=Decimal("20.00"),
+            now=lambda: future,
+            refresh_seconds=1000.0,
+        )
+        await guard.check()
+        snapshot = guard.snapshot(future)
+        assert snapshot is not None
+        # Read against the ceiling actually in force: a daily override alongside
+        # a monthly budget is capped at 2x derived, so a hardcoded figure here
+        # would be asserting the burst cap rather than the source filter.
+        daily_ceiling = guard.daily_limit_for(future)
+        assert daily_ceiling is not None
+        # Day sees $0.10 (the visitor row); month sees $4.10 (both).
+        assert snapshot.remaining["daily"] == daily_ceiling - Decimal("0.10")
+        assert snapshot.remaining["monthly"] == Decimal("20.00") - Decimal("4.10")
+    finally:
+        await _cleanup(session_factory, marker)
+
+
+async def test_two_overlapping_runs_against_headroom_that_admits_one(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """A scheduled run and a manual one, started minutes apart.
+
+    Check-then-spend is the design amendment 5 replaced: both would check, both
+    would pass, and neither would see the other until it finished. The run-level
+    reservation is the same mechanism at a coarser grain -- and the assertion is
+    that the *second* run is refused while the first is still going, not that
+    both eventually fit.
+    """
+    # A month exactly one run wide: the first is admitted (its own claim is never
+    # counted against it), the second meets the first's outstanding claim.
+    worst_case_run = Decimal("3.90")  # 50 questions at the reserved worst case
+    guard = _empty_window_guard(
+        session_factory, monthly_limit_usd=worst_case_run, refresh_seconds=1000.0
+    )
+    await guard.check()
+
+    first = await guard.reserve(worst_case_run, source=SpendSource.EVAL)
+    with pytest.raises((BudgetPressure, BudgetExhausted)):
+        await guard.reserve(worst_case_run, source=SpendSource.EVAL)
+
+    # ...and once the first settles to what it actually cost, the second fits.
+    first.settle(Decimal("0.65"))
+    second = await guard.reserve(worst_case_run, source=SpendSource.EVAL)
+    second.settle(Decimal("0.65"))
+    assert guard.reserved == Decimal("0")
+    assert guard.recorded == Decimal("1.30")
+
+
+async def test_a_killed_run_releases_its_reservation(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """An eval run is exactly the thing a person ctrl-Cs after seeing the first
+    few results. `KeyboardInterrupt` is not an `Exception`, so an `except
+    Exception` cleanup would miss it and a run-length claim would outlive the
+    run -- blocking the next one for the rest of the month."""
+    guard = _empty_window_guard(
+        session_factory, monthly_limit_usd=Decimal("20.00"), refresh_seconds=1000.0
+    )
+    reservation = await guard.reserve(Decimal("3.90"), source=SpendSource.EVAL)
+
+    with pytest.raises(KeyboardInterrupt), reservation:
+        raise KeyboardInterrupt
+
+    assert guard.reserved == Decimal("0")
+
+
+async def test_the_context_manager_releases_on_a_clean_exit_too(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    guard = _empty_window_guard(
+        session_factory, monthly_limit_usd=Decimal("20.00"), refresh_seconds=1000.0
+    )
+    async with asyncio.timeout(5):
+        reservation = await guard.reserve(Decimal("3.90"), source=SpendSource.EVAL)
+        with reservation:
+            reservation.settle(Decimal("0.65"))
+    assert guard.reserved == Decimal("0")
+    assert guard.recorded == Decimal("0.65")

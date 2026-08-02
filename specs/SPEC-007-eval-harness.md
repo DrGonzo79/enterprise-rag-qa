@@ -13,10 +13,12 @@ recall@3 and recall@8 are pinned at 1.000 for both methods, which makes this
 harness **unfalsifiable as scoped**. Corpus expansion is a prerequisite, not an
 enhancement (Key decision 7).
 
-**Two amendments to approved specs are proposed here and deliberately not
-applied** (CLAUDE.md rule 4): a `source` column on `query_log` (SPEC-002) and a
-source-scoped daily window (SPEC-006 Key decision 16). Both are in Key decision
-5. Nothing in this spec is implemented until it and they are approved.
+**Both amendments this draft proposed are now approved and applied**
+*(2026-08-02)*: `query_log.source` (SPEC-002 migration 0005) and the
+source-scoped daily window (SPEC-006 Key decision 16, amendment 7). The spend
+path they define has been exercised end to end against a stub provider — see
+the Test plan. **This spec itself remains Draft**: the harness, the artifacts,
+and the capture mechanism below are not implemented.
 
 ## Purpose
 
@@ -73,8 +75,29 @@ evals/
   reports/
     report-<git-sha>-<chunks>chunks-<utc-date>.json   # immutable
     latest.json                                        # convenience copy
+  recordings/
+    recordings-<git-sha>-<chunks>chunks-<utc-date>.json  # immutable; KD-11
 contracts/
-  eval-report.schema.json   # GENERATED + drift-checked, like conditions.json
+  eval-report.schema.json       # GENERATED + drift-checked, like conditions.json
+  eval-recordings.schema.json   # ditto — SPEC-009 binds to this shape
+```
+
+**A captured recording** — the *mechanism*'s output. Which of these a visitor
+sees, and how the label is rendered, is SPEC-009's (KD-11):
+
+```jsonc
+{
+  "case_id": "eu-ai-act-art6-2",
+  "question": "What does Article 6(2) classify as high-risk?",
+  "answer": "…",
+  "verdict": "answered",
+  "citations": [ /* CitationOut shape, so the panel renders them like a live answer */ ],
+  "captured_at": "2026-09-14T11:02:44Z",
+  "git_sha": "…",
+  "corpus_chunks": 1180,
+  "prompt_version": "v1",
+  "from_run_id": "…"          // the same run that produced the report beside it
+}
 ```
 
 ```bash
@@ -208,42 +231,52 @@ reader who has not opened the repository:
    — this runs offline against the libraries, not through the API." **That is
    false, and the mechanism is one line:** `Generator._write_query_log` writes a
    `query_log` row whenever it holds a `session_factory`, `SpendGuard` sums
-   `cost_usd` over **every** row in the window, and `query_log` has **no column
+   `cost_usd` over **every** row in the window, and `query_log` had **no column
    distinguishing traffic**. The ceiling is not an API-layer feature that offline
-   code escapes; it reads a ledger the *library* writes. Running offline changes
+   code escapes; it reads a ledger the *library* writes. Running offline changed
    nothing.
 
-   **The arithmetic, which is why this matters more than a wording fix.** Fifty
-   golden questions at the observed ~$0.010 per query is ~$0.50 against a derived
-   daily ceiling of **$0.64** ($20/month ÷ 31). **One eval run consumes ~78 % of
-   the day's visitor budget, and a run that starts near the ceiling trips it —
-   taking the demo down, on a schedule, to measure how good the demo is.**
+   **The arithmetic, which is why this mattered more than a wording fix.** Fifty
+   golden questions at realistic usage is **~$0.65** against a derived daily
+   ceiling of **$0.64** ($20/month ÷ 31). One run exhausts the day's visitor
+   budget, and a run started near the ceiling trips it — taking the demo down, on
+   a schedule, to measure how good the demo is.
 
-   Today the harness has exactly two options and both are wrong: write rows and
-   consume the visitor ceiling indistinguishably, or write none and make eval
-   spend invisible to the only ledger the project has. So:
+   **Settled by SPEC-002 migration 0005 and SPEC-006 Key decision 16 amendment
+   7** *(both approved 2026-08-02)*: `query_log.source` discriminates the
+   traffic, the **daily** window filters to `visitor`, and the **monthly** cap
+   counts every source because it is the invoice. An eval run therefore writes
+   `source = 'eval'` rows — its cost is in the ledger, visible to the invoice,
+   and invisible to the demo's burst limit. **The interim this draft proposed —
+   running with `session_factory=None` and noting the gap in the report — is
+   withdrawn**: it would have put eval spend outside the invoice, and the place
+   to qualify "the monthly cap is the invoice" is the Key decision that makes
+   that claim, not the report of a spec that inherits it. SPEC-006 Key decision
+   16 now carries that scope, with its own removal condition.
 
-   - **Proposed (SPEC-002): add `source` to `query_log`** — `visitor` | `eval` |
-     `cli`, not-null, defaulted to `visitor` so the migration is safe on existing
-     rows. One migration, one column, and it is the discriminator every option
-     below needs.
-   - **Proposed (SPEC-006 Key decision 16): the daily window filters to
-     `source = 'visitor'`; the monthly cap does not.** The daily ceiling's job is
-     shaping *visitor* burst, and an eval run must not close the demo for the
-     rest of the day. The monthly cap is the **invoice**, which includes eval
-     spend, so it counts everything — otherwise the number the owner committed to
-     silently stops meaning what they committed to.
-   - **Decided here (no amendment needed): an eval run refuses to start when the
-     monthly headroom is below its own estimate.** A scheduled eval on the 28th
-     of an expensive month must decline and say so, rather than be the thing that
-     exhausts the month. This is the reservation idea from SPEC-006 KD-16
-     amendment 5 at a coarser grain: estimate the worst case, check it against
-     headroom, refuse rather than overshoot.
+   **A run reserves; it does not check.** The first version of this decision had
+   the runner compare its estimate against remaining headroom at startup, and
+   called that "the reservation idea at a coarser grain". It was not — **it was
+   check-then-spend, which is the design SPEC-006 Key decision 16 amendment 5
+   exists to replace.** A scheduled run and a manual one begun minutes apart both
+   check, both pass, and neither sees the other until it finishes. So the runner
+   uses the mechanism that already exists:
 
-   **Until those amendments are approved**, the harness runs with
-   `session_factory=None` — its spend is recorded in the report and **not** in
-   `query_log` — and the report states that its cost is absent from the ledger.
-   That is the least-bad interim, and it is stated rather than left as a gap.
+   - **Reserve the run's worst case at start** — `per-question worst case ×
+     len(cases)`, from `Generator.max_cost`, tagged `SpendSource.EVAL`. Measured
+     at 50 questions: **$0.0449 per question, $2.24 for the run** (~3.5× the
+     ~$0.65 actual, the same conservatism the per-request bound has, held for the
+     length of a run rather than a call).
+   - **Settle to actual at the end**, so the over-reservation lasts one run.
+   - **Release on every exit path**, via `Reservation`'s context-manager form
+     whose `__exit__` fires on `BaseException` — because the exception an eval
+     run will actually meet is `KeyboardInterrupt`, which is not an `Exception`,
+     and which someone will produce after watching the first few results.
+     `SIGKILL` is out of scope and needs no handling: the claim lives in the
+     process.
+   - **A run that cannot reserve does not start**, and says which ceiling
+     refused it. A scheduled eval on the 28th of an expensive month declines
+     rather than being the thing that exhausts the month.
 
 6. **50 golden questions predates any power analysis, and is not defended here.**
    SPEC-004 KD-12a says power comes from the retrieval-only set, not from the
@@ -285,6 +318,36 @@ reader who has not opened the repository:
     hypothesis this measures, not a commitment it defends; if hybrid loses on a
     de-saturated corpus, the finding is published and the stack decision is
     revisited by amendment.
+
+11. **This spec owns the *capture mechanism* for the demo's pre-recorded Q&A
+    pairs; SPEC-009 owns which pairs are shown, how they are labeled, and how
+    they render** *(added 2026-08-02, owner review)*. The recordings SPEC-006 Key
+    decision 16 binds into the explanatory panel had no owning spec, which is how
+    a required content of a panel ends up produced by nobody. **The split is
+    capture versus curation**, and it falls where the machinery already is:
+
+    | This spec | SPEC-009 |
+    |---|---|
+    | Runs the `Generator`, tags `source='eval'`, reserves and settles | Chooses which captured pairs appear |
+    | Writes an immutable, schema-checked artifact | Labels them as recordings, with the capture date |
+    | Guards it against drift and overwrite | Decides layout, ordering, and adjacency to the figures |
+
+    **The point of the split is that one paid run produces both artifacts.** The
+    corpus, the question set, the de-saturation gate, the reservation, and the
+    demo-down window are the same for a report and for a set of recordings, so
+    capturing them separately would mean two paid runs, two lead times, and two
+    occasions on which the day's visitor budget is consumed. One
+    `source='eval'` run emits `evals/reports/report-….json` **and**
+    `evals/recordings/recordings-….json`, from the same answers, at the same
+    corpus state and git sha — which additionally means a recording shown beside
+    a figure is a recording *of the run that produced that figure*, rather than
+    two artifacts a reader has to be trusted not to compare.
+
+    **What this spec deliberately does not decide:** which questions are
+    interesting enough to show a visitor, and how "recorded" is rendered so the
+    label is not a styling detail. Those are presentation, they are SPEC-009's,
+    and SPEC-006 Key decision 16 already binds the honesty requirement onto that
+    spec rather than this one.
 
 ## Acceptance criteria
 
@@ -342,6 +405,20 @@ reader who has not opened the repository:
   document asserts that every sentence claiming the system performs well cites a
   figure or names a bound. Mechanical and deliberately crude: it exists because
   the failure it guards is one the author cannot see in their own prose.
+- **AC-12 (one run, two artifacts, one corpus state)** — A single run emits both
+  the report and the recordings, and every recording's `git_sha`,
+  `corpus_chunks`, and `from_run_id` match the report's. Asserted by construction
+  rather than by convention: a recording captured at a different corpus state
+  from the figure it is displayed beside is a comparison a reader would make and
+  be misled by. `evals/recordings/` is immutable under the same write guard as
+  reports and baselines.
+- **AC-13 (the whole artifact path runs against a stub before it runs for
+  money)** — Capture → both artifacts → schema validation → drift check
+  completes end to end with a stub provider and zero provider calls, asserted in
+  CI. The failure this prevents is discovering a malformed artifact *after* the
+  budget is spent and the demo has been taken down to produce it, at which point
+  the fix costs a second run and a second demo-down window. **The paid run is not
+  the first exercise of this path.**
 - **AC-11 (the report contract cannot drift)** — `contracts/eval-report.schema.json`
   is generated from the report model and regenerated in the test, failing on any
   difference — the same guard `contracts/conditions.json` gets, for the same

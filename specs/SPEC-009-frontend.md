@@ -37,24 +37,26 @@ SPEC-007 was drafted — the blocker list is only useful if it is current)*:
 | The eval **report** in the panel | Format and location settled: `evals/reports/report-<sha>-<chunks>chunks-<date>.json`, with `contracts/eval-report.schema.json` generated and drift-checked (SPEC-007 AC-11) | **No** — this spec can be written against the schema |
 | A report that **exists** | Blocked on corpus de-saturation (SPEC-003 AC-10) and one real, billable run | **Yes** — see below |
 | The **methodology** beside the figures | Settled, and stronger than assumed: SPEC-007 KD-2 puts methodology *inside* the artifact and binds this spec to render `methodology.limitations` **adjacent to** the figures, not behind a disclosure | **No**, but it adds a requirement — see Key decision 5 |
-| Labeled pre-recorded Q&A pairs | Still unowned. SPEC-007 covers eval cases, not demo recordings; the capture needs the same corpus and a real run | **Yes** |
+| Labeled pre-recorded Q&A pairs | **Ownership split (SPEC-007 KD-11, 2026-08-02):** SPEC-007 owns the *capture mechanism* — same `Generator` path, `source='eval'` tagging, same immutability guard, same schema drift check — and emits `evals/recordings/…` from the **same run** that produces the report. **This spec consumes that artifact; it does not produce it.** Which pairs are shown, how they are labeled, and how they render are this spec's | **Yes** — the artifact does not exist yet, for the same reason the report does not |
 
-**So two things still block, and they are the same two as before, now sharper.**
-Neither is a spec gap; both are lead time. (a) There is no report and cannot be
-one until the corpus is de-saturated and a golden run has been paid for. (b) The
-recorded Q&A pairs have no owning spec — **flagged: they are not SPEC-007's, and
-if they are not to be this spec's, they need one**; they are a *required* content
-of a panel this spec must build.
+**So the blocker is now one thing rather than two, and it is lead time rather
+than a spec gap.** Both required contents — the report and the recordings — come
+out of **one** paid run at a de-saturated corpus. They cannot exist until that
+run happens, and they will then exist together: same run id, same git sha, same
+corpus state, which is what makes a recording shown beside a figure a recording
+*of the run that produced that figure* rather than two artifacts a reader has to
+be trusted not to compare.
 
 **One new requirement lands on this spec from SPEC-007 KD-2:** the limitations
 text — including the single-author bound — renders next to the numbers. A caveat
 one click away from a figure is a caveat most readers never see, and the eval's
 honesty about its own bias is worth nothing if the panel hides it.
 
-**One thing to watch, not a blocker:** SPEC-007 KD-5 proposes a `source` column
-on `query_log` so eval spend stops consuming the visitor ceiling. If the recorded
-Q&A capture runs through the same `Generator`, it needs the same treatment, or
-producing this spec's fixture takes the demo down for a day.
+**Resolved:** `query_log.source` and the source-scoped daily window landed
+2026-08-02 (SPEC-002 migration 0005, SPEC-006 Key decision 16 amendment 7), and
+SPEC-007's capture runs under the same `source='eval'` tag. Producing this spec's
+recordings therefore no longer takes the demo down for a day: it presses the
+monthly invoice and leaves the daily visitor ceiling untouched.
 
 **A third dependency is named rather than assumed:** the deployment that serves
 the static assets (SPEC-010), which is also where the read key question lands.
@@ -200,9 +202,19 @@ decision 4, and this line is deliberately not written as though it were closed.
    rather than an outage. The label is the whole difference between this and the
    canned-answer option that spec rejected: an artifact presented as a recording
    is honest, and the same artifact presented as an answer is not. **The
-   recorded pairs are a checked-in fixture with a capture date and the
-   `prompt_version` they were produced under**, so a stale recording is visible
-   rather than merely old.
+   recorded pairs come from SPEC-007's capture mechanism (its Key decision 11);
+   this spec selects and labels, it does not produce.** The artifact carries the
+   capture date, `git_sha`, `corpus_chunks`, `prompt_version`, and the run id, so
+   a stale recording is visible rather than merely old — and a recording is
+   provably from the same run that produced the figures beside it.
+
+   **The selection rule is written down and the unshown count is published.**
+   Curating five pairs out of fifty is an editorial act performed by the author
+   of the system, on its own output, with no metric to check it: the selection
+   bias SPEC-007 Key decision 3 names for the eval set, with the safeguards
+   removed. A panel that shows the best five without saying it chose them from
+   fifty is doing the thing the labeling requirement exists to prevent, one level
+   up.
 
 6. **`budget_pressure` is a *transient* state and must not borrow the
    explanatory panel** *(added 2026-08-01, with SPEC-006 Key decision 16

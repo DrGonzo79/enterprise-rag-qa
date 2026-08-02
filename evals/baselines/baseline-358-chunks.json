@@ -1,8 +1,63 @@
 {
-  "note": "Measured baseline, not a threshold. SPEC-004 AC-6 sets no floor; SPEC-007 sets one against the 50-question golden set. recall@3 and recall@8 saturate at 1.000 for both methods on this 358-chunk corpus — k=1 is the only regime with discriminating power. See SPEC-004 Key decision 12 for the unresolved finding that plain RRF loses to vector-only on paraphrase queries.",
-  "measured_on": "358-chunk corpus (NIST AI RMF, EU AI Act, NVDA 10-K)",
+  "rung": "rung-0-pre-expansion",
+  "measured_at": "2026-08-02",
+  "git_sha": "386a3445b6ff933b44bcfa02841b599c7324861f",
+  "embedder_identity": "openai:text-embedding-3-small",
   "k": 8,
-  "cases": 26,
+  "corpus": {
+    "document_count": 3,
+    "chunk_count": 358,
+    "per_document": [
+      {
+        "title": "NIST AI Risk Management Framework (AI RMF 1.0)",
+        "doc_type": "standard",
+        "source_uri": "https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.100-1.pdf",
+        "chunks": 38
+      },
+      {
+        "title": "NVIDIA Corporation Form 10-K (fiscal year 2026)",
+        "doc_type": "filing",
+        "source_uri": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/nvda-20260125.htm",
+        "chunks": 119
+      },
+      {
+        "title": "Regulation (EU) 2024/1689 (Artificial Intelligence Act)",
+        "doc_type": "regulation",
+        "source_uri": "https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=OJ:L_202401689",
+        "chunks": 201
+      }
+    ],
+    "chunker_config": {
+      "breadcrumb_format": "v1:›",
+      "edgar_numeric_table_threshold": 0.5,
+      "hard_min": 120,
+      "overlap_ratio": 0.15,
+      "strategy": "heading_v1",
+      "target_max": 800,
+      "target_min": 500
+    },
+    "question_set": {
+      "path": "evals/retrieval_smoke.jsonl",
+      "count": 26,
+      "sha256": "b1807e7c489ba7f629f1c514c2d87cb227ee84f0a095dca06e1270f32af818bc"
+    }
+  },
+  "preregistration": {
+    "preregistered_at": "2026-08-02",
+    "primary_metric": "recall@8",
+    "k": 8,
+    "lever": "corpus growth (SPEC-003 AC-10's measured rungs)",
+    "levers_held_fixed": [
+      "k",
+      "the question set",
+      "the chunker config",
+      "the embedder"
+    ],
+    "test": "mcnemar_exact_binomial",
+    "sidedness": "two-sided",
+    "alpha": 0.05,
+    "informative_when": "recall@8 < 1.000 AND discordant_pairs >= 25"
+  },
   "recall_at_1": {
     "hybrid_overall": 0.7692,
     "vector_only_overall": 0.8846,
@@ -35,16 +90,28 @@
     "hybrid_paraphrase": 0.7639,
     "vector_only_paraphrase": 0.9583
   },
+  "pairs": {
+    "hybrid_only": 0,
+    "vector_only": 0,
+    "both": 26,
+    "neither": 0,
+    "n_discordant": 0,
+    "test": "mcnemar_exact_binomial",
+    "sidedness": "two-sided",
+    "alpha": 0.05,
+    "p": 1.0
+  },
+  "stop_condition": {
+    "recall_at_8_below_1": false,
+    "discordant_pairs_at_least_25": false,
+    "informative": false,
+    "verdict": "recorded here, decided by review"
+  },
   "distinct_section_rate": {
     "mean": 0.8317,
     "median": 0.875,
     "min": 0.375,
     "max": 1.0
-  },
-  "latency_ms": {
-    "end_to_end_p50": 185.4,
-    "end_to_end_p95": 1381.5,
-    "end_to_end_max": 1700.8
   },
   "per_case": [
     {
@@ -281,21 +348,5 @@
       "vector_rank": 1,
       "distinct_section_rate": 0.375
     }
-  ],
-  "stage_latency_split_ms": {
-    "embed_ms": {
-      "p50": 189.2,
-      "p95": 711.0,
-      "max": 959.8
-    },
-    "retrieval_side_ms": {
-      "p50": 12.1,
-      "p95": 13.5
-    },
-    "end_to_end_ms": {
-      "p50": 200.9,
-      "p95": 723.1,
-      "max": 971.5
-    }
-  }
+  ]
 }

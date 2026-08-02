@@ -350,3 +350,25 @@ The two-tier split holds, with the expansion landing almost entirely in the real
 4. **Stop as soon as recall@8 < 1.000.** Escalation to the next rung requires the prior rung's recorded measurement showing recall@8 still exactly 1.000.
 
 Fetching a rung before the previous rung's measurement exists violates AC-10. Fetching anything before step 1 destroys the pre-expansion record.
+
+#### Ladder log — the recorded verdict per rung (AC-10)
+
+**Rung 0 — pre-expansion. Measured 2026-08-02 at `386a344`. Artifact: `evals/baselines/baseline-358-chunks.json`.**
+
+| | Value |
+|---|---|
+| Corpus | 358 chunks / 3 documents (AI RMF 38 · AI Act 201 · NVDA 10-K 119) |
+| `recall@8`, hybrid | **1.000** |
+| `recall@8`, vector-only | **1.000** |
+| Discordant pairs at k=8 | **0** (hybrid-only 0 · vector-only 0 · both 26 · neither 0) |
+| McNemar exact, two-sided | p = 1.0 — **vacuous, and recorded as vacuous**: with zero discordant pairs there is no data in the test at all |
+| `recall@1`, hybrid / vector-only | 0.769 / 0.885 |
+| `MRR@8`, hybrid / vector-only | 0.865 / 0.942 |
+
+**Verdict: ESCALATE.** Neither pre-registered condition is met, and the second is not close: `recall@8 < 1.000` is false, and `discordant_pairs ≥ 25` fails at **0 of 25**. This is the completely saturated state SPEC-004 Key decision 12a described, now measured rather than inferred, and it is the "before" every later rung is read against.
+
+**Two things the numbers say that the stop condition does not, both recorded and neither acted on:**
+- **The paraphrase regression is still there and is still not evidence.** Vector-only leads hybrid at k=1 overall (0.885 vs 0.769) and on paraphrase (0.917 vs 0.583), while hybrid leads on citation (0.929 vs 0.857) — the same shape SPEC-004 Key decision 12 recorded as noise on 26 questions. At k=8, which is the *pre-registered* metric, there is nothing to see, because there is nothing left to separate. Reading a k=1 result while the pre-registered metric is saturated is exactly the substitution Key decision 12 of SPEC-007 forbids.
+- **`neither` is 0.** Every question is answered by both methods. This is not a retrieval result; it is a statement that the corpus contains no competitor for any of these 26 questions, which is the thing Key decision 14's near-miss selection exists to change.
+
+**The ladder stops here pending approval, not pending evidence.** The evidence for escalating to Rung 1 is complete and recorded above. What is missing is the approval to fetch — see the Status block: the corpus-expansion amendment is still **DRAFT**, and its own text says nothing is fetched until it is approved and Rung 1's probe output is reviewed.

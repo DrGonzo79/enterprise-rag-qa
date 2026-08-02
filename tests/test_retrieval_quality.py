@@ -11,11 +11,16 @@ corpus changes, so it is never produced as a side effect of `pytest`. Without
 the flag the measured table is printed and nothing on disk moves.
 """
 
+import hashlib
 import json
+import math
 import os
 import statistics
+import subprocess
 import time
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -29,7 +34,29 @@ from rag_qa.retrieval.types import RetrievedChunk
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SMOKE_SET = REPO_ROOT / "evals" / "retrieval_smoke.jsonl"
 BASELINE = REPO_ROOT / "evals" / "retrieval_baseline.json"
+BASELINES_DIR = REPO_ROOT / "evals" / "baselines"
+MANIFEST = REPO_ROOT / "corpus" / "ingest-manifest.json"
 K = 8
+
+# SPEC-007 Key decision 12, echoed as values so a diff shows any drift. The
+# corpus ladder is judged against these and nothing else; choosing the metric
+# after seeing which one separates the methods is the bias this exists to stop.
+PREREGISTRATION = {
+    "preregistered_at": "2026-08-02",
+    "primary_metric": "recall@8",
+    "k": K,
+    "lever": "corpus growth (SPEC-003 AC-10's measured rungs)",
+    "levers_held_fixed": ["k", "the question set", "the chunker config", "the embedder"],
+    "test": "mcnemar_exact_binomial",
+    "sidedness": "two-sided",
+    "alpha": 0.05,
+    "informative_when": "recall@8 < 1.000 AND discordant_pairs >= 25",
+}
+
+# The corpus state this run measures. Rung 0 is the corpus before any expansion —
+# the record SPEC-003's sequencing requires to exist *before the first fetch*,
+# because it is the only "before" the ladder will ever have.
+RUNG_LABEL = os.environ.get("RAG_QA_RUNG_LABEL", "rung-0-pre-expansion")
 
 load_env()
 CORPUS_DATABASE_URL = os.environ.get(
@@ -62,6 +89,72 @@ def recall_at(ranks: list[int | None], k: int) -> float:
 
 def mrr_at_k(ranks: list[int | None]) -> float:
     return sum(1 / r for r in ranks if r is not None) / len(ranks) if ranks else 0.0
+
+
+def mcnemar_exact_two_sided(b: int, c: int) -> float:
+    """Exact binomial McNemar, two-sided, no continuity correction and no mid-p
+    adjustment — SPEC-007 Key decision 12, which pins all three because they move
+    the answer.
+
+    `b` and `c` are the discordant cells: questions exactly one method got. Under
+    H0 each discordant pair is a fair coin, so the two-sided p is twice the lower
+    tail, capped at 1. With no discordant pairs there is nothing to test and the
+    honest value is 1.0, not 0.
+    """
+    n = b + c
+    if n == 0:
+        return 1.0
+    lower = sum(math.comb(n, i) for i in range(min(b, c) + 1)) / 2**n
+    return min(1.0, 2 * lower)
+
+
+def corpus_state(rows: list[dict[str, object]]) -> dict[str, object]:
+    """What a reader six months from now needs to interpret the numbers.
+
+    A measurement without its corpus state is not interpretable, and the corpus
+    state cannot be reconstructed once the ladder moves — which is the whole
+    reason these artifacts are immutable (SPEC-003 AC-13).
+    """
+    config = json.loads(MANIFEST.read_text(encoding="utf-8"))["config"] if MANIFEST.exists() else {}
+    return {
+        "chunker_config": config,
+        "question_set": {
+            "path": "evals/retrieval_smoke.jsonl",
+            "count": len(rows),
+            # The pre-registration holds the question set fixed. A hash makes
+            # that checkable across rungs instead of merely asserted.
+            "sha256": hashlib.sha256(SMOKE_SET.read_bytes()).hexdigest(),
+        },
+    }
+
+
+async def document_chunk_counts(factory) -> list[dict[str, Any]]:  # type: ignore[no-untyped-def]
+    from sqlalchemy import text
+
+    async with factory() as session:
+        result = await session.execute(
+            text(
+                "SELECT d.title, d.doc_type, d.source_uri, count(c.id) AS chunks "
+                "FROM documents d JOIN chunks c ON c.document_id = d.id "
+                "GROUP BY d.id, d.title, d.doc_type, d.source_uri ORDER BY d.title"
+            )
+        )
+        return [
+            {
+                "title": row.title,
+                "doc_type": row.doc_type,
+                "source_uri": row.source_uri,
+                "chunks": row.chunks,
+            }
+            for row in result
+        ]
+
+
+def git_sha() -> str:
+    result = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=REPO_ROOT, capture_output=True, text=True
+    )
+    return result.stdout.strip() or "unknown"
 
 
 @pytest.fixture(scope="session")
@@ -199,10 +292,94 @@ async def test_hybrid_beats_vector_only_and_records_the_baseline(
         },
         "per_case": rows,
     }
+
+    # --- SPEC-003 AC-10: the ladder's per-rung record ------------------------
+    #
+    # Pairing unit is one question; a pair is discordant when exactly one method
+    # succeeds at k=8 (SPEC-007 KD-12's `pairing_unit`).
+    def succeeded(row: dict[str, object], key: str) -> bool:
+        rank = row[key]
+        return isinstance(rank, int) and rank <= K
+
+    hybrid_only = sum(
+        1 for r in rows if succeeded(r, "hybrid_rank") and not succeeded(r, "vector_rank")
+    )
+    vector_only_wins = sum(
+        1 for r in rows if succeeded(r, "vector_rank") and not succeeded(r, "hybrid_rank")
+    )
+    both = sum(1 for r in rows if succeeded(r, "hybrid_rank") and succeeded(r, "vector_rank"))
+    neither = len(rows) - hybrid_only - vector_only_wins - both
+    n_discordant = hybrid_only + vector_only_wins
+
+    recall_8 = measured[f"recall_at_{K}"]["hybrid_overall"]
+    conditions = {
+        "recall_at_8_below_1": recall_8 < 1.000,
+        "discordant_pairs_at_least_25": n_discordant >= 25,
+    }
+    per_document = await document_chunk_counts(factory)
+    chunk_count = sum(int(d["chunks"]) for d in per_document)
+
+    labeled = {
+        "rung": RUNG_LABEL,
+        "measured_at": datetime.now(UTC).date().isoformat(),
+        "git_sha": git_sha(),
+        "embedder_identity": retriever._query_embedder.identity,
+        "k": K,
+        "corpus": {
+            "document_count": len(per_document),
+            "chunk_count": chunk_count,
+            "per_document": per_document,
+            **corpus_state(rows),
+        },
+        "preregistration": PREREGISTRATION,
+        **measured,
+        "mrr_at_k": baseline["mrr_at_k"],
+        "pairs": {
+            "hybrid_only": hybrid_only,
+            "vector_only": vector_only_wins,
+            "both": both,
+            "neither": neither,
+            "n_discordant": n_discordant,
+            "test": "mcnemar_exact_binomial",
+            "sidedness": "two-sided",
+            "alpha": 0.05,
+            "p": round(mcnemar_exact_two_sided(hybrid_only, vector_only_wins), 6),
+        },
+        "stop_condition": {
+            **conditions,
+            "informative": all(conditions.values()),
+            # NOT a verdict. AC-10 makes `recall@8 < 1.000` permit stopping, never
+            # mandate it, and the judgment is reviewed rather than thresholded.
+            "verdict": "recorded here, decided by review",
+        },
+        "distinct_section_rate": baseline["distinct_section_rate"],
+        "per_case": rows,
+    }
+
+    print(f"\nrung {RUNG_LABEL}: {chunk_count} chunks in {len(per_document)} documents")
+    print(f"recall@{K} hybrid {recall_8:.3f} / vector-only {overall_vector_k:.3f}")
+    print(
+        f"pairs: hybrid-only {hybrid_only}, vector-only {vector_only_wins}, "
+        f"both {both}, neither {neither} -> discordant {n_discordant}"
+    )
+    print(f"stop conditions: {json.dumps(conditions)}")
+
     if write_baseline:
         BASELINE.write_text(
             json.dumps(baseline, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
         )
+        BASELINES_DIR.mkdir(parents=True, exist_ok=True)
+        labeled_path = BASELINES_DIR / f"baseline-{chunk_count}-chunks.json"
+        # Immutability outranks the flag (SPEC-003 AC-13). The session guard
+        # fails the run on a modified artifact, but by then the file is already
+        # overwritten and the corpus state it recorded is gone, so the write is
+        # refused here rather than reported afterwards.
+        if labeled_path.exists():
+            print(f"\n[{labeled_path.name} exists — immutable, not rewritten (SPEC-003 AC-13)]")
+        else:
+            labeled_path.write_text(
+                json.dumps(labeled, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+            )
     else:
         print(f"\n[baseline not written — pass --write-baseline to record {BASELINE.name}]")
 

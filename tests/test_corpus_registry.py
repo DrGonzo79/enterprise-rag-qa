@@ -248,3 +248,54 @@ def test_every_pilot_case_records_why_its_label_is_what_it_is() -> None:
         # The recipe forbids naming the section: a question carrying its own
         # answer's citation is the lexical bullseye the pilot exists to avoid.
         assert "Article" not in case["question"], f"{case['id']} names an article in the question"
+
+
+# --- pilot-2 shares the pilot-1 discipline (SPEC-007 KD-12 amendment 3) --------
+
+
+def test_pilot_two_is_excluded_and_lexically_anchored() -> None:
+    """Same exclusion rule as pilot-1, plus the constraint that defines the cell:
+    every question must be satisfiable under `websearch_to_tsquery`'s AND
+    semantics, which is what makes the full-text branch able to fire at all. A
+    question that cannot fire measures nothing about the branch."""
+    import json
+
+    evals = REPO_ROOT / "evals"
+    cases = [
+        json.loads(line)
+        for line in (evals / "retrieval_pilot2.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+    assert 12 <= len(cases) <= 15, f"pre-registered size is 12-15, found {len(cases)}"
+    ids = {c["id"] for c in cases}
+    for other in evals.glob("*.jsonl"):
+        if other.name == "retrieval_pilot2.jsonl":
+            continue
+        theirs = {json.loads(line)["id"] for line in other.read_text().splitlines() if line.strip()}
+        assert not (ids & theirs), f"pilot-2 ids leaked into {other.name}: {sorted(ids & theirs)}"
+    for case in cases:
+        assert case["human_verified"] is False, case["id"]
+        assert case["anchor"].strip(), f"{case['id']} records no lexical anchor"
+        assert case["label_reason"].strip(), case["id"]
+        assert "Article" not in case["question"] or "Chapter" in case["question"], (
+            f"{case['id']} names its own article in the question"
+        )
+
+
+def test_the_two_pilots_measure_different_cells() -> None:
+    """The whole point of pilot-2 is that it occupies a cell pilot-1 does not.
+    Identical questions across the two would make the comparison between them
+    meaningless while still passing every other check here."""
+    import json
+
+    evals = REPO_ROOT / "evals"
+
+    def questions(name: str) -> set[str]:
+        return {
+            json.loads(line)["question"]
+            for line in (evals / name).read_text().splitlines()
+            if line.strip()
+        }
+
+    shared = questions("retrieval_pilot.jsonl") & questions("retrieval_pilot2.jsonl")
+    assert not shared, f"the two pilots share questions: {shared}"

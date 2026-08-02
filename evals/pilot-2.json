@@ -1,0 +1,202 @@
+{
+  "pilot_id": "pilot-2",
+  "measured_at": "2026-08-02",
+  "git_sha": "bdd548aa464cbeb43e2c5c58f4bf13b684406452",
+  "corpus_chunks": 358,
+  "k": 8,
+  "excluded_from_confirmatory_set": true,
+  "case_ids": [
+    "anc-01",
+    "anc-02",
+    "anc-03",
+    "anc-04",
+    "anc-05",
+    "anc-06",
+    "anc-07",
+    "anc-08",
+    "anc-09",
+    "anc-10",
+    "anc-11",
+    "anc-12",
+    "anc-13",
+    "anc-14"
+  ],
+  "labels_human_verified": false,
+  "pilot": {
+    "set": "pilot (hard, authored without an expected section)",
+    "n": 14,
+    "recall_at_8_hybrid": 1.0,
+    "recall_at_8_vector_only": 0.8571,
+    "hybrid_only": 2,
+    "vector_only": 0,
+    "both": 12,
+    "neither": 0,
+    "n_discordant": 2,
+    "r": 0.1429,
+    "p": 0.5,
+    "questions_with_no_fulltext_candidates": 0,
+    "questions_where_top_k_is_identical": 6
+  },
+  "smoke_comparison": {
+    "set": "smoke (existing 26, article number in the question)",
+    "n": 26,
+    "recall_at_8_hybrid": 1.0,
+    "recall_at_8_vector_only": 1.0,
+    "hybrid_only": 0,
+    "vector_only": 0,
+    "both": 26,
+    "neither": 0,
+    "n_discordant": 0,
+    "r": 0.0,
+    "p": 1.0,
+    "questions_with_no_fulltext_candidates": 12,
+    "questions_where_top_k_is_identical": 13
+  },
+  "sizing": {
+    "min_discordant_for_any_rejection": 6,
+    "r_measured": 0.1429,
+    "r_upper_95_pilot": 0.1429,
+    "r_upper_95_pooled": 0.05,
+    "pooled_n": 40,
+    "pooled_discordant": 2,
+    "N_required": 42,
+    "N_lower_bound_pilot": 42,
+    "N_lower_bound_pooled": 120,
+    "power_at_floor": {
+      "0.7": 0.118,
+      "0.75": 0.178,
+      "0.8": 0.262,
+      "0.9": 0.531
+    },
+    "note": "With r = 0 the sizing calculation N = 6/r is undefined rather than large. The bounds are one-sided 95% upper bounds on r and therefore LOWER bounds on N; the pilot places no upper bound on N at all. Pooling with the smoke set mixes a deliberately hard set with a deliberately easy one and is reported as a sanity check, not as a rate for either population."
+  },
+  "per_case": [
+    {
+      "id": "anc-01",
+      "shape": "wrong-lexical-match",
+      "hybrid_rank": 1,
+      "vector_rank": 1,
+      "fulltext_candidates": 3,
+      "identical_top_k": false,
+      "top_section": "EU AI Act › CHAPTER III › SECTION 3 › Article 26 — Obligations of deployers of high-risk AI systems"
+    },
+    {
+      "id": "anc-02",
+      "shape": "wrong-lexical-match",
+      "hybrid_rank": 1,
+      "vector_rank": 1,
+      "fulltext_candidates": 2,
+      "identical_top_k": true,
+      "top_section": "EU AI Act › CHAPTER III › SECTION 5 › Article 46 — Derogation from conformity assessment procedure"
+    },
+    {
+      "id": "anc-03",
+      "shape": "near-miss",
+      "hybrid_rank": 1,
+      "vector_rank": 1,
+      "fulltext_candidates": 3,
+      "identical_top_k": false,
+      "top_section": "EU AI Act › CHAPTER III › SECTION 3 › Article 18 — Documentation keeping – Article 20 — Corrective actions and duty of information"
+    },
+    {
+      "id": "anc-04",
+      "shape": "wrong-lexical-match",
+      "hybrid_rank": 1,
+      "vector_rank": 1,
+      "fulltext_candidates": 1,
+      "identical_top_k": true,
+      "top_section": "EU AI Act › CHAPTER XII › Article 101 — Fines for providers of general-purpose AI models"
+    },
+    {
+      "id": "anc-05",
+      "shape": "near-miss",
+      "hybrid_rank": 1,
+      "vector_rank": 1,
+      "fulltext_candidates": 1,
+      "identical_top_k": true,
+      "top_section": "EU AI Act › CHAPTER VI › Article 59 — Further processing of personal data for developing certain AI systems in the public interest in the AI regulatory sandbox"
+    },
+    {
+      "id": "anc-06",
+      "shape": "near-miss",
+      "hybrid_rank": 1,
+      "vector_rank": 4,
+      "fulltext_candidates": 5,
+      "identical_top_k": false,
+      "top_section": "EU AI Act › CHAPTER I › Article 2 — Scope"
+    },
+    {
+      "id": "anc-07",
+      "shape": "near-miss",
+      "hybrid_rank": 1,
+      "vector_rank": 1,
+      "fulltext_candidates": 2,
+      "identical_top_k": false,
+      "top_section": "EU AI Act › Annex Vii — ANNEX VII"
+    },
+    {
+      "id": "anc-08",
+      "shape": "wrong-lexical-match",
+      "hybrid_rank": 2,
+      "vector_rank": 2,
+      "fulltext_candidates": 4,
+      "identical_top_k": false,
+      "top_section": "EU AI Act › CHAPTER III › SECTION 5 › Article 49 — Registration"
+    },
+    {
+      "id": "anc-09",
+      "shape": "near-miss",
+      "hybrid_rank": 1,
+      "vector_rank": 1,
+      "fulltext_candidates": 1,
+      "identical_top_k": true,
+      "top_section": "NIST AI RMF 1.0 › Framing Risk › Challenges for AI Risk Management › Risk Measurement"
+    },
+    {
+      "id": "anc-10",
+      "shape": "near-miss",
+      "hybrid_rank": 2,
+      "vector_rank": 2,
+      "fulltext_candidates": 2,
+      "identical_top_k": true,
+      "top_section": "NIST AI RMF 1.0 › AI Risks and Trustworthiness"
+    },
+    {
+      "id": "anc-11",
+      "shape": "wrong-lexical-match",
+      "hybrid_rank": 1,
+      "vector_rank": 1,
+      "fulltext_candidates": 1,
+      "identical_top_k": true,
+      "top_section": "NVIDIA 10-K FY2026 › Item 1A. Risk Factors › Competition could adversely impact our market share and financial results."
+    },
+    {
+      "id": "anc-12",
+      "shape": "wrong-lexical-match",
+      "hybrid_rank": 2,
+      "vector_rank": 3,
+      "fulltext_candidates": 3,
+      "identical_top_k": false,
+      "top_section": "NVIDIA 10-K FY2026 › Item 15. Exhibits and Financial Statement Schedules › Note 13 - Income Taxes – Notes to the Consolidated Financial Statements"
+    },
+    {
+      "id": "anc-13",
+      "shape": "spans-two-sections",
+      "hybrid_rank": 1,
+      "vector_rank": null,
+      "fulltext_candidates": 1,
+      "identical_top_k": false,
+      "top_section": "EU AI Act › CHAPTER IX › SECTION 5 › Article 88 — Enforcement of the obligations of providers of general-purpose AI models – Article 91 — Power to request documentation and information"
+    },
+    {
+      "id": "anc-14",
+      "shape": "spans-two-sections",
+      "hybrid_rank": 1,
+      "vector_rank": null,
+      "fulltext_candidates": 1,
+      "identical_top_k": false,
+      "top_section": "NIST AI RMF 1.0 › AI RMF Core › Measure"
+    }
+  ],
+  "not_a_claim": "No figure here is a quality result. n=14 sizes an instrument; it does not measure retrieval."
+}

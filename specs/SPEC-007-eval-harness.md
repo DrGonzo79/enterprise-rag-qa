@@ -836,6 +836,45 @@ reader who has not opened the repository:
 
     **The asymmetry, stated in advance because it governs how much the result is worth.** Pilot-2 is a **best case for the branch**, constructed by constraining vocabulary to what the corpus contains. **Failure here is decisive; success is weak** — it would show the branch works when queried in a register a user may never use, and the API accepts sentences. A "works" result therefore licenses no claim about production behaviour, only about the mechanism.
 
+    #### Pilot-2 results — measured 2026-08-02, artifact `evals/pilot-2.json`
+
+    14 questions, unchanged 358-chunk corpus, identical measurement path to pilot-1 (the same script, parameterised — a second copy would have been a second chance to differ from it).
+
+    | | pilot-1 (hard, natural language) | **pilot-2 (hard, lexically anchored)** |
+    |---|---:|---:|
+    | Questions with **zero** full-text candidates | 13 of 14 | **0 of 14** |
+    | Questions where hybrid's top-8 is identical to vector-only's | 14 of 14 | **6 of 14** |
+    | `recall@8` hybrid | 0.714 | **1.000** |
+    | `recall@8` vector-only | 0.714 | **0.857** |
+    | Discordant pairs (b / c) | 0 / 0 | **2 / 0** |
+    | `r` | 0.000 | **0.1429** |
+
+    **Pre-registered outcome 1 obtains, and it is reported as such: the branch fires and discordance appears.** The full-text branch works for the case it was built for. **Pilot-1's 13-of-14 silence is a fact about question style, not a defect independent of style**, and SPEC-004 AC-12(b) is therefore a **scoping question, not a bug**. This is the less dramatic of the two answers and it is the one the measurement gives.
+
+    **Scoping question does not mean small.** The mechanism is sound; its **operating envelope is far narrower than the architecture assumed**. Production queries arrive as sentences — that is what `/query` accepts and what SPEC-009 will send — and on sentences the branch is silent about half the time for citation-style questions and 93 % of the time for natural-language ones. The CLAUDE.md scoping note stands unchanged and must not be deleted by whichever option is chosen.
+
+    **What made pilot-2's questions fire, recorded because it is the finding underneath the finding.** Three of eighteen drafts had to be rewritten even while deliberately using corpus vocabulary, and the words that killed them are instructive: `must` (the AI Act says *shall*), `long`, `mean`, `principal … identify`. **`shall` itself kills any NIST query, because NIST says *should*.** The corpus is three documents in three registers — EU legislative *shall*, NIST advisory *should*, SEC first-person *we* — and under AND semantics **a query cannot satisfy two registers at once**, so a cross-document question is close to guaranteed to return nothing.
+
+    **The two discordant pairs are both `spans-two-sections`, both hybrid-only** (`anc-13`, `anc-14`: hybrid rank 1, vector-only absent from the top 8). Neither is evidence of anything on its own — `n_discordant = 2` is below the floor of 6, so `p = 0.5` and the comparison is **inconclusive**, exactly as the contract requires it to be reported.
+
+    #### The recomputed N
+
+    `r = 0.1429` → **`N = 6 / r = 42`** to reach the floor where rejection becomes *possible*. That is the number, and these three bounds travel with it:
+
+    | | Value |
+    |---|---|
+    | Point estimate | **N = 42** |
+    | 95 % Clopper-Pearson on `r` (2 of 14) | `[0.018, 0.428]` → **N ∈ [15, 338]** |
+    | For power 0.50 at θ = 0.8 (needs 12 discordant) | **N ≈ 84** |
+    | For power 0.80 at θ = 0.8 (needs 20 discordant) | **N ≈ 140** |
+
+    **Three caveats that decide how much weight N = 42 can carry.**
+    1. **42 buys the floor, not power.** At N = 42 the expected discordant count is exactly 6, where power is 0.26 at θ = 0.8. A set that can *possibly* reject is not a set that will.
+    2. **`r` was measured on pilot-2's recipe, which the pre-registration fixed as a best case for the branch.** Vocabulary was constrained to what the corpus contains. Real queries will not be, so **0.1429 is an upper estimate and N = 42 is correspondingly a lower bound** for any realistic query mix.
+    3. **The interval is enormous** — `N ∈ [15, 338]` from two discordant pairs. Reporting 42 without it would repeat the original sin of KD-12 at one tenth the size.
+
+    **prereg-2's `N = 120` is now inside the interval and close to the power-0.8 figure of 140**, which is a coincidence worth naming rather than a vindication: 120 was `6/0.05` with the 0.05 assumed, and it lands near a defensible number for a reason unrelated to how it was derived.
+
     #### Pilot-1 results — measured 2026-08-02, artifact `evals/pilot-1.json`
 
     14 questions, unchanged 358-chunk corpus, nothing fetched, nothing ingested.

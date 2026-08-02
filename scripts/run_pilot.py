@@ -31,15 +31,17 @@ from rag_qa.retrieval.service import Retriever
 from rag_qa.retrieval.types import RetrievedChunk
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-PILOT_SET = REPO_ROOT / "evals" / "retrieval_pilot.jsonl"
+PILOT_SET = REPO_ROOT / os.environ.get("RAG_QA_PILOT_SET", "evals/retrieval_pilot.jsonl")
 SMOKE_SET = REPO_ROOT / "evals" / "retrieval_smoke.jsonl"
-OUT = REPO_ROOT / "evals" / "pilot-1.json"
+OUT = REPO_ROOT / os.environ.get("RAG_QA_PILOT_OUT", "evals/pilot-1.json")
 K = 8
-PILOT_ID = "pilot-1"
+PILOT_ID = os.environ.get("RAG_QA_PILOT_ID", "pilot-1")
 # Derived from the exact binomial and alpha alone: 2 * 2**-n >= 0.05 for n <= 5.
 MIN_DISCORDANT_FOR_ANY_REJECTION = 6
 
 load_env()
+# The pilot set is parameterised so pilot-2 reuses the identical measurement
+# path: a second copy of this script would be a second chance to differ from it.
 CORPUS_URL = os.environ.get(
     "RAG_QA_CORPUS_DATABASE_URL", "postgresql+asyncpg://rag:rag@localhost:5432/rag"
 )

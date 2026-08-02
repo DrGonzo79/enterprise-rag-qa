@@ -198,3 +198,53 @@ def test_a_broken_registry_raises_rather_than_ingesting_everything(tmp_path: Pat
     broken = _corpus_dir(tmp_path, TWO_DOCS.replace('loader = "nist_pdf"', 'loader = "wat"', 1))
     with pytest.raises(RegistryError):
         discover(broken, IngestConfig())
+
+
+# --- the pilot set is excluded from the confirmatory set (SPEC-007 KD-12 am. 2) ---
+
+
+def test_the_pilot_set_shares_no_ids_with_any_other_eval_set() -> None:
+    """A pilot that sizes an analysis and then contributes cases to it is the
+    same substitution KD-12 amendment 1 exists to prevent, wearing a new name:
+    the cases that set the threshold would be among the cases judged against it,
+    and they were selected for being hard."""
+    import json
+
+    evals = REPO_ROOT / "evals"
+    pilot = {
+        json.loads(line)["id"]
+        for line in (evals / "retrieval_pilot.jsonl").read_text().splitlines()
+        if line.strip()
+    }
+    assert pilot, "the pilot set is empty"
+    for other in evals.glob("*.jsonl"):
+        if other.name == "retrieval_pilot.jsonl":
+            continue
+        ids = {json.loads(line)["id"] for line in other.read_text().splitlines() if line.strip()}
+        assert not (pilot & ids), f"pilot ids leaked into {other.name}: {sorted(pilot & ids)}"
+
+
+def test_every_pilot_case_records_why_its_label_is_what_it_is() -> None:
+    """The labels are machine-drafted and human-unverified, so the reasoning has
+    to travel with them — SPEC-004's binding note is that an auto-labelled
+    retrieval set measures the labeler. A reviewer cannot confirm a label whose
+    justification was never written down."""
+    import json
+
+    cases = [
+        json.loads(line)
+        for line in (REPO_ROOT / "evals" / "retrieval_pilot.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+    assert 12 <= len(cases) <= 15, f"pre-registered size is 12-15, found {len(cases)}"
+    for case in cases:
+        assert case["label_reason"].strip(), case["id"]
+        assert case["human_verified"] is False, (
+            f"{case['id']} claims human verification; only the owner may set that"
+        )
+        assert case["shape"] in {"wrong-lexical-match", "near-miss", "spans-two-sections"}, case[
+            "id"
+        ]
+        # The recipe forbids naming the section: a question carrying its own
+        # answer's citation is the lexical bullseye the pilot exists to avoid.
+        assert "Article" not in case["question"], f"{case['id']} names an article in the question"

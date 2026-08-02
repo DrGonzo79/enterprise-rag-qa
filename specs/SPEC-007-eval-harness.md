@@ -799,6 +799,28 @@ reader who has not opened the repository:
        review with their gold sections and the reason each was labelled as it
        was.
 
+    #### Pilot-1 results — measured 2026-08-02, artifact `evals/pilot-1.json`
+
+    14 questions, unchanged 358-chunk corpus, nothing fetched, nothing ingested.
+
+    | Set | n | recall@8 hybrid | recall@8 vector-only | discordant | `r` |
+    |---|---:|---:|---:|---:|---:|
+    | smoke (existing 26, article number in the question) | 26 | 1.000 | 1.000 | 0 | 0.00 |
+    | **pilot (hard, no expected section in hand)** | 14 | **0.714** | **0.714** | **0** | **0.00** |
+
+    **Result 1 — the binding constraint was the question set. `recall@8` de-saturated at 358 chunks, with no fetch.** 0.714 against 1.000, from changing nothing but how the questions were written. Four of fourteen missed entirely, and the misses are genuine rather than mislabelled: in three of the four the retriever returned the *predicted decoy* — `Article 49 — Registration` at rank 3 for the question whose answer is in Article 26(8), and `Item 1. Business › Competition` at rank 7 for the admission that lives in Risk Factors.
+
+    **Result 2 — the sizing calculation does not produce a number, and "N is large" is the wrong reading.** `r = 0`, so `N = 6 / r` is **undefined**, not big. What the pilot supports is a one-sided 95% **upper bound** on `r` and therefore a **lower bound** on `N`: `r ≤ 0.193` → `N ≥ 32` from the pilot alone; pooled with the smoke set (0 discordant in 40) `r ≤ 0.072` → `N ≥ 84`. **There is no upper bound and no finite N.** The pooled figure mixes a deliberately hard set with a deliberately easy one and is a sanity check, not a rate for either population.
+
+    **Result 3 — and this is the finding, because it explains the two zeros above by two different mechanisms.** The full-text branch returns **zero candidates** on 12 of 26 smoke questions and **13 of 14** pilot questions. Where it returns nothing, `hybrid` *is* `vector_only` — the pilot's top-8 was byte-identical on **14 of 14** questions. So:
+
+    - **On the smoke set** the branch does fire (14 of 26) and does reorder the top 8 (13 of 26), but `recall@8` is saturated, so reordering inside a top-8 that already contains the gold cannot create a discordant pair.
+    - **On the pilot set** `recall@8` is de-saturated, but the branch is silent, so the two arms are the same list and a discordant pair is *structurally impossible*.
+
+    **Neither set can produce a discordant pair, and neither reason is about corpus size.** No rung would have fixed either. This is why the pilot came before the fetch.
+
+    **What this does to prereg-2.** `assumed_discordance: 0.05` is falsified — measured 0 with an upper bound of 0.193 on the pilot recipe. `N = 120` is **not** supported and **not** refuted; it now sits inside `[32, ∞)`. **Authoring 94 more questions of either existing style would buy nothing**, because both styles are on a branch of the vise. The confirmatory set cannot be sized until Result 3 has an owner decision, and that is recorded here rather than worked around.
+
     **The exclusion is not a formality.** A pilot that measures the rate and then
     contributes its cases to the analysis it sized is the same substitution
     amendment 1 exists to prevent, wearing a new name: the cases that set the

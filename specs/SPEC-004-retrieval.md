@@ -250,6 +250,27 @@ None. Query embedding reuses `openai` (SPEC-003); everything else is SQLAlchemy 
 - **AC-10 (filters, push-down)** — With `filters.document_ids = (X,)`: every returned chunk has `document_id == X`; on a corpus where the top corpus-wide vector *and* FTS hits all live outside X and X holds ≥ k matching chunks, the filtered call still returns **exactly k** results (proves predicates run inside both branch queries, not post-fusion). Same shape asserted for `doc_types` and `source_uris`; combined filters AND together.
 - **AC-11 (ef_search GUC, review amendment 1)** — During a `retrieve()` call on a connection drawn fresh from the pool, `SHOW hnsw.ef_search` inside the vector branch's transaction reads 50; after the call, the same pooled connection outside any retrieval transaction reads the default (40) — `SET LOCAL` scoped correctly, no leakage across pool recycling.
 - **AC-12 (degenerate inputs, review amendment 3)** — (a) `retrieve("")` and `retrieve("   \n")` raise `ValueError` with **zero** embedding calls and zero SQL issued. (b) A query with no lexical match (`websearch_to_tsquery` yields no `@@` hits) returns k results in vector order without error, `fulltext_rank is None` on all. (c) A corpus/filter combination holding fewer than k chunks returns exactly that many, no padding, no error.
+
+  **PROPOSED AMENDMENT — not applied** *(raised 2026-08-02; CLAUDE.md rule 4: an amendment proposed unprompted stops at proposed)*. **AC-12(b) describes the branch's normal case as if it were a degenerate one. It is not degenerate — it is the majority.**
+
+  **Measured 2026-08-02 against the 358-chunk corpus.** `fulltext_search` returns **zero candidates** on **12 of the 26** smoke questions (46 %) and **13 of the 14** pilot questions (93 %). Where it returns nothing the fused result is the vector ranking unchanged: the pilot's top-8 was byte-identical to vector-only on **14 of 14** questions.
+
+  **The mechanism, verified rather than inferred.** `websearch_to_tsquery` ANDs every content term, and a question phrased as a sentence contributes conversational words the corpus does not contain. The repository's own flagship citation question is an instance:
+
+  ```
+  "What does Article 6(2) say about classifying high-risk AI systems?"
+    -> 'articl' & '6' & '2' & 'say' & 'classifi' & 'high-risk' & 'ai' & 'system'   ->  0 hits
+  "Article 6(2) high-risk"
+    -> 'articl' & '6' & '2' & 'high-risk'                                          -> 33 hits
+  ```
+
+  **`say` is the term that empties it.** No chunk contains the word, so the conjunction is unsatisfiable, and the branch built to nail exact citations returns nothing for the exact-citation query.
+
+  **Why this matters beyond a tuning detail.** The stack rationale in CLAUDE.md is *"regulatory text is dense with terms of art and exact citations … Embeddings blur exact terms; full-text search nails them."* On the queries a user actually types, that branch is silent about half the time and near-always for natural-language questions — so **the project's central retrieval claim is currently untested rather than false**, and the hybrid-vs-vector-only comparison Key decision 12 defers to SPEC-007 would, run today, compare one arm against itself (SPEC-007 Key decision 12, amendment 2, Result 3).
+
+  **What this would change, with the options ranked but not chosen.** All of them touch fusion, which is why none is applied here: (i) fall back to an OR-of-terms `tsquery` when the AND form yields no rows — smallest change, preserves precision when the strict form works; (ii) strip a stop-list of interrogative/conversational tokens before building the query — cheap but a hand-maintained list; (iii) `plainto_tsquery` — no better, it also ANDs; (iv) accept it and re-scope the hybrid claim to citation-shaped queries only, which is the honest do-nothing option and is not free, because it narrows a claim the README makes.
+
+  **Not applied**, because it changes approved retrieval behaviour on my own initiative, and because SPEC-004 Key decision 12 already reserves fusion changes for SPEC-007 with data. **This is the data.**
 - **AC-13 (baseline artifacts are produced deliberately, never as a test side effect — Key decision 14)** *(added 2026-07-26, third review)* — asserted on **exit codes**, since the guard's entire job is to fail a run:
   - **Gated:** `uv run pytest` writes nothing under `evals/baselines/` and does not modify `evals/retrieval_baseline.json`. The quality tier's *assertions still run* — only the disk write is skipped, and the measured table is printed instead. `uv run pytest --write-baseline` performs the write.
   - **Guarded:** a run that changes any guarded artifact without `--write-baseline` **exits non-zero** with a message naming the file, the change (created / modified / deleted), and the flag. Verified by staging a throwaway artifact, never by overwriting a committed one.

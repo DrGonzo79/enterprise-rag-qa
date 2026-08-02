@@ -799,6 +799,43 @@ reader who has not opened the repository:
        review with their gold sections and the reason each was labelled as it
        was.
 
+    ---
+
+    ### Amendment 3 — pilot-2, the fourth question shape, pre-registered before authoring *(2026-08-02, owner-asked)*
+
+    **Committed before a single pilot-2 question exists**, same discipline as amendment 2.
+
+    **Why this shape and not more of the other two.** Pilot-1's `r = 0` has two live explanations and the existing sets cannot separate them, because each occupies one branch of a vise: citation-style questions make the full-text branch fire but leave `recall@8` saturated, so no discordant pair is possible; natural-language questions de-saturate `recall@8` but silence the branch, so hybrid *is* vector-only and no discordant pair is possible. **The cell neither set occupies — hard *and* lexically anchored — is the only one where the branch can fire while recall is not saturated, and therefore the only shape that can produce a discordant pair at k = 8.**
+
+    ```
+    pilot_id:            pilot-2
+    preregistered_at:    2026-08-02
+    purpose:             DIAGNOSTIC first, sizing second.
+    size:                12–15 questions
+    corpus:              the existing 358 chunks, unchanged. Nothing is fetched.
+    k:                   8
+    cell:                hard AND lexically anchored
+    authoring_rule:      written from corpus text WITHOUT an expected section in
+                         hand; gold determined by verification after the question
+                         exists. Additionally: every question must contain at
+                         least one term of art or citation appearing VERBATIM in
+                         the corpus, and must avoid vocabulary the corpus does not
+                         contain, so that websearch_to_tsquery's conjunction is
+                         satisfiable.
+    target_shapes:       as pilot-1 — wrong-lexical-match, near-miss, spans-two-sections
+    excluded_from:       the confirmatory set, permanently and by id
+    ```
+
+    **The decision rule, fixed before the run, with all three outcomes named:**
+
+    | Outcome | Reading |
+    |---|---|
+    | The branch fires on a majority **and** discordant pairs appear | It works for its intended case. Pilot-1's 13/14 silence is a fact about **question style**, and SPEC-004 AC-12(b) is a **scoping** question, not a bug. |
+    | The branch returns zero **even here** | The ANDing is a **defect independent of question style**. AC-12(b) is a bug. |
+    | The branch fires **but discordance is still 0** | Neither explanation fits. **Report it as a third outcome rather than forcing it into either branch** — this row exists so that a surprise is recorded as a surprise. |
+
+    **The asymmetry, stated in advance because it governs how much the result is worth.** Pilot-2 is a **best case for the branch**, constructed by constraining vocabulary to what the corpus contains. **Failure here is decisive; success is weak** — it would show the branch works when queried in a register a user may never use, and the API accepts sentences. A "works" result therefore licenses no claim about production behaviour, only about the mechanism.
+
     #### Pilot-1 results — measured 2026-08-02, artifact `evals/pilot-1.json`
 
     14 questions, unchanged 358-chunk corpus, nothing fetched, nothing ingested.

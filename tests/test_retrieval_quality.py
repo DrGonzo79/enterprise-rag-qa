@@ -240,10 +240,17 @@ async def test_latency_against_the_real_corpus(
     caplog: pytest.LogCaptureFixture,
     write_baseline: bool,
 ) -> None:
-    """AC-8 local tier. The end-to-end p95 is dominated by the OpenAI embedding
-    round-trip (measured p95 843ms against 16ms of retrieval work), so the tight
-    assertion goes on the budget this code owns and the end-to-end distribution
-    is recorded. See SPEC-004 AC-8."""
+    """AC-8 local tier. End-to-end latency is dominated by the OpenAI embedding
+    round-trip (measured embed p95 483ms against 16ms of retrieval work), so the
+    assertion goes on the budget this code owns and **every end-to-end figure is
+    recorded, none asserted** (SPEC-004 AC-8, amendment 4 of 2026-08-02).
+
+    The p50 assertion this test used to carry failed three times in one afternoon
+    on provider weather, with no change to this repository. A test that goes red
+    on someone else's latency trains people to ignore it, and an ignored test is
+    worse than an absent one. The degraded window it was detecting is now watched
+    where degradation actually matters — `rag_qa_embed_latency_seconds` in
+    production, with its `absent()` pair (docs/observability.md)."""
     import logging
 
     retriever, _ = corpus_retriever
@@ -270,7 +277,11 @@ async def test_latency_against_the_real_corpus(
         return statistics.quantiles(values, n=20)[-1]
 
     stage_split = {
-        "embed_ms": {"p50": round(statistics.median(embed), 1), "p95": round(p95(embed), 1)},
+        "embed_ms": {
+            "p50": round(statistics.median(embed), 1),
+            "p95": round(p95(embed), 1),
+            "max": round(max(embed), 1),
+        },
         "retrieval_side_ms": {
             "p50": round(statistics.median(retrieval_side), 1),
             "p95": round(p95(retrieval_side), 1),
@@ -294,7 +305,11 @@ async def test_latency_against_the_real_corpus(
         f"retrieval-side p95 {p95(retrieval_side):.0f}ms exceeds the 150ms budget this code owns "
         f"(embedding round-trip excluded; embed p95 was {p95(embed):.0f}ms)"
     )
-    assert statistics.median(end_to_end) <= 800, (
-        f"end-to-end p50 {statistics.median(end_to_end):.0f}ms exceeds the 800ms target "
-        f"(embed p50 {statistics.median(embed):.0f}ms)"
+    # NO end-to-end assertion, by decision rather than by omission. Restoring one
+    # requires a provider-latency budget agreed separately -- SPEC-004 AC-8.
+    # Structural sanity only: the split must actually add up, or the numbers
+    # above are being read off the wrong fields.
+    assert statistics.median(end_to_end) >= statistics.median(embed), (
+        f"end-to-end p50 {statistics.median(end_to_end):.0f}ms is below embed p50 "
+        f"{statistics.median(embed):.0f}ms, which is impossible -- the stage split is misread"
     )

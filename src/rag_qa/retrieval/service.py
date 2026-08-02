@@ -10,6 +10,7 @@ import asyncio
 import hashlib
 import logging
 import time
+from collections.abc import Callable
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -49,6 +50,14 @@ class Retriever:
         self._session_factory = session_factory
         self._query_embedder = query_embedder
         self._reranker: Reranker = reranker if reranker is not None else NoopReranker()
+        # A plain callable, not a metrics object: the embedding round-trip is the
+        # dominant term in query latency and the one that moves the SPEC-006
+        # KD-10 shed threshold (amendment 5), so the API layer needs to see it --
+        # but retrieval importing `rag_qa.api` to say so would invert the
+        # dependency for a single float. Set after construction because the app
+        # is handed a retriever in some paths and builds one in others, and one
+        # wiring point beats two constructors that must agree.
+        self.on_embed_latency: Callable[[float], None] | None = None
 
     async def retrieve(
         self,
@@ -63,6 +72,13 @@ class Retriever:
         vectors = await self._query_embedder.embed([query])
         query_vector = vectors[0]
         embed_ms = _elapsed_ms(started)
+        if self.on_embed_latency is not None:
+            # Successful round-trips only, deliberately. A connection refused in
+            # 5 ms is also an `embed` outcome, and counting it here would pull
+            # p95 *down* -- masking the degradation this series exists to show.
+            # Failures are `rag_qa_errors_total`, which is the right series for
+            # them and a different question.
+            self.on_embed_latency(embed_ms / 1000.0)
 
         async def vector_branch() -> tuple[list[CandidateRow], float]:
             branch_started = time.perf_counter()

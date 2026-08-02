@@ -72,6 +72,8 @@ def create_app(
         embedding_client=embedding_client,  # type: ignore[arg-type]
     )
 
+    _wire_retrieval_metrics(state)
+
     app = FastAPI(title=TITLE, description=DESCRIPTION, lifespan=_lifespan)
     app.state.settings = resolved
     app.state.rag = state
@@ -149,6 +151,21 @@ def _build_dependencies(state: AppState) -> None:
         monthly_limit_usd=state.settings.monthly_budget_usd,
         refresh_seconds=state.settings.budget_refresh_seconds,
     )
+    _wire_retrieval_metrics(state)
+
+
+def _wire_retrieval_metrics(state: AppState) -> None:
+    """One wiring point for both paths that can produce a retriever.
+
+    `create_app` may be *handed* one and `lifespan` may *build* one, and a
+    constructor argument would have to be remembered at both. The series this
+    feeds is the only place a degraded embedding provider is visible (SPEC-004
+    AC-8 amendment 4), so a path that silently skips the wiring is the exact
+    failure it was added to prevent. A stub retriever performs no round-trip and
+    correctly reports nothing.
+    """
+    if isinstance(state.retriever, Retriever):
+        state.retriever.on_embed_latency = state.metrics.observe_embed_latency
 
 
 def _envelope(error: ApiError) -> JSONResponse:

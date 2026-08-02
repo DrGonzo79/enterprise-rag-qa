@@ -227,6 +227,52 @@ async def test_the_three_refusals_are_distinguishable(
     assert "rag_qa_budget_trips_total{ceiling=" not in shed_body
 
 
+async def test_the_embedding_round_trip_is_timed_separately_from_the_request(
+    session_factory: async_sessionmaker[AsyncSession],
+    seeded_corpus: SeededCorpus,
+) -> None:
+    """SPEC-004 AC-8 amendment 4 withdrew the only assertion that could see a
+    degraded embedding provider. This series is what replaced it, so it has to
+    be *populated by a real retrieval*, not merely declared.
+
+    Both halves matter and they fail differently. The series must exist from
+    process start, or its `absent()` pair means "quiet" instead of "not
+    reporting" and the alert pair is a decoration; and it must actually advance
+    when an embedding happens, or the threshold rule reads a permanently empty
+    histogram and never fires.
+    """
+    fresh = build_app(Retriever(session_factory, StubQueryEmbedder()), session_factory=None)
+    before = (await get(fresh, "/metrics", key=ADMIN_KEY)).text
+    assert "rag_qa_embed_latency_seconds_count 0" in before, (
+        "the series must be emitted from zero, or absent() cannot distinguish a "
+        "replica that is quiet from one that has stopped reporting"
+    )
+
+    app = build_app(
+        Retriever(session_factory, StubQueryEmbedder()), session_factory=session_factory
+    )
+    for _ in range(3):
+        await post(app, "/query", {"question": "quarklebit"})
+
+    body = (await get(app, "/metrics", key=ADMIN_KEY)).text
+    assert "rag_qa_embed_latency_seconds_count 3" in body
+    # A stub embedder returns in microseconds, so every observation lands in the
+    # first bucket -- which is what makes a *rising* p95 mean something.
+    assert 'rag_qa_embed_latency_seconds_bucket{le="0.05"} 3' in body
+
+
+async def test_a_retriever_that_does_not_embed_reports_no_embedding_latency() -> None:
+    """The wiring is `isinstance`-gated, and the gate has to be the right way
+    round: a stub that performs no round-trip must leave the series at zero
+    rather than contributing a fabricated sub-millisecond observation that would
+    drag a production p95 down."""
+    app = build_app(StubRetriever())
+    await post(app, "/query", QUESTION)
+    body = (await get(app, "/metrics", key=ADMIN_KEY)).text
+    assert "rag_qa_embed_latency_seconds_count 0" in body
+    assert "rag_qa_query_latency_seconds_count 1" in body
+
+
 async def test_budget_headroom_is_published_only_when_a_ceiling_exists(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:

@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.pool import NullPool
 
 from baseline_guard import snapshot, violations
+from embedding_ledger import EmbeddingLedger, install, report, resolve_ceiling
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -82,12 +83,38 @@ def write_baseline(request: pytest.FixtureRequest) -> bool:
     return bool(request.config.getoption("--write-baseline"))
 
 
+# --- embedding spend ledger (SPEC-003 AC-14) ---------------------------------
+#
+# Real embedding calls are real charges that reach no ledger and no ceiling
+# (SPEC-006 KD-16's invoice clause). This prices them, attributes them to the
+# test that made them, and stops the run at a ceiling — so a loop in a test is a
+# red build rather than an invoice line nobody can explain.
+
+_embedding_ledger = EmbeddingLedger(ceiling_usd=resolve_ceiling())
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    install(_embedding_ledger)
+
+
+def pytest_runtest_setup(item: pytest.Item) -> None:
+    _embedding_ledger.current_test = item.nodeid
+
+
 def pytest_sessionstart(session: pytest.Session) -> None:
     global _baseline_snapshot
     _baseline_snapshot = snapshot(REPO_ROOT)
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    reporter = session.config.pluginmanager.get_plugin("terminalreporter")
+
+    spend = report(_embedding_ledger)
+    if spend and reporter is not None:
+        reporter.section("EMBEDDING SPEND", bold=True)
+        for line in spend:
+            reporter.line(f"  {line}")
+
     problems = violations(
         _baseline_snapshot,
         snapshot(REPO_ROOT),
@@ -96,7 +123,6 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     if not problems:
         return
 
-    reporter = session.config.pluginmanager.get_plugin("terminalreporter")
     if reporter is not None:
         reporter.section("BASELINE GUARD FAILED", red=True, bold=True)
         for problem in problems:

@@ -136,6 +136,7 @@ in-process; `query_log` is the authoritative ledger, offline.
 |---|---|
 | `rag_qa_requests_total` | Traffic, by route template and status |
 | `rag_qa_query_latency_seconds` | End-to-end `/query` distribution |
+| `rag_qa_embed_latency_seconds` | The query-embedding round-trip alone — the term that dominates the one above, and the only one this code does not own |
 | `rag_qa_verdicts_total` | How often the model answers, declines, or is truncated |
 | `rag_qa_prompt_tokens_total`, `rag_qa_completion_tokens_total` | Token volume |
 | `rag_qa_cost_usd_total` | Spend since process start |
@@ -195,10 +196,28 @@ absent(rag_qa_budget_pressure_total)
 rag_qa_budget_reserved_usd >= min by (ceiling) (rag_qa_budget_remaining_usd)
 absent(rag_qa_budget_reserved_usd)
 
+# The embedding provider has entered a degraded window. 2s is chosen from
+# measurement, not taste: the worst p95 across two measurement dates was 843ms,
+# and the degraded window that motivated this rule ran at a p50 of 4517ms. The
+# threshold sits between them, so it fires on the condition observed and on
+# nothing that has ever been normal.
+histogram_quantile(0.95, sum by (le) (rate(rag_qa_embed_latency_seconds_bucket[15m]))) > 2
+# ...and, separately, no embedding is being timed at all. Emitted from zero, so
+# this pair says something true on a replica that has served no traffic.
+absent(rag_qa_embed_latency_seconds_count)
+
 # Telemetry itself is failing. Best-effort by construction (see below), so any
 # non-zero rate is worth looking at rather than a threshold.
 increase(rag_qa_telemetry_failures_total[15m]) > 0
 ```
+
+**Why the embedding round-trip gets its own series, when `rag_qa_query_latency_seconds` already exists.** It is ~94% of query latency at the median and it is the one term this repository cannot fix, so folding it into the end-to-end histogram makes every latency conversation ambiguous between "the code regressed" and "the provider is having an afternoon". Those need different responses and one of them needs none. Measured 2026-08-02: embed p50 192 ms, p95 483 ms, **max 3680 ms** — against a retrieval-side p95 of 16 ms measured 2026-07-26.
+
+**It replaces a test, and that is the point.** SPEC-004 AC-8 used to assert end-to-end p50 ≤ 800 ms against the real corpus. That assertion went red three times in one afternoon on provider latency with no change to this repository, and it was withdrawn (SPEC-004 AC-8, amendment 4). Withdrawing it without this series would have taken the *only* place a degraded window was visible and replaced it with nothing — so the signal moved to where degradation has a consequence rather than where it has none.
+
+**The consequence, which is why this is worth paging on rather than merely graphing.** SPEC-006 Key decision 10's semaphore is held across the embedding round-trip. Four slots at the normal p50 turn over in ~208 ms — about **19 req/s** before requests start shedding. In a degraded window at 4.5 s they turn over in ~4.5 s — about **0.9 req/s**, a **20× drop in the shed threshold caused entirely by provider latency**, with the surplus arriving as `overloaded` 503s. Expect `rag_qa_requests_shed_total` to climb with this series and *not* with traffic; that combination is the fingerprint. The SSE heartbeat is unaffected — 15 s comfortably covers a 4.5 s embed.
+
+**Only successful round-trips are timed.** A connection refused in 5 ms is also an outcome of `embed`, and counting it here would pull p95 *down* — masking the degradation the series exists to show. Failures belong to `rag_qa_errors_total`, which answers a different question.
 
 **`remaining` means money spent; `reserved` means money claimed — and they are
 two series on purpose.** Every request debits its worst-case cost before the

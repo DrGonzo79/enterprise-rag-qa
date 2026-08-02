@@ -34,6 +34,16 @@ class Metrics:
         self.latency_buckets: Counter[float] = Counter()
         self.latency_count = 0
         self.latency_sum = 0.0
+        # The embedding round-trip, separately from the request it is part of.
+        # SPEC-004 AC-8 amendment 4 withdrew the end-to-end p50 assertion because
+        # it was a bound on a third party's latency; the degraded windows that
+        # assertion was accidentally detecting are real and have a consequence
+        # here (SPEC-006 KD-10 amendment 5: a 20x drop in the shed threshold), so
+        # they are watched where they can be acted on instead. Emitted from
+        # process start so `absent()` on it means "not reporting", never "quiet".
+        self.embed_latency_buckets: Counter[float] = Counter()
+        self.embed_latency_count = 0
+        self.embed_latency_sum = 0.0
         self.prompt_tokens = 0
         self.completion_tokens = 0
         self.cost_usd = Decimal("0")
@@ -69,6 +79,15 @@ class Metrics:
         for bound in LATENCY_BUCKETS_SECONDS:
             if seconds <= bound:
                 self.latency_buckets[bound] += 1
+
+    def observe_embed_latency(self, seconds: float) -> None:
+        """One query-embedding round-trip. Called from SPEC-004's `Retriever`
+        through a plain callable, so retrieval never imports the API layer."""
+        self.embed_latency_count += 1
+        self.embed_latency_sum += seconds
+        for bound in LATENCY_BUCKETS_SECONDS:
+            if seconds <= bound:
+                self.embed_latency_buckets[bound] += 1
 
     def observe_error(self, code: str) -> None:
         """`spec_for` rather than a bare increment: a code with no registry entry
@@ -131,6 +150,18 @@ class Metrics:
             f'rag_qa_query_latency_seconds_bucket{{le="+Inf"}} {self.latency_count}',
             f"rag_qa_query_latency_seconds_sum {self.latency_sum:.6f}",
             f"rag_qa_query_latency_seconds_count {self.latency_count}",
+            "# HELP rag_qa_embed_latency_seconds Query-embedding provider round-trip.",
+            "# TYPE rag_qa_embed_latency_seconds histogram",
+        ]
+        for bound in LATENCY_BUCKETS_SECONDS:
+            lines.append(
+                f'rag_qa_embed_latency_seconds_bucket{{le="{bound}"}} '
+                f"{self.embed_latency_buckets[bound]}"
+            )
+        lines += [
+            f'rag_qa_embed_latency_seconds_bucket{{le="+Inf"}} {self.embed_latency_count}',
+            f"rag_qa_embed_latency_seconds_sum {self.embed_latency_sum:.6f}",
+            f"rag_qa_embed_latency_seconds_count {self.embed_latency_count}",
             "# HELP rag_qa_verdicts_total Answers by verdict (refusal is a success).",
             "# TYPE rag_qa_verdicts_total counter",
         ]

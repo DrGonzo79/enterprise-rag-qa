@@ -361,6 +361,28 @@ None. Query embedding reuses `openai` (SPEC-003); everything else is SQLAlchemy 
 
   **Nothing weights on it, and a test asserts that fusion output is byte-identical with the flag set either way.** When SPEC-007 settles fusion with data, this field **is** the data — the question "should a fallback candidate be worth 1/61?" cannot be answered by a system that does not record which candidates were fallbacks.
 
+  #### Measured after pruning — 2026-08-02
+
+  Smoke set, 26 questions, hybrid arm. The middle column is the same code with `MAX_LEXEME_CHUNK_FRACTION` disabled, so the last two columns isolate pruning alone. **Vector-only is unchanged in every column** (`recall@1` 0.885, `@3` 1.000, `@8` 1.000).
+
+  | Hybrid | Before the fallback | Fallback, no pruning | **Fallback + pruning** |
+  |---|---:|---:|---:|
+  | `recall@1` overall | 0.769 | 0.500 | **0.538** |
+  | `recall@1` citation | 0.929 | 0.714 | **0.786** |
+  | `recall@1` paraphrase | 0.583 | 0.250 | **0.250** |
+  | `recall@3` overall | 1.000 | 0.962 | **0.923** |
+  | `recall@8` overall | 1.000 | 1.000 | **0.962** |
+  | `MRR@8` overall | 0.865 | 0.706 | **0.708** |
+  | discordant (b / c) | 0 / 0 | 0 / 0 | **0 / 1** |
+
+  **Pruning helped where it was predicted to help, by roughly the predicted amount: `recall@1` citation 0.714 → 0.786, overall 0.500 → 0.538.** It did not close the gap — vector-only remains at 0.857 and 0.885 — which is the arithmetic above behaving exactly as written down beforehand. A better chunk now wins the `1/61`; `1/61` is still what winning is worth.
+
+  **And pruning made `recall@3` and `recall@8` worse, which was not predicted.** `recall@8` fell 1.000 → 0.962: one paraphrase question (`par-11`, patents and proprietary rights) lost its gold chunk from the top 8 entirely. Mechanism: pruning dropped `protect` (109 of 358 chunks, 30 %), which changed *which* 50 candidates the fallback returned and their order, and the gold fell out of a set the unpruned fallback had retained. **Pruning is not monotonically beneficial — it changes the candidate set, and a lexeme with little discriminating power can still be the one holding a particular gold chunk in the pool.**
+
+  **This is CLAUDE.md rule 9 being violated one commit after it was written, and it is recorded as that rather than as a surprise.** The prediction above enumerated `recall@1` and nothing else. Rule 9 says: name the mechanism, then enumerate the metrics it could appear in, or declare the falsifier metric-independent. Pruning's mechanism is *changing the candidate set*, which can move any rank-sensitive metric in either direction, and the correct falsifier was metric-independent from the start.
+
+  **Net position, stated without rounding in either direction.** Against the pre-fallback baseline the hybrid arm is worse at every k on the smoke set and better on the two pilot sets; against the no-pruning intermediate it is better at k = 1 and worse at k = 3 and k = 8. **The structural cause is untouched and was always going to be**: RRF cannot tell a confident branch from a desperate one. AC-6 stays `xfail(strict=True)` — the assertion still fails at 0.786 against 0.857 — and the trigger written into the marker is unchanged: it comes off when SPEC-007 Key decision 12 settles fusion with data, not when a threshold is nudged.
+
 
 
 - **AC-13 (baseline artifacts are produced deliberately, never as a test side effect — Key decision 14)** *(added 2026-07-26, third review)* — asserted on **exit codes**, since the guard's entire job is to fail a run:

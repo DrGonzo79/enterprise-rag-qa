@@ -896,6 +896,23 @@ reader who has not opened the repository:
 
     **The two `r` values disagree and that is the finding, not a nuisance: 0.2857 (pilot-1) against 0.1429 (pilot-2).** `r` is a property of the *question recipe*, exactly as amendment 2 pre-registered — it does not transfer between shapes, so a confirmatory set drawing on both would need its own measurement rather than either number. **No sizing is done here**, because prereg-2's `N` cannot be fixed while the mix of question shapes in the confirmatory set is undecided, and choosing the mix after seeing which one yields the larger `r` would be the substitution this key decision exists to prevent.
 
+    #### Both pilots re-run again after frequency pruning — 2026-08-02
+
+    Artifacts `evals/pilot-1-pruned.json`, `evals/pilot-2-pruned.json`.
+
+    | | pilot-1 fallback | pilot-1 **pruned** | pilot-2 fallback | pilot-2 **pruned** |
+    |---|---:|---:|---:|---:|
+    | `recall@8` hybrid | 0.857 | 0.857 | 1.000 | 1.000 |
+    | `recall@8` vector-only | 0.714 | 0.714 | 0.857 | 0.857 |
+    | b / c | 3 / 1 | 3 / 1 | 2 / 0 | 2 / 0 |
+    | `r` | 0.2857 | 0.2857 | 0.1429 | 0.1429 |
+
+    **Both pilots are unchanged by pruning at k = 8.** Their questions are short and their lexemes are mostly discriminative, so few terms cross the 25 % threshold and the candidate sets barely move. The smoke set, whose questions are longer and carry more common vocabulary, is where pruning acts — helping at k = 1 and hurting at k = 3 and k = 8 (SPEC-004 AC-12 amendment 6).
+
+    **`r` is unchanged on both sets: 0.2857 and 0.1429.** The two still disagree, still by recipe, and **no sizing is done** — for the same reason as before, and now with a second demonstration that `r` is a property of the question shape rather than of the system.
+
+    **What the smoke set gained is one discordant pair in the `c` cell** (vector-only succeeds, hybrid fails) — the cell SPEC-004's failure mode predicted, now populated on a third set. Across smoke + pilot-1 + pilot-2 the totals are b = 5, c = 2, `n_discordant` = 7. **That is above the floor of 6 for the first time**, and it is **not** reported as a result: the three sets have different authoring recipes and pooling them would be exactly the shape-mix selection this key decision refuses to make after seeing the numbers.
+
     #### Pilot-1 results — measured 2026-08-02, artifact `evals/pilot-1.json`
 
     14 questions, unchanged 358-chunk corpus, nothing fetched, nothing ingested.

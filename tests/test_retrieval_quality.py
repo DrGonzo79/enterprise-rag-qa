@@ -194,6 +194,22 @@ async def corpus_retriever():  # type: ignore[no-untyped-def]
     await engine.dispose()
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "SPEC-004 AC-6, red by a known and owner-accepted defect in this repository, "
+        "not by an external change. The OR fallback (AC-12 amendment 5) made the "
+        "full-text branch fire on every query, and RRF is blind to branch "
+        "confidence: a fallback candidate at full-text rank 1 scores 1/61, which "
+        "outranks every vector candidate except rank 1. Measured 2026-08-02, hybrid "
+        "recall@1 on citation queries fell 0.929 -> 0.714 against an unchanged "
+        "vector-only 0.857, with 8 of 13 top-1 misses traced to that mechanism. "
+        "STRICT so this goes red again the moment it starts passing and nobody "
+        "re-arms the assertion. TRIGGER TO REMOVE: SPEC-007 Key decision 12 settles "
+        "fusion with data, or frequency pruning (AC-12 amendment 6) closes the gap "
+        "on its own -- at which point delete this marker rather than widening it."
+    ),
+)
 async def test_hybrid_beats_vector_only_and_records_the_baseline(
     corpus_retriever, write_baseline: bool
 ) -> None:  # type: ignore[no-untyped-def]

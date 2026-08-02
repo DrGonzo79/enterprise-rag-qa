@@ -117,13 +117,11 @@ async def test_the_fallback_still_pushes_filters_into_the_query(
     would do so only on the queries that reach the fallback, so it would look
     correct in every test that used a matching query."""
     filing_id = seeded_corpus.document_ids["filing"]
-    # `passage` appears in all three synthetic documents and `say` in none, so
-    # the conjunction is empty and the fallback reaches every document -- which
-    # is what makes the filter's effect observable.
-    # A pool wider than the default, because the regulation's 199 filler chunks
-    # otherwise fill all 50 slots on rank alone and the unfiltered call would
-    # span one document -- making the comparison below vacuous rather than wrong.
-    sentence = "What does the passage say about quarklebit obligations?"
+    # Every lexeme here survives frequency pruning: `passage` and `obligations`
+    # are in ~199 of 215 chunks and would be dropped, leaving one document.
+    # `quarklebit` (1 chunk), `manufacturing` (filing) and `govern` (standard)
+    # are rare enough to survive and reach three documents between them.
+    sentence = "What does manufacturing say about quarklebit govern?"
     async with session_factory() as session:
         unfiltered = await fulltext_search(session, sentence, pool=250)
         filtered = await fulltext_search(
@@ -138,6 +136,58 @@ async def test_the_fallback_still_pushes_filters_into_the_query(
     )
     assert filtered, "the filtered fallback returned nothing"
     assert {row.document_id for row in filtered} == {filing_id}
+
+
+# --- amendment 6: frequency pruning and fallback provenance -------------------
+
+
+async def test_a_corpus_common_lexeme_is_pruned_from_the_fallback(
+    session_factory: async_sessionmaker[AsyncSession], seeded_corpus: SeededCorpus
+) -> None:
+    """`passage` is in 213 of 215 chunks; `quarklebit` is in one. Without pruning
+    the OR set returns essentially the whole corpus and the rare term is buried.
+    Pruning is what makes the fallback's ranking mean something."""
+    async with session_factory() as session:
+        common_only = await session.execute(
+            text("SELECT count(*) FROM chunks WHERE tsv @@ 'passag'::tsquery")
+        )
+        assert common_only.scalar_one() > 0.25 * seeded_corpus.total_chunks, (
+            "premise: `passage` is above the pruning threshold"
+        )
+        rows = await fulltext_search(
+            session, "What does the passage say about quarklebit?", pool=250
+        )
+
+    # `say` is absent so the conjunction is empty; `passage` is pruned; only
+    # `quarklebit` survives, so exactly the chunk containing it comes back.
+    assert [row.text for row in rows] == [LEXICAL_ONLY_TEXT]
+
+
+async def test_a_query_of_only_common_lexemes_returns_nothing(
+    session_factory: async_sessionmaker[AsyncSession], seeded_corpus: SeededCorpus
+) -> None:
+    """Correct, not a regression. A query whose every term is corpus-common has
+    no lexical signal at all, and returning the resulting candidates would be
+    worse than returning none — AC-12(b) already defines empty as a valid
+    outcome that degrades fusion to vector order."""
+    async with session_factory() as session:
+        assert await fulltext_search(session, "passage obligations zzzabsent") == []
+
+
+async def test_fallback_rows_are_marked_and_conjunction_rows_are_not(
+    session_factory: async_sessionmaker[AsyncSession], seeded_corpus: SeededCorpus
+) -> None:
+    """The branch owes its caller `found by conjunction` versus `found by
+    fallback`. Recorded now so SPEC-007 KD-12 has the data when it settles
+    whether a fallback candidate should be worth 1/61."""
+    async with session_factory() as session:
+        conjunction = await fulltext_search(session, PROBE_QUERY)
+        fallback = await fulltext_search(
+            session, "What does the passage say about quarklebit?", pool=250
+        )
+
+    assert conjunction and all(not row.via_fallback for row in conjunction)
+    assert fallback and all(row.via_fallback for row in fallback)
 
 
 async def test_a_query_of_only_stop_words_is_empty_not_an_error(

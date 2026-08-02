@@ -1,0 +1,202 @@
+{
+  "pilot_id": "pilot-1-pruned",
+  "measured_at": "2026-08-02",
+  "git_sha": "98b6566a6f8d7c540ac85aff5363adcfad264dcf",
+  "corpus_chunks": 358,
+  "k": 8,
+  "excluded_from_confirmatory_set": true,
+  "case_ids": [
+    "pil-01",
+    "pil-02",
+    "pil-03",
+    "pil-04",
+    "pil-05",
+    "pil-06",
+    "pil-07",
+    "pil-08",
+    "pil-09",
+    "pil-10",
+    "pil-11",
+    "pil-12",
+    "pil-13",
+    "pil-14"
+  ],
+  "labels_human_verified": false,
+  "pilot": {
+    "set": "pilot (hard, authored without an expected section)",
+    "n": 14,
+    "recall_at_8_hybrid": 0.8571,
+    "recall_at_8_vector_only": 0.7143,
+    "hybrid_only": 3,
+    "vector_only": 1,
+    "both": 9,
+    "neither": 1,
+    "n_discordant": 4,
+    "r": 0.2857,
+    "p": 0.625,
+    "questions_with_no_fulltext_candidates": 0,
+    "questions_where_top_k_is_identical": 1
+  },
+  "smoke_comparison": {
+    "set": "smoke (existing 26, article number in the question)",
+    "n": 26,
+    "recall_at_8_hybrid": 0.9615,
+    "recall_at_8_vector_only": 1.0,
+    "hybrid_only": 0,
+    "vector_only": 1,
+    "both": 25,
+    "neither": 0,
+    "n_discordant": 1,
+    "r": 0.0385,
+    "p": 1.0,
+    "questions_with_no_fulltext_candidates": 0,
+    "questions_where_top_k_is_identical": 1
+  },
+  "sizing": {
+    "min_discordant_for_any_rejection": 6,
+    "r_measured": 0.2857,
+    "r_upper_95_pilot": 0.2857,
+    "r_upper_95_pooled": 0.125,
+    "pooled_n": 40,
+    "pooled_discordant": 5,
+    "N_required": 22,
+    "N_lower_bound_pilot": 21,
+    "N_lower_bound_pooled": 48,
+    "power_at_floor": {
+      "0.7": 0.118,
+      "0.75": 0.178,
+      "0.8": 0.262,
+      "0.9": 0.531
+    },
+    "note": "With r = 0 the sizing calculation N = 6/r is undefined rather than large. The bounds are one-sided 95% upper bounds on r and therefore LOWER bounds on N; the pilot places no upper bound on N at all. Pooling with the smoke set mixes a deliberately hard set with a deliberately easy one and is reported as a sanity check, not as a rate for either population."
+  },
+  "per_case": [
+    {
+      "id": "pil-01",
+      "shape": "wrong-lexical-match",
+      "hybrid_rank": null,
+      "vector_rank": 3,
+      "fulltext_candidates": 50,
+      "identical_top_k": false,
+      "top_section": "EU AI Act › CHAPTER III › SECTION 2 › Article 14 — Human oversight"
+    },
+    {
+      "id": "pil-02",
+      "shape": "wrong-lexical-match",
+      "hybrid_rank": 1,
+      "vector_rank": 1,
+      "fulltext_candidates": 1,
+      "identical_top_k": true,
+      "top_section": "EU AI Act › CHAPTER XII › Article 101 — Fines for providers of general-purpose AI models"
+    },
+    {
+      "id": "pil-03",
+      "shape": "wrong-lexical-match",
+      "hybrid_rank": 5,
+      "vector_rank": 5,
+      "fulltext_candidates": 50,
+      "identical_top_k": false,
+      "top_section": "EU AI Act › CHAPTER VI › Article 57 — AI regulatory sandboxes"
+    },
+    {
+      "id": "pil-04",
+      "shape": "wrong-lexical-match",
+      "hybrid_rank": 7,
+      "vector_rank": 3,
+      "fulltext_candidates": 50,
+      "identical_top_k": false,
+      "top_section": "EU AI Act › Preamble › Recital (123) – Recital (127)"
+    },
+    {
+      "id": "pil-05",
+      "shape": "wrong-lexical-match",
+      "hybrid_rank": null,
+      "vector_rank": null,
+      "fulltext_candidates": 50,
+      "identical_top_k": false,
+      "top_section": "NVIDIA 10-K FY2026 › Item 15. Exhibits and Financial Statement Schedules › Notes to the Consolidated Financial Statements"
+    },
+    {
+      "id": "pil-06",
+      "shape": "near-miss",
+      "hybrid_rank": 3,
+      "vector_rank": 1,
+      "fulltext_candidates": 47,
+      "identical_top_k": false,
+      "top_section": "EU AI Act › Preamble › Recital (69) – Recital (71)"
+    },
+    {
+      "id": "pil-07",
+      "shape": "near-miss",
+      "hybrid_rank": 2,
+      "vector_rank": 1,
+      "fulltext_candidates": 50,
+      "identical_top_k": false,
+      "top_section": "NIST AI RMF 1.0 › Framing Risk › Challenges for AI Risk Management › Risk Prioritization – Organizational Integration and Management of Risk"
+    },
+    {
+      "id": "pil-08",
+      "shape": "near-miss",
+      "hybrid_rank": 7,
+      "vector_rank": null,
+      "fulltext_candidates": 50,
+      "identical_top_k": false,
+      "top_section": "EU AI Act › Preamble › Recital (104) – Recital (105)"
+    },
+    {
+      "id": "pil-09",
+      "shape": "near-miss",
+      "hybrid_rank": 2,
+      "vector_rank": null,
+      "fulltext_candidates": 50,
+      "identical_top_k": false,
+      "top_section": "NIST AI RMF 1.0 › AI RMF Core › Govern"
+    },
+    {
+      "id": "pil-10",
+      "shape": "near-miss",
+      "hybrid_rank": 1,
+      "vector_rank": 1,
+      "fulltext_candidates": 50,
+      "identical_top_k": false,
+      "top_section": "EU AI Act › CHAPTER III › SECTION 5 › Article 46 — Derogation from conformity assessment procedure"
+    },
+    {
+      "id": "pil-11",
+      "shape": "wrong-lexical-match",
+      "hybrid_rank": 1,
+      "vector_rank": 3,
+      "fulltext_candidates": 50,
+      "identical_top_k": false,
+      "top_section": "NVIDIA 10-K FY2026 › Item 7. Management's Discussion and Analysis of Financial Condition and Results of Operations › Income Taxes – Liquidity and Capital Resources"
+    },
+    {
+      "id": "pil-12",
+      "shape": "spans-two-sections",
+      "hybrid_rank": 4,
+      "vector_rank": null,
+      "fulltext_candidates": 50,
+      "identical_top_k": false,
+      "top_section": "EU AI Act › Preamble › Recital (112) – Recital (114)"
+    },
+    {
+      "id": "pil-13",
+      "shape": "spans-two-sections",
+      "hybrid_rank": 1,
+      "vector_rank": 1,
+      "fulltext_candidates": 50,
+      "identical_top_k": false,
+      "top_section": "NIST AI RMF 1.0 › AI Risks and Trustworthiness › Safe – Secure and Resilient"
+    },
+    {
+      "id": "pil-14",
+      "shape": "spans-two-sections",
+      "hybrid_rank": 2,
+      "vector_rank": 1,
+      "fulltext_candidates": 50,
+      "identical_top_k": false,
+      "top_section": "NVIDIA 10-K FY2026 › Item 7. Management's Discussion and Analysis of Financial Condition and Results of Operations › Non-Marketable Equity Securities – Results of Operations"
+    }
+  ],
+  "not_a_claim": "No figure here is a quality result. n=14 sizes an instrument; it does not measure retrieval."
+}

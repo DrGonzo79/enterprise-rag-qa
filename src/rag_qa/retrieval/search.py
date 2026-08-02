@@ -5,7 +5,17 @@ import uuid
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import ColumnElement, Row, cast, func, literal, literal_column, select, text
+from sqlalchemy import (
+    ColumnElement,
+    Row,
+    String,
+    cast,
+    func,
+    literal,
+    literal_column,
+    select,
+    text,
+)
 from sqlalchemy.dialects.postgresql import TSQUERY
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,6 +23,13 @@ from rag_qa.db.models import Chunk, Document
 from rag_qa.retrieval.types import RetrievalFilters
 
 CANDIDATE_POOL = 50
+# A lexeme present in more than this fraction of chunks is dropped from the OR
+# fallback (SPEC-004 AC-12 amendment 6). At a quarter of the corpus a term can
+# partition it 1:3 at best -- under one bit -- while contributing more OR
+# candidates than any discriminative term. Chosen from that arithmetic and
+# deliberately NOT tuned against a retrieval metric; tuning belongs to SPEC-007
+# KD-12, and tuning it here would be picking the implementation that wins.
+MAX_LEXEME_CHUNK_FRACTION = 0.25
 
 
 @dataclass(frozen=True)
@@ -27,6 +44,13 @@ class CandidateRow:
     section_path: str
     ordinal: int
     text: str
+    # Whether this row came from the OR fallback rather than the conjunction
+    # (SPEC-004 AC-12 amendment 5/6). RECORDED, NEVER FUSED: nothing weights on
+    # it, and `rrf_fuse` is asserted to produce identical output either way. It
+    # exists so SPEC-007 KD-12 can answer "should a fallback candidate be worth
+    # 1/61?" -- a question no system that fails to record the distinction can
+    # even pose.
+    via_fallback: bool = False
 
 
 _COLUMNS = (
@@ -54,7 +78,7 @@ def _filter_conditions(filters: RetrievalFilters | None) -> list[ColumnElement[b
     return conditions
 
 
-def _candidate(row: Row[Any]) -> CandidateRow:
+def _candidate(row: Row[Any], *, via_fallback: bool = False) -> CandidateRow:
     return CandidateRow(
         chunk_id=row[0],
         document_id=row[1],
@@ -64,6 +88,7 @@ def _candidate(row: Row[Any]) -> CandidateRow:
         section_path=row[5],
         ordinal=row[6],
         text=row[7],
+        via_fallback=via_fallback,
     )
 
 
@@ -122,11 +147,38 @@ async def fulltext_search(
     rows = await _search_with(session, func.websearch_to_tsquery("english", query), filters, pool)
     if rows:
         return rows
-    return await _search_with(session, _any_lexeme_tsquery(query), filters, pool)
+    return await _search_with(session, _any_lexeme_tsquery(query), filters, pool, via_fallback=True)
+
+
+def _discriminative_lexemes(query: str) -> ColumnElement[Any]:
+    """The query's lexemes, minus those too common in this corpus to discriminate.
+
+    **Computed, never maintained.** The frequency is counted against the indexed
+    corpus at query time, so it adapts as documents are added and there is no
+    list to keep current — which is the property a hand-maintained stop-list
+    lacks, and the reason this is the successor to the fallback rather than the
+    rejected option (ii) under another name.
+    """
+    lexeme: ColumnElement[str] = literal_column("lexeme", String)
+    total = select(func.count()).select_from(Chunk).scalar_subquery()
+    occurrences = (
+        select(func.count())
+        .select_from(Chunk)
+        .where(Chunk.tsv.op("@@")(cast(func.quote_literal(lexeme), TSQUERY)))
+        .scalar_subquery()
+    )
+    return (
+        select(func.string_agg(func.quote_literal(lexeme), literal(" | ")))
+        .select_from(
+            func.unnest(func.tsvector_to_array(func.to_tsvector("english", query))).alias("lexeme")
+        )
+        .where(occurrences <= func.ceil(total * literal(MAX_LEXEME_CHUNK_FRACTION)))
+        .scalar_subquery()
+    )
 
 
 def _any_lexeme_tsquery(query: str) -> ColumnElement[Any]:
-    """The query's lexemes OR-ed together.
+    """The query's discriminative lexemes OR-ed together.
 
     Built from `to_tsvector` rather than by splitting the string, so stemming,
     stop-word removal and compound handling stay identical to the AND form and
@@ -141,16 +193,13 @@ def _any_lexeme_tsquery(query: str) -> ColumnElement[Any]:
     and because the failure it prevents would be silent — a bare concatenation of
     `a'b | c` casts without error and yields a *different* query.
     """
-    lexemes = func.unnest(func.tsvector_to_array(func.to_tsvector("english", query)))
-    joined = (
-        select(func.string_agg(func.quote_literal(literal_column("lexeme")), literal(" | ")))
-        .select_from(lexemes.alias("lexeme"))
-        .scalar_subquery()
-    )
-    # A query of nothing but stop words yields no lexemes and therefore NULL,
-    # which casts to a NULL tsquery and matches nothing -- the same defined
-    # empty outcome as before, not an error.
-    return cast(joined, TSQUERY)
+    # NULL when the query is all stop words, and NULL when every lexeme it has
+    # is too common to discriminate. Both cast to a NULL tsquery and match
+    # nothing -- a defined empty outcome that degrades fusion to vector order,
+    # not an error. The second case is correct rather than a regression: a query
+    # whose every term is corpus-common has no lexical signal, and returning the
+    # resulting candidates would be worse than returning none.
+    return cast(_discriminative_lexemes(query), TSQUERY)
 
 
 async def _search_with(
@@ -158,6 +207,8 @@ async def _search_with(
     ts_query: ColumnElement[Any],
     filters: RetrievalFilters | None,
     pool: int,
+    *,
+    via_fallback: bool = False,
 ) -> list[CandidateRow]:
     rank = func.ts_rank_cd(Chunk.tsv, ts_query)
     stmt = (
@@ -168,7 +219,7 @@ async def _search_with(
         .limit(pool)
     )
     result = await session.execute(stmt)
-    return [_candidate(row) for row in result.all()]
+    return [_candidate(row, via_fallback=via_fallback) for row in result.all()]
 
 
 async def fetch_embedder_identities(session: AsyncSession) -> set[str]:

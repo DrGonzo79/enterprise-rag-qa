@@ -139,3 +139,24 @@ def test_distinct_section_rate_empty_is_zero() -> None:
 def test_distinct_section_rate_all_unique_is_one() -> None:
     chunks = rrf_fuse([_row(f"r{i}", f"Doc › S{i}") for i in range(4)], [])
     assert distinct_section_rate(chunks) == 1.0
+
+
+def test_fusion_is_blind_to_fallback_provenance() -> None:
+    """`via_fallback` is RECORDED, NEVER FUSED (SPEC-004 AC-12 amendment 6).
+
+    Nothing may weight on it yet: whether a fallback candidate should be worth
+    1/61 is SPEC-007 Key decision 12's question, and answering it inside the
+    fusion rule would be exactly the reservation KD-12 holds. This asserts the
+    output is identical with the flag set either way, so a future weighting
+    cannot be introduced without this test going red and being argued for.
+    """
+    import dataclasses
+
+    vector = [_row(f"v{i}") for i in range(3)]
+    fulltext = [_row(f"v{i}") for i in (5, 1, 6)]
+    plain = rrf_fuse(vector, fulltext)
+    marked = rrf_fuse(vector, [dataclasses.replace(row, via_fallback=True) for row in fulltext])
+
+    assert [(c.chunk_id, c.score, c.vector_rank, c.fulltext_rank) for c in plain] == [
+        (c.chunk_id, c.score, c.vector_rank, c.fulltext_rank) for c in marked
+    ]

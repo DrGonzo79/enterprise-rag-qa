@@ -148,6 +148,43 @@ uv run python -m rag_qa.evals.report <run-id>                  # render only
 }
 ```
 
+**A comparison figure** — the primary analysis, and it needs its own shape.
+Key decision 10 makes RRF-vs-vector-only the first job and Key decision 12
+pre-registers McNemar's exact test; the scalar figure above has nowhere to put a
+discordant count, a *p*, or which arm won, so a report echoing a pre-registered
+test could not carry that test's result. **The comparison would have been the one
+number in the report without a warrant** — the exact defect Key decision 1 exists
+to prevent, sitting on the primary analysis:
+
+```jsonc
+{
+  "kind": "comparison",
+  "metric": "recall@8",
+  "arms": {"hybrid": 0.9231, "vector_only": 0.8846},
+  "b": 18,                       // McNemar: hybrid succeeds, vector-only fails
+  "c": 7,                        // vector-only succeeds, hybrid fails
+  "n_discordant": 25,            // b + c; the pre-registered informativeness gate
+  "n": 130,                      // every paired case, discordant or not
+  "test": "mcnemar-exact",       // pinned by the preregistration block
+  "sidedness": "two-sided",
+  "alpha": 0.05,
+  "p": 0.0433,
+  "outcome": "hybrid",           // "hybrid" | "vector_only" | "inconclusive"
+  "corpus_chunks": 1180,
+  "git_sha": "…",
+  "prompt_version": "v1",
+  "claim": "On 130 paired questions, hybrid and vector-only disagreed on 25; hybrid won 18 of those (McNemar exact, two-sided, p = 0.043).",
+  "not_a_claim": "That hybrid retrieval is better in general, or by this margin on any other corpus."
+}
+```
+
+**`outcome` is `inconclusive` whenever `p >= alpha` or `n_discordant` is below
+the pre-registered threshold**, and `inconclusive` is a result rather than a
+missing one — SPEC-004 Key decision 12's whole correction was that a 2–1 split of
+three decided questions had been reported as a win. A comparison that cannot name
+an arm must say so in `outcome`, not omit the field and let the reader infer from
+`arms`.
+
 **The report carries its own methodology**, because SPEC-009 renders it to a
 reader who has not opened the repository:
 
@@ -158,7 +195,14 @@ reader who has not opened the repository:
     "summary": "50 questions authored from the source documents before retrieval was run…",
     "authoring": "single-author, not blind — see limitations",
     "limitations": ["…"],                  // KD-3's bound, rendered, not filed
-    "corpus": {"chunks": 1180, "documents": [...], "desaturated": true},
+    "corpus": {
+      "chunks": 1180, "documents": [...],
+      // DERIVED, not asserted: `desaturated` is computed from the measurement
+      // beside it against SPEC-003 AC-10's gate. A producer that simply declares
+      // itself de-saturated is grading its own prerequisite.
+      "recall_at_8_retrieval_set": 0.94,
+      "desaturated": true            // == (recall_at_8_retrieval_set < 1.000)
+    },
     "preregistration": {                   // KD-12, echoed verbatim from the spec
       "preregistered_at": "2026-08-02",
       "primary_metric": "recall@8", "k": 8,
@@ -170,8 +214,13 @@ reader who has not opened the repository:
       {"field": "…", "preregistered": "…", "actual": "…", "reason": "…"}
     ]
   },
-  "figures": [ /* the shape above */ ],
+  "figures": [ /* scalar and comparison shapes above */ ],
   "cost_usd": "0.4831",
+  // On the report, not only on each recording: a figure has to be reproducible
+  // from its own artifact, and the prompt that produced the answers is part of
+  // what produced the number.
+  "prompt_version": "v1",
+  "generator_identity": "anthropic:claude-sonnet-5",
   "run": {"id": "…", "git_sha": "…", "dirty_worktree": false, "created_at": "…"}
 }
 ```
@@ -316,14 +365,30 @@ reader who has not opened the repository:
      They are not to make the run interruptible. **This paragraph exists so that
      optimisation is rejected on sight rather than rediscovered.**
 
-6. **50 golden questions predates any power analysis, and is not defended here.**
-   SPEC-004 KD-12a says power comes from the retrieval-only set, not from the
-   golden set and not from more documents. So the golden set is sized for
-   *coverage of failure modes* — multi-source, citation-exact, paraphrase,
-   unanswerable, near-miss — and **the report must not quote a golden-set
-   difference between two configurations as significant.** Flagged: if the
-   intended use turns out to be config comparison, 50 is too few, and the honest
-   fix is a power calculation before authoring more, not after.
+6. **50 golden questions is sized for failure-mode coverage, and is explicitly
+   not sized for significance** *(restated 2026-08-02: the first version called
+   it "undefended", which was the wrong word — it has a job and a stated
+   non-job)*. SPEC-004 Key decision 12a routes statistical power to the
+   retrieval-only set; the golden set's job is that **every failure mode this
+   system has is exercised often enough that one case does not dominate its
+   fraction.** The allocation:
+
+   | Failure mode | Cases | Why that many |
+   |---|---|---|
+   | Citation-exact ("Article 6(2)") | 12 | The terms-of-art case hybrid retrieval exists for; one failure is 8 % |
+   | Paraphrase | 12 | Where RRF was measured *losing* on 2026-07-26 — the open question needs a populated cell |
+   | Multi-source (answer spans two documents) | 8 | Possible only since SPEC-003's corpus expansion; the mode most likely to produce a wrong-but-plausible answer |
+   | Near-miss (answerable, with a competing document) | 6 | Distinguishes "retrieved the right document" from "retrieved *a* plausible document" |
+   | Unanswerable | 12 | Refusal is a scored capability; the 2×2's declined-correctly cell needs a denominator that is not a handful |
+   | **Total** | **50** | |
+
+   **Twelve is the floor, and it is chosen from what one case is worth:** at 12,
+   a single case moves the mode's fraction by 8.3 points, which is legible as
+   one case rather than as a trend. Below ~10 the fraction becomes noise wearing
+   a percentage. **The non-job stands unchanged:** this set cannot support a
+   significance claim between two configurations, and the report must not quote
+   one. If config comparison later becomes the point, the fix is a power
+   calculation before authoring more — not more questions in the same shape.
 
 7. **The corpus must pass SPEC-003 AC-10 before this reports anything — inherited
    from SPEC-004 KD-12a, not chosen here.** Reporting against a saturated corpus
@@ -386,6 +451,21 @@ reader who has not opened the repository:
     label is not a styling detail. Those are presentation, they are SPEC-009's,
     and SPEC-006 Key decision 16 already binds the honesty requirement onto that
     spec rather than this one.
+
+    **The seam is closed with validity as the boundary, so "whose bug" has one
+    answer** *(added 2026-08-02, owner review)*. A split where each side assumes
+    the other did its job produces the failure both sides can disclaim. So:
+    **this spec validates every recording against
+    `contracts/eval-recordings.schema.json` at capture time and refuses to emit
+    the artifact if any record fails** (AC-15). **SPEC-009 may assume a valid
+    artifact** — it is entitled to render `citations[0].section_path` without
+    checking it exists. **Anything invalid is this spec's defect by definition**,
+    including a schema-valid record whose contents are wrong (an empty answer, a
+    citation pointing at no chunk), because the validation is where "wrong" is
+    supposed to be caught. The corollary binds too: SPEC-009 must not add
+    defensive re-validation, because a consumer that re-checks is a consumer that
+    will eventually diverge on what "valid" means, and then there are two
+    definitions and no owner.
 
 12. **The de-saturation target is pre-registered here, before any de-saturation
     work, and a run reporting something else must show it as a deviation**
@@ -507,10 +587,10 @@ reader who has not opened the repository:
 - **AC-9 (the de-saturation prerequisite is enforced)** — Reporting against a
   corpus that has not passed SPEC-003 AC-10 fails with a named cause rather than
   producing figures.
-- **AC-10 (this spec makes no unqualified quality claim)** — A test over this
-  document asserts that every sentence claiming the system performs well cites a
-  figure or names a bound. Mechanical and deliberately crude: it exists because
-  the failure it guards is one the author cannot see in their own prose.
+- **AC-10 (every quality claim in this spec is a reviewed one — inverted 2026-08-02)** — The first version was a regex over prose asserting that no unqualified claim exists. **A pattern-match over English produces false positives, gets suppressed, and a suppressed test is worse than none** — it reports a clean bill from a rule nobody runs. Inverted to the same regenerate-and-compare shape as `contracts/conditions.json`: `scripts/export_spec_claims.py` extracts every claim-shaped sentence from this document **together with its qualifier** into `contracts/spec-007-claims.json`, and the test regenerates and fails on any difference. Adding a claim sentence therefore fails the build, and **the fix is to regenerate, which puts the sentence and its qualifier into a reviewable diff** — the review happens on the artifact rather than in a matcher's confidence. A claim that reaches the file without a qualifier is visible in that diff; one that never reaches the file cannot exist, because the extractor is what the test compares against.
+- **AC-15 (the recording seam has one owner — Key decision 11)** *(added 2026-08-02)* — Every recording is validated against `contracts/eval-recordings.schema.json` **at capture**, and a run with any invalid record emits **no** recordings artifact rather than a partial one. Asserted by injecting a malformed record. The complementary assertion is on SPEC-009's side and is named here so neither spec adds it twice: a consumer that re-validates is out of contract, because two definitions of "valid" is the seam this closes.
+- **AC-16 (the comparison figure carries the pre-registered test's result)** *(added 2026-08-02)* — A comparison figure carries `arms`, `b`, `c`, `n_discordant`, `n`, `test`, `sidedness`, `alpha`, `p`, and `outcome`, and its `test`/`sidedness`/`alpha` **equal the `preregistration` block's** — a report whose comparison disagrees with its own pre-registration fails to render unless a deviation is recorded (AC-14). `outcome` is `inconclusive` whenever `p >= alpha` **or** `n_discordant` is below the pre-registered threshold, asserted directly with a 2–1 split of three discordant pairs — SPEC-004's original over-claim, which must come out `inconclusive` here. A comparison figure missing any field fails to render, like any other figure (AC-1).
+- **AC-17 (a report is reproducible from itself)** *(added 2026-08-02)* — The report carries `prompt_version` and `generator_identity` at the top level, not only on recordings; `methodology.corpus.desaturated` is **derived** from `recall_at_8_retrieval_set` beside it rather than asserted, and a report whose `desaturated` disagrees with that measurement fails to render. A producer that declares itself de-saturated is grading its own prerequisite.
 - **AC-12 (one run, two artifacts, one corpus state)** — A single run emits both
   the report and the recordings, and every recording's `git_sha`,
   `corpus_chunks`, and `from_run_id` match the report's. Asserted by construction

@@ -332,6 +332,35 @@ None. Query embedding reuses `openai` (SPEC-003); everything else is SQLAlchemy 
 
   **Recommendation: (2), then re-measure, and only then revisit AC-6.** The assertion is measuring something real — hybrid got worse at rank 1 — and demoting it first would remove the signal that the successor is supposed to move.
 
+  #### Amendment 6 — corpus-derived frequency pruning *(2026-08-02, owner-approved: option (2))*
+
+  **What it does.** Before the fallback query is built, each of the query's lexemes is counted against the indexed corpus, and any lexeme present in **more than 25 % of chunks** is dropped from the OR set. The count comes from the corpus itself at query time — **computed, never maintained**. There is no list, no per-document vocabulary, and nothing to update when a document is added; that is the property option (ii) lacked and the reason this is the successor rather than a stop-list by another name.
+
+  **Why 25 %, chosen from the shape of the arithmetic rather than tuned against a metric.** A lexeme present in a quarter of chunks can at best partition the corpus 1 : 3, so it carries under one bit; inside an OR set it contributes more candidates than any discriminative term and therefore dominates what the branch returns. The value is **not tuned** — tuning it against `recall@1` would be selecting the implementation that makes hybrid win, and belongs to SPEC-007 Key decision 12 with data.
+
+  **If pruning empties the set, the result is empty and that is correct, not a regression.** A query whose every lexeme is corpus-common has no lexical signal at all; returning the resulting garbage would be worse than returning nothing, and AC-12(b) already defines an empty full-text list as a valid outcome that degrades fusion to vector order.
+
+  #### Expect it to help and not to close — the arithmetic, stated before the re-measurement
+
+  **RRF reads rank and is blind to confidence.** With `RRF_K = 60`:
+
+  | Candidate | Score |
+  |---|---|
+  | full-text rank 1, absent from the vector list | `1/61` = 0.016393 |
+  | vector rank 1, absent from the full-text list | `1/61` = 0.016393 — **identical** |
+  | vector rank 2 | `1/62` = 0.016129 |
+  | vector rank 3 | `1/63` = 0.015873 |
+
+  **A chunk leading a fallback list is worth exactly what the vector branch's best result is worth.** Solving `1/61 > 1/(60 + r)` gives `r > 1`: **a full-text rank-1 candidate outranks every vector candidate except vector rank 1, which it ties.** That is a property of the fusion rule, not of the fallback, and it holds whether the fallback's rank-1 chunk is excellent or worthless.
+
+  **Therefore, pruning improves *what leads* the fallback list; it cannot change *what leading the list is worth*.** The predicted outcome is a partial recovery of `recall@1` — better chunks winning the 1/61 — with the structural displacement intact. **A partial close is the expected result and must not be read as pruning having failed.** Closing it fully requires making fusion sensitive to branch confidence — a weight, a threshold, or excluding fallback results from fusion entirely — and every one of those is a change to the fusion rule, which Key decision 12 reserves for SPEC-007 with data.
+
+  #### Fallback provenance is recorded, and deliberately not used
+
+  `CandidateRow` and `RetrievedChunk` carry whether the full-text list came from the conjunction or from the fallback. **Recording is not fusing**, so this respects Key decision 12's reservation, and it is the same argument that justified the fallback itself: the branch owes its caller *"empty because nothing matched"* versus *"empty because the query was unsatisfiable"*, and one level up it owes *"found by conjunction"* versus *"found by fallback"*.
+
+  **Nothing weights on it, and a test asserts that fusion output is byte-identical with the flag set either way.** When SPEC-007 settles fusion with data, this field **is** the data — the question "should a fallback candidate be worth 1/61?" cannot be answered by a system that does not record which candidates were fallbacks.
+
 
 
 - **AC-13 (baseline artifacts are produced deliberately, never as a test side effect — Key decision 14)** *(added 2026-07-26, third review)* — asserted on **exit codes**, since the guard's entire job is to fail a run:

@@ -42,16 +42,35 @@ K = 8
 # corpus ladder is judged against these and nothing else; choosing the metric
 # after seeing which one separates the methods is the bias this exists to stop.
 PREREGISTRATION = {
+    "preregistration_id": "prereg-2",
     "preregistered_at": "2026-08-02",
+    "supersedes": "prereg-1 (unsatisfiable: threshold 25 against a 26-question set)",
     "primary_metric": "recall@8",
     "k": K,
     "lever": "corpus growth (SPEC-003 AC-10's measured rungs)",
-    "levers_held_fixed": ["k", "the question set", "the chunker config", "the embedder"],
+    # The question set is frozen WITHIN a pre-registration, not forever. Freezing
+    # it across the rungs of one ladder run is what makes those rungs comparable;
+    # freezing it across all time is what made prereg-1's threshold unreachable.
+    "levers_held_fixed": ["k", "the chunker config", "the embedder", "the question set"],
+    "retrieval_set_size": 120,
+    "assumed_discordance": 0.05,
     "test": "mcnemar_exact_binomial",
     "sidedness": "two-sided",
     "alpha": 0.05,
-    "informative_when": "recall@8 < 1.000 AND discordant_pairs >= 25",
+    # Two gates, deliberately separate. Corpus adequacy is a property of the
+    # corpus; conclusiveness is a property of the result and is therefore not a
+    # gate at all. prereg-1 conjoined them and so asked a corpus to promise that
+    # a comparison would come out significant.
+    "corpus_adequacy": "recall@8 < 1.000, with a recorded headroom judgment (SPEC-003 AC-10)",
+    "conclusive_when": "n_discordant >= 6 AND p < alpha",
+    "otherwise": "inconclusive - never reported as 'no difference'",
 }
+
+# n < 6 cannot reject at alpha=0.05 two-sided even unanimously: 2 * 2**-n >= 0.05
+# for n <= 5. Derived from the test and alpha alone, so it cannot be tuned toward
+# a desired answer.
+MIN_DISCORDANT_FOR_ANY_REJECTION = 6
+PREREG_ID = PREREGISTRATION["preregistration_id"]
 
 # The corpus state this run measures. Rung 0 is the corpus before any expansion —
 # the record SPEC-003's sequencing requires to exist *before the first fetch*,
@@ -312,12 +331,20 @@ async def test_hybrid_beats_vector_only_and_records_the_baseline(
     n_discordant = hybrid_only + vector_only_wins
 
     recall_8 = measured[f"recall_at_{K}"]["hybrid_overall"]
-    conditions = {
-        "recall_at_8_below_1": recall_8 < 1.000,
-        "discordant_pairs_at_least_25": n_discordant >= 25,
-    }
+    p_value = mcnemar_exact_two_sided(hybrid_only, vector_only_wins)
     per_document = await document_chunk_counts(factory)
     chunk_count = sum(int(d["chunks"]) for d in per_document)
+
+    # A run against a set that is not the pre-registered size is a deviation, and
+    # it is recorded as one rather than tolerated silently — that recording is the
+    # whole difference between a deviation and a substitution nobody can see.
+    deviations: list[str] = []
+    if len(rows) != PREREGISTRATION["retrieval_set_size"]:
+        deviations.append(
+            f"retrieval set is {len(rows)} questions, not the pre-registered "
+            f"{PREREGISTRATION['retrieval_set_size']}; power is below the table in "
+            f"SPEC-007 KD-12 amendment 1 and any comparison here is under-powered"
+        )
 
     labeled = {
         "rung": RUNG_LABEL,
@@ -343,14 +370,31 @@ async def test_hybrid_beats_vector_only_and_records_the_baseline(
             "test": "mcnemar_exact_binomial",
             "sidedness": "two-sided",
             "alpha": 0.05,
-            "p": round(mcnemar_exact_two_sided(hybrid_only, vector_only_wins), 6),
+            "p": round(p_value, 6),
         },
-        "stop_condition": {
-            **conditions,
-            "informative": all(conditions.values()),
+        "deviations": deviations,
+        "corpus_adequacy": {
+            "recall_at_8_below_1": recall_8 < 1.000,
             # NOT a verdict. AC-10 makes `recall@8 < 1.000` permit stopping, never
             # mandate it, and the judgment is reviewed rather than thresholded.
             "verdict": "recorded here, decided by review",
+        },
+        "comparison": {
+            # An outcome, not a gate. prereg-1 made conclusiveness a condition the
+            # corpus had to satisfy in advance, which no corpus can do.
+            "min_discordant_for_any_rejection": MIN_DISCORDANT_FOR_ANY_REJECTION,
+            "outcome": (
+                "conclusive"
+                if n_discordant >= MIN_DISCORDANT_FOR_ANY_REJECTION and p_value < 0.05
+                else "inconclusive"
+            ),
+            "why": (
+                f"{n_discordant} discordant pairs is below the {MIN_DISCORDANT_FOR_ANY_REJECTION} "
+                f"at which the exact test can reject at all"
+                if n_discordant < MIN_DISCORDANT_FOR_ANY_REJECTION
+                else f"p = {p_value:.4f} against alpha = 0.05"
+            ),
+            "not_a_claim": "that the two methods perform equally",
         },
         "distinct_section_rate": baseline["distinct_section_rate"],
         "per_case": rows,
@@ -362,14 +406,26 @@ async def test_hybrid_beats_vector_only_and_records_the_baseline(
         f"pairs: hybrid-only {hybrid_only}, vector-only {vector_only_wins}, "
         f"both {both}, neither {neither} -> discordant {n_discordant}"
     )
-    print(f"stop conditions: {json.dumps(conditions)}")
+    print(f"comparison: {labeled['comparison']['outcome']} — {labeled['comparison']['why']}")
+    for deviation in deviations:
+        print(f"DEVIATION: {deviation}")
 
     if write_baseline:
         BASELINE.write_text(
             json.dumps(baseline, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
         )
         BASELINES_DIR.mkdir(parents=True, exist_ok=True)
+        # SPEC-003 AC-13 names `baseline-<N>-chunks.json`, so that stays the
+        # canonical name. A pre-registration change re-measures corpus states that
+        # were already measured (SPEC-007 KD-12 amendment 1), and two runs of the
+        # same corpus under different pre-registrations are two experiments, not a
+        # rewrite — so the second one gets the id in its name rather than
+        # overwriting a record it is not comparable to.
         labeled_path = BASELINES_DIR / f"baseline-{chunk_count}-chunks.json"
+        if labeled_path.exists():
+            existing = json.loads(labeled_path.read_text(encoding="utf-8"))
+            if existing.get("preregistration", {}).get("preregistration_id") != PREREG_ID:
+                labeled_path = BASELINES_DIR / f"baseline-{chunk_count}-chunks-{PREREG_ID}.json"
         # Immutability outranks the flag (SPEC-003 AC-13). The session guard
         # fails the run on a modified artifact, but by then the file is already
         # overwritten and the corpus state it recorded is gone, so the write is

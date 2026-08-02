@@ -208,7 +208,12 @@ reader who has not opened the repository:
       "primary_metric": "recall@8", "k": 8,
       "lever": "corpus growth",
       "test": "mcnemar-exact", "sidedness": "two-sided", "alpha": 0.05,
-      "informative_when": "recall@8 < 1.000 AND discordant_pairs >= 25"
+      "preregistration_id": "prereg-2",
+      "corpus_adequacy": "recall@8 < 1.000, with a recorded headroom judgment",
+      "conclusive_when": "n_discordant >= 6 AND p < alpha",
+      "otherwise": "inconclusive",
+      "retrieval_set_size": 120,
+      "assumed_discordance": 0.05
     },
     "deviations": [                        // empty is only valid if nothing differs
       {"field": "…", "preregistered": "…", "actual": "…", "reason": "…"}
@@ -492,6 +497,11 @@ reader who has not opened the repository:
     sidedness:            two-sided
     alpha:                0.05
     informative_when:     recall@8 < 1.000  AND  discordant_pairs >= 25
+                          # ^ WITHDRAWN, unsatisfiable — see amendment 1 below.
+                          #   Superseded by prereg-2's corpus_adequacy +
+                          #   conclusive_when. Left visible rather than deleted:
+                          #   a pre-registration that quietly loses a line is
+                          #   indistinguishable from one that never had it.
     ```
 
     **The test and its sidedness are pinned because they move the answer, and
@@ -516,14 +526,186 @@ reader who has not opened the repository:
     rather than described**, so the choice is reviewable by someone who will not
     redo the binomial.
 
-    **`discordant_pairs >= 25` is a claim about the set's power, not about the
-    result.** SPEC-004 Key decision 12 established discordant pairs as the honest
-    instrument after recall@1's "win" turned out to be a 2–1 split of three
-    decided questions. Below 25, no split the set can produce reaches α = 0.05
-    two-sided, so a run clearing `recall@8 < 1.000` but not this threshold has
-    de-saturated the corpus without making the comparison answerable. **The
-    threshold says what the set must be able to detect. It does not predict,
-    require, or prefer a hybrid win.**
+    **~~`discordant_pairs >= 25` is a claim about the set's power, not about the
+    result.~~ WITHDRAWN — the threshold was unreachable and its justification was
+    arithmetically false. See amendment 1 below.** SPEC-004 Key decision 12
+    established discordant pairs as the honest instrument after recall@1's "win"
+    turned out to be a 2–1 split of three decided questions; that part stands.
+
+    ---
+
+    ### Amendment 1 — the pre-registration was unsatisfiable, and is replaced *(2026-08-02, owner-asked after Rung 0; CLAUDE.md rule 4's owner-asked clause)*
+
+    **Declared as a deviation before the fetch, not after a result.** Nothing has
+    been ingested, no rung has moved, and the run that would have been judged
+    against this block has not happened. That ordering is the entire difference
+    between a deviation and a result-fitted substitution, and it is why this is
+    written now rather than when a number came out wrong.
+
+    **Finding 1 — the threshold is unreachable by construction.** Discordant
+    pairs are bounded above by the question count. The retrieval set is **26**
+    and the threshold is **25**, so clearing it requires the two methods to
+    disagree on **96 %** of questions — a rate no corpus produces, and one that
+    would itself indicate something broken rather than something measured. And
+    `questions` sits in `levers_held_fixed`, so the block **forbids the only
+    lever that could make its own threshold reachable**. Corpus growth cannot fix
+    it at any rung: the ladder can drive `recall@8` below 1.000, but it cannot
+    raise a bound that is set by the size of the question set.
+
+    **Finding 2 — the justification given for 25 was arithmetically false**, and
+    it is worth recording because it is the reason the number survived review.
+    The withdrawn sentence claimed "below 25, no split the set can produce
+    reaches α = 0.05 two-sided." Under the exact binomial McNemar this block
+    pins, that is wrong at both ends: a **unanimous 6–0** split gives
+    **p = 0.03125**, and a **20–5** split gives **p = 0.0041**. The smallest `n`
+    at which *any* split can reject is **6**, not 25. A threshold that is
+    unreachable is a bug; a threshold that is unreachable *and* defended by a
+    false claim about the test is the pattern CLAUDE.md rule 7 exists for, and
+    this is its fourth instance — a formula written in the indicative, checked by
+    nobody, decaying in the direction that flattered the design.
+
+    **Finding 3, and the one that matters most — the block asked a corpus gate to
+    guarantee a result.** `informative_when` conjoined two unrelated things: a
+    property of the corpus (`recall@8 < 1.000`) and a property of the *outcome*
+    (enough discordance for significance). **No corpus can guarantee that a
+    comparison will come out conclusive** — that is what running the comparison
+    is for. Conflating them produced a gate that could never open and, worse, one
+    whose closure would have been read as "the corpus is not ready" when the true
+    reading was "the instrument cannot answer this question at this set size."
+
+    **This lever was named in advance, in two places, before this block existed.**
+    That record is what makes the present change a deviation rather than a
+    substitution chosen to fit Rung 0:
+    - **SPEC-003 AC-10** *(2026-07-26)*: "**Decided-question counts are recorded
+      but are explicitly NOT part of the stop condition** … Short decided-counts
+      are answered by SPEC-004's retrieval-only eval set, **never by another
+      rung**."
+    - **SPEC-004's cross-spec note** *(2026-07-26)*: "Sizing is derived, not
+      chosen: `N ≈ required_decided_pairs / observed_decision_rate` … **No
+      question count is fixed here**", and, separately, the warning that a round
+      number already written down must not be "quietly reinterpreted as the
+      instrument for retrieval significance."
+
+      **So the error was not an oversight about which lever to use — it was
+      overriding a decision two approved specs had already made.** KD-12, written
+      2026-08-02, froze `questions` after both of those said the question set was
+      precisely the lever that answers short decided-counts. The pre-registration
+      contradicted its own dependencies and nothing caught it, because the block
+      was reviewed for whether the test and sidedness were pinned — which they
+      were — and not for whether its threshold could be reached.
+
+    #### The choice: option (b), a threshold derived from the test and a set size I can defend
+
+    Option (a) — size the set for 25 discordant pairs at a plausible rate —
+    **requires a number that does not exist.** The only discordance figure this
+    repository has measured is **7/26 ≈ 0.27, and it is at k = 1 on a saturated
+    corpus**: a different statistic, at a different `k`, under exactly the corpus
+    conditions the sizing is meant to escape. Discordance falls as `k` rises,
+    because both methods get eight chances instead of one, and **nothing here
+    measures by how much**. Sizing `N = 25 / r` from that would put a decimal
+    point on a guess and call it a derivation — which is what 25 was.
+
+    **Option (b) is chosen. The decisive structural difference: under (b) a wrong
+    rate assumption costs *power*, not *satisfiability*.** The threshold comes
+    from the test itself and is reachable at any set size; only the probability of
+    reaching it depends on the rate. When the assumption is wrong the run reports
+    **inconclusive**, which is a defensible outcome. Under (a) a wrong rate
+    reproduces exactly the failure being amended.
+
+    **The threshold is derived, not chosen: `n_discordant >= 6`.** Below 6, the
+    pre-registered test is *mathematically incapable* of rejecting at α = 0.05
+    two-sided even on a unanimous split (`2 × 2⁻ⁿ ≥ 0.05` for `n ≤ 5`). Nothing
+    about the corpus, the questions, or the effect size enters this number; it
+    falls out of the exact binomial and α alone, which is precisely why it cannot
+    be tuned toward a desired answer.
+
+    **The set size, and its basis stated as an assumption rather than smuggled as
+    a fact.** `N = 120`, derived as `6 / 0.05` — the structural floor at the
+    **pessimistic** planning rate. The rate is a **stated assumption with no
+    measurement behind it**: `r = 0.05` is roughly one-fifth of the measured k = 1
+    rate of 0.27, on the reasoning that a top-8 window forgives most rank-1
+    disagreements. **Nothing verifies that ratio.** It is written here so it can
+    be checked against the first de-saturated measurement and corrected, and it
+    sizes toward the floor at a pessimistic rate rather than toward significance
+    at an optimistic one.
+
+    **The power this buys, stated honestly including where it is bad.** θ is
+    `P(hybrid wins | the pair is discordant)`; power is computed under the exact
+    binomial at α = 0.05 two-sided:
+
+    | Discordance rate `r` | Expected `n` at N = 120 | Power, θ = 0.7 | θ = 0.8 | θ = 0.9 |
+    |---|---:|---:|---:|---:|
+    | 0.27 (the k = 1 measurement, optimistic) | 32 | 0.61 | 0.95 | 1.00 |
+    | 0.15 | 18 | ~0.38 | ~0.75 | ~0.97 |
+    | 0.10 | 12 | 0.19 | 0.48 | 0.85 |
+    | **0.05 (the planning assumption)** | **6** | **0.12** | **0.26** | **0.53** |
+
+    **Read that bottom row plainly: at the rate this set was sized against, the
+    comparison is badly underpowered and will usually come out inconclusive.**
+    N = 120 is well powered only if discordance lands at or above ~0.15 *and* the
+    effect is large. **This is stated as a limitation of the instrument, not as a
+    prediction about the answer**, and the honest outcome is written into the
+    contract below rather than discovered later. An inconclusive result that can
+    be defended is worth more than a threshold that was never reachable.
+
+    **Authoring cost, since it is the real constraint and it is a person's time,
+    not money.** 26 questions exist; 94 must be authored and human-verified. At
+    the ~2–3 minutes per label SPEC-004 estimates, that is **4–5 hours of owner
+    time**, spread over the ladder rather than paid at once. **This is the one
+    number in this amendment most worth pushing back on**: raising N raises every
+    power figure above, and the table is the exchange rate.
+
+    #### The replacement pre-registration
+
+    ```
+    preregistration_id:   prereg-2                    # prereg-1 = 2026-08-02, superseded
+    preregistered_at:     2026-08-02
+    supersedes:           prereg-1 (unsatisfiable; see amendment 1)
+    primary_metric:       recall@8          # SPEC-004 AC-6a, inherited not chosen here
+    k:                    8
+    diagnostic_metrics:   MRR@8, recall@{1,3}, discordant-pair counts
+    lever:                corpus growth     # SPEC-003 AC-10's measured rungs
+    levers_held_fixed:    k, the chunker config, the embedder,
+                          the question set — WITHIN a pre-registration
+    retrieval_set_size:   120               # 26 existing + 94 to author
+    assumed_discordance:  0.05              # ASSUMPTION, unmeasured; basis above
+    comparison:           hybrid (RRF) vs vector-only, same query embeddings
+    pairing_unit:         one question; discordant = exactly one method succeeds at k=8
+    test:                 McNemar's test, exact binomial form (no continuity
+                          correction, no mid-p adjustment)
+    sidedness:            two-sided
+    alpha:                0.05
+    corpus_adequacy:      recall@8 < 1.000, with a recorded headroom judgment
+                          (SPEC-003 AC-10). NO discordance term.
+    conclusive_when:      n_discordant >= 6  AND  p < alpha
+    otherwise:            INCONCLUSIVE — reported as inconclusive, never as
+                          "no difference" and never as a corpus failure
+    ```
+
+    **The two gates are separated, and that is the substantive fix.** Corpus
+    adequacy is a property of the corpus and belongs to SPEC-003 AC-10, which
+    already owns it and correctly carries no discordance term. Conclusiveness is a
+    property of the *result* and is therefore **not a gate at all** — it is an
+    outcome, recorded either way. Nothing in this spec now asks a corpus to
+    promise that a comparison will succeed.
+
+    **`questions` is frozen WITHIN a pre-registration, not forever, and the
+    distinction is load-bearing.** Freezing it across the rungs of one ladder run
+    is what makes those rungs comparable; freezing it across all time is what made
+    the threshold unreachable. Changing the set opens a **new pre-registration
+    id** and every rung already measured must be **re-measured against the new
+    set** before it can be compared to a later one. The machinery already enforces
+    this: each baseline artifact carries a sha256 of the question set, and
+    `tests/test_baseline_artifacts.py::test_the_frozen_levers_agree_across_every_rung`
+    fails when two artifacts in the same pre-registration disagree on it.
+
+    **Consequence, stated so it is not discovered later: `baseline-358-chunks.json`
+    is a prereg-1 artifact and is not comparable to any prereg-2 rung.** Rung 0
+    must be re-measured against the 120-question set before Rung 1's measurement
+    means anything. That re-measurement is cheap (~120 embeddings, well under a
+    cent) and it does **not** require re-ingesting the corpus — but it does
+    require the 120 questions to exist, which makes authoring them a prerequisite
+    of the ladder rather than a follow-up to it.
 
     **Deviations are visible or the run is invalid.** The report's `methodology`
     carries a `preregistration` block echoing these values and a `deviations`

@@ -158,7 +158,17 @@ reader who has not opened the repository:
     "summary": "50 questions authored from the source documents before retrieval was run…",
     "authoring": "single-author, not blind — see limitations",
     "limitations": ["…"],                  // KD-3's bound, rendered, not filed
-    "corpus": {"chunks": 1180, "documents": [...], "desaturated": true}
+    "corpus": {"chunks": 1180, "documents": [...], "desaturated": true},
+    "preregistration": {                   // KD-12, echoed verbatim from the spec
+      "preregistered_at": "2026-08-02",
+      "primary_metric": "recall@8", "k": 8,
+      "lever": "corpus growth",
+      "test": "mcnemar-exact", "sidedness": "two-sided", "alpha": 0.05,
+      "informative_when": "recall@8 < 1.000 AND discordant_pairs >= 25"
+    },
+    "deviations": [                        // empty is only valid if nothing differs
+      {"field": "…", "preregistered": "…", "actual": "…", "reason": "…"}
+    ]
   },
   "figures": [ /* the shape above */ ],
   "cost_usd": "0.4831",
@@ -395,20 +405,45 @@ reader who has not opened the repository:
     diagnostic_metrics:   MRR@8, recall@{1,3}, discordant-pair counts
     lever:                corpus growth     # SPEC-003 AC-10's measured rungs
     levers_held_fixed:    k, the question set, the chunker config, the embedder
-    informative_when:     recall@8 < 1.000  AND  discordant_pairs >= 25
     comparison:           hybrid (RRF) vs vector-only, same query embeddings
+    pairing_unit:         one question; discordant = exactly one method succeeds at k=8
+    test:                 McNemar's test, exact binomial form (no continuity
+                          correction, no mid-p adjustment)
+    sidedness:            two-sided
+    alpha:                0.05
+    informative_when:     recall@8 < 1.000  AND  discordant_pairs >= 25
     ```
+
+    **The test and its sidedness are pinned because they move the answer, and
+    the first version of this block pinned neither** *(corrected 2026-08-02,
+    owner review)*. At 25 discordant pairs an 18–7 split gives **p = 0.0216
+    one-sided, 0.0433 two-sided** — the same data landing either side of 0.05 at
+    a 20–5 split's neighbours, decided by a parameter nobody had written down. A
+    block that fixes the metric and the threshold but leaves the test open can
+    move a result across the line after the fact, which is the thing
+    pre-registration exists to prevent.
+
+    **Two-sided, and one-sided would not be defensible here.** A one-sided test
+    encodes the alternative hypothesis in the instrument: it can reject only in
+    the pre-chosen direction, so choosing "hybrid > vector-only" would make the
+    measurement unable to report the finding the repository *already has
+    evidence for* — RRF measured as a **loss** on paraphrase questions on
+    2026-07-26. Key decision 10 states that "vector-only wins" is an allowed
+    answer; a one-sided test in the hybrid's favour would contradict that in the
+    arithmetic while the prose kept saying it. One-sided is defensible when the
+    opposite direction is genuinely uninteresting or impossible — not when it is
+    the outcome the last measurement pointed at. **Named as McNemar's exact test
+    rather than described**, so the choice is reviewable by someone who will not
+    redo the binomial.
 
     **`discordant_pairs >= 25` is a claim about the set's power, not about the
     result.** SPEC-004 Key decision 12 established discordant pairs as the honest
     instrument after recall@1's "win" turned out to be a 2–1 split of three
-    decided questions. At 25 discordant pairs an 18–7 split reaches p ≈ 0.04 on
-    an exact binomial; below that, no split the set can produce is
-    distinguishable from a coin flip, so a run that clears
-    `recall@8 < 1.000` but not this threshold has de-saturated the corpus without
-    making the comparison answerable. **The threshold says what the set must be
-    able to detect. It does not predict, require, or prefer a hybrid win** — Key
-    decision 10 already states that "vector-only wins" is an allowed answer.
+    decided questions. Below 25, no split the set can produce reaches α = 0.05
+    two-sided, so a run clearing `recall@8 < 1.000` but not this threshold has
+    de-saturated the corpus without making the comparison answerable. **The
+    threshold says what the set must be able to detect. It does not predict,
+    require, or prefer a hybrid win.**
 
     **Deviations are visible or the run is invalid.** The report's `methodology`
     carries a `preregistration` block echoing these values and a `deviations`

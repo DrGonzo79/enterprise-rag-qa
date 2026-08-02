@@ -91,3 +91,39 @@ async def test_query_route_exists_even_when_misconfigured() -> None:
     assert response.status_code != 404
     assert response.status_code == 500
     assert response.json()["error"]["code"] == "misconfigured"
+
+
+async def test_a_falsey_anonymous_flag_leaves_authentication_actually_required(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The behavioural half of the `_bool` fix, asserted on a response rather
+    than on a parsed setting.
+
+    `bool("false")` is `True`, so `RAG_QA_ALLOW_ANONYMOUS=false` set
+    `allow_anonymous=True` and `verify()` returned immediately — **the operator
+    asked for authentication and got none**. The unit test asserts the parsed
+    flag, which is an intermediate; this asserts the thing the operator cares
+    about, which is that a keyless request is refused. Both directions of the
+    consequence have been stated wrong at least once while the code was right,
+    which is exactly why the outcome gets its own assertion.
+    """
+    from api_harness import StubRetriever
+    from rag_qa.generation.service import Generator
+    from test_generation_service import FakeLLMClient
+
+    monkeypatch.setenv("RAG_QA_ALLOW_ANONYMOUS", "false")
+    monkeypatch.setenv("RAG_QA_API_KEY", "a-real-key")
+    monkeypatch.setenv("RAG_QA_MONTHLY_BUDGET_USD", "20.00")
+
+    resolved = Settings.from_env()
+    assert resolved.allow_anonymous is False
+    app = create_app(
+        settings=resolved,
+        retriever=StubRetriever(),  # type: ignore[arg-type]
+        generator=Generator(FakeLLMClient()),
+    )
+
+    refused = await post(app, "/query", {"question": "What applies?"}, key=None)
+    assert refused.status_code == 401, "an operator who wrote =false was served anonymously"
+    served = await post(app, "/query", {"question": "What applies?"}, key="a-real-key")
+    assert served.status_code == 200

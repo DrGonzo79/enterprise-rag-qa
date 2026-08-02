@@ -13,4 +13,8 @@ dist/
 build/
 corpus/*
 !corpus/README.md
+# The registry is source, not corpus: it carries each document's identity, its
+# size guard, and the status that decides whether it may be ingested at all.
+# Ignoring it would make the approval gate a local file.
+!corpus/corpus.toml
 .gstack/

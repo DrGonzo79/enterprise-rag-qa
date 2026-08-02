@@ -1,0 +1,264 @@
+{
+  "rung": "rung-1",
+  "questions": 26,
+  "k": 8,
+  "embedder_identity": "openai:text-embedding-3-small",
+  "baseline": {
+    "hybrid_recall_at_8": 1.0,
+    "vector_only_recall_at_8": 1.0
+  },
+  "candidates": [
+    {
+      "id": "nist-csf-2-0",
+      "sections": 12,
+      "chunks": 20,
+      "estimated_chunks": 26,
+      "max_heading_depth": 3,
+      "hierarchy_ok": true,
+      "sample_sections": [
+        "NIST CSF 2.0 › 1. Cybersecurity Framework (CSF) Overview",
+        "NIST CSF 2.0 › 2. Introduction to the CSF Core",
+        "NIST CSF 2.0 › 3. Introduction to CSF Profiles and Tiers"
+      ],
+      "tokens": 12043,
+      "hybrid": {
+        "recall_at_8": 1.0,
+        "appearances": 9,
+        "questions_touched": 2,
+        "gold_displaced": 0,
+        "gold_displaced_ids": [],
+        "gold_rank_moved": 0,
+        "mean_gold_rank_change": 0.0
+      },
+      "vector_only": {
+        "recall_at_8": 1.0,
+        "appearances": 11,
+        "questions_touched": 3,
+        "gold_displaced": 0,
+        "gold_displaced_ids": [],
+        "gold_rank_moved": 0,
+        "mean_gold_rank_change": 0.0
+      }
+    },
+    {
+      "id": "nist-ai-600-1",
+      "sections": 26,
+      "chunks": 57,
+      "estimated_chunks": 51,
+      "max_heading_depth": 4,
+      "hierarchy_ok": true,
+      "sample_sections": [
+        "NIST AI 600-1 › 1. Introduction",
+        "NIST AI 600-1 › 2. Overview of Risks Unique to or Exacerbated by GAI",
+        "NIST AI 600-1 › 2."
+      ],
+      "tokens": 37627,
+      "hybrid": {
+        "recall_at_8": 1.0,
+        "appearances": 22,
+        "questions_touched": 5,
+        "gold_displaced": 0,
+        "gold_displaced_ids": [],
+        "gold_rank_moved": 1,
+        "mean_gold_rank_change": 5.0
+      },
+      "vector_only": {
+        "recall_at_8": 1.0,
+        "appearances": 18,
+        "questions_touched": 5,
+        "gold_displaced": 0,
+        "gold_displaced_ids": [],
+        "gold_rank_moved": 0,
+        "mean_gold_rank_change": 0.0
+      }
+    },
+    {
+      "id": "nist-sp-800-37r2",
+      "sections": 51,
+      "chunks": 180,
+      "estimated_chunks": 146,
+      "max_heading_depth": 4,
+      "hierarchy_ok": true,
+      "sample_sections": [
+        "NIST SP 800-37r2 › Revision 2",
+        "NIST SP 800-37r2 › Revision 2",
+        "NIST SP 800-37r2 › U.S. Department of Commerce"
+      ],
+      "tokens": 126377,
+      "hybrid": {
+        "recall_at_8": 1.0,
+        "appearances": 14,
+        "questions_touched": 5,
+        "gold_displaced": 0,
+        "gold_displaced_ids": [],
+        "gold_rank_moved": 0,
+        "mean_gold_rank_change": 0.0
+      },
+      "vector_only": {
+        "recall_at_8": 1.0,
+        "appearances": 17,
+        "questions_touched": 5,
+        "gold_displaced": 0,
+        "gold_displaced_ids": [],
+        "gold_rank_moved": 0,
+        "mean_gold_rank_change": 0.0
+      }
+    },
+    {
+      "id": "nist-sp-1270",
+      "sections": 18,
+      "chunks": 86,
+      "estimated_chunks": 69,
+      "max_heading_depth": 4,
+      "hierarchy_ok": true,
+      "sample_sections": [
+        "NIST SP 1270 › Purpose and Scope",
+        "NIST SP 1270 › AI Bias: Context and Terminology",
+        "NIST SP 1270 › AI Bias: Context and Terminology › Characterizing AI bias › Contexts for addressing AI bias"
+      ],
+      "tokens": 60172,
+      "hybrid": {
+        "recall_at_8": 1.0,
+        "appearances": 25,
+        "questions_touched": 6,
+        "gold_displaced": 0,
+        "gold_displaced_ids": [],
+        "gold_rank_moved": 2,
+        "mean_gold_rank_change": 1.0
+      },
+      "vector_only": {
+        "recall_at_8": 1.0,
+        "appearances": 26,
+        "questions_touched": 6,
+        "gold_displaced": 0,
+        "gold_displaced_ids": [],
+        "gold_rank_moved": 1,
+        "mean_gold_rank_change": 1.0
+      }
+    },
+    {
+      "id": "gdpr",
+      "sections": 272,
+      "chunks": 117,
+      "estimated_chunks": 120,
+      "max_heading_depth": 4,
+      "hierarchy_ok": true,
+      "sample_sections": [
+        "GDPR › Preamble › Recital (1)",
+        "GDPR › Preamble › Recital (2)",
+        "GDPR › Preamble › Recital (3)"
+      ],
+      "tokens": 66956,
+      "hybrid": {
+        "recall_at_8": 1.0,
+        "appearances": 10,
+        "questions_touched": 4,
+        "gold_displaced": 0,
+        "gold_displaced_ids": [],
+        "gold_rank_moved": 0,
+        "mean_gold_rank_change": 0.0
+      },
+      "vector_only": {
+        "recall_at_8": 1.0,
+        "appearances": 13,
+        "questions_touched": 4,
+        "gold_displaced": 0,
+        "gold_displaced_ids": [],
+        "gold_rank_moved": 0,
+        "mean_gold_rank_change": 0.0
+      }
+    },
+    {
+      "id": "machinery-regulation",
+      "sections": 152,
+      "chunks": 112,
+      "estimated_chunks": 120,
+      "max_heading_depth": 3,
+      "hierarchy_ok": true,
+      "sample_sections": [
+        "Machinery Regulation › Preamble › Recital (1)",
+        "Machinery Regulation › Preamble › Recital (2)",
+        "Machinery Regulation › Preamble › Recital (3)"
+      ],
+      "tokens": 70991,
+      "hybrid": {
+        "recall_at_8": 1.0,
+        "appearances": 1,
+        "questions_touched": 1,
+        "gold_displaced": 0,
+        "gold_displaced_ids": [],
+        "gold_rank_moved": 0,
+        "mean_gold_rank_change": 0.0
+      },
+      "vector_only": {
+        "recall_at_8": 1.0,
+        "appearances": 1,
+        "questions_touched": 1,
+        "gold_displaced": 0,
+        "gold_displaced_ids": [],
+        "gold_rank_moved": 0,
+        "mean_gold_rank_change": 0.0
+      }
+    },
+    {
+      "id": "cyber-resilience-act",
+      "sections": 209,
+      "chunks": 111,
+      "estimated_chunks": 114,
+      "max_heading_depth": 3,
+      "hierarchy_ok": true,
+      "sample_sections": [
+        "Cyber Resilience Act › Preamble › Recital (1)",
+        "Cyber Resilience Act › Preamble › Recital (2)",
+        "Cyber Resilience Act › Preamble › Recital (3)"
+      ],
+      "tokens": 65123,
+      "hybrid": {
+        "recall_at_8": 1.0,
+        "appearances": 13,
+        "questions_touched": 3,
+        "gold_displaced": 0,
+        "gold_displaced_ids": [],
+        "gold_rank_moved": 1,
+        "mean_gold_rank_change": 1.0
+      },
+      "vector_only": {
+        "recall_at_8": 1.0,
+        "appearances": 15,
+        "questions_touched": 5,
+        "gold_displaced": 0,
+        "gold_displaced_ids": [],
+        "gold_rank_moved": 0,
+        "mean_gold_rank_change": 0.0
+      }
+    }
+  ],
+  "all_candidates_together": {
+    "chunks_added": 683,
+    "hybrid": {
+      "recall_at_8": 1.0,
+      "appearances": 57,
+      "questions_touched": 13,
+      "gold_displaced": 0,
+      "gold_displaced_ids": [],
+      "gold_rank_moved": 4,
+      "mean_gold_rank_change": 1.75
+    },
+    "vector_only": {
+      "recall_at_8": 1.0,
+      "appearances": 60,
+      "questions_touched": 13,
+      "gold_displaced": 0,
+      "gold_displaced_ids": [],
+      "gold_rank_moved": 1,
+      "mean_gold_rank_change": 1.0
+    },
+    "hybrid_only": 0,
+    "vector_only_wins": 0,
+    "n_discordant": 0,
+    "both": 26,
+    "neither": 0
+  },
+  "embedding_tokens": 878578,
+  "embedding_usd": 0.017572
+}

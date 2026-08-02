@@ -78,9 +78,39 @@ def route_loader(path: Path, config: IngestConfig) -> Callable[[Path], ParsedDoc
 
 
 def discover(directory: Path, config: IngestConfig) -> list[Path]:
-    return sorted(
+    """Loadable files in `directory`, minus anything the registry marks probe-only.
+
+    **The exclusion is the point, not a refinement.** Probing a candidate means
+    fetching it into `corpus/`, and `discover` previously returned every loadable
+    file there — so a routine `python -m rag_qa.ingest` would have swept seven
+    unapproved documents into the corpus as a side effect of having evaluated
+    them. The approval covers probing, not ingestion, and a gate that lives only
+    in a fetch script is not a gate once the file is on disk.
+
+    **A missing registry and a broken one are not the same case**, and treating
+    them alike is how this guard would fail open. No registry means nothing is
+    registered as probe-only, so nothing is excluded — that is the state of a
+    fresh checkout and of every synthetic test fixture. A registry that exists
+    and does not parse means the file deciding what may be ingested is broken,
+    and continuing would ingest whatever happens to be on disk, so it raises.
+    """
+    candidates = sorted(
         p for p in directory.iterdir() if p.is_file() and route_loader(p, config) is not None
     )
+    excluded = probe_only_filenames(directory)
+    for path in candidates:
+        if path.name in excluded:
+            logger.info("excluding probe-only document from ingest: %s", path.name)
+    return [p for p in candidates if p.name not in excluded]
+
+
+def probe_only_filenames(directory: Path) -> frozenset[str]:
+    from rag_qa.ingest.registry import load
+
+    registry = directory / "corpus.toml"
+    if not registry.exists():
+        return frozenset()
+    return frozenset(d.filename for d in load(registry) if d.is_probe_only)
 
 
 async def _existing_hashes(session: AsyncSession) -> set[str]:

@@ -373,4 +373,34 @@ Fetching a rung before the previous rung's measurement exists violates AC-10. Fe
 
 **Re-measured under prereg-2** *(same day, `evals/baselines/baseline-358-chunks-prereg-2.json`)*: identical numbers, since the question set has not changed yet — but the comparison is now recorded as **inconclusive** with its reason ("0 discordant pairs is below the 6 at which the exact test can reject at all") rather than as a failed gate, and the run carries a **declared deviation** for having 26 questions against a pre-registered 120. The prereg-1 artifact is retained as the record of a superseded pre-registration and is never compared to a prereg-2 rung. See SPEC-007 Key decision 12, amendment 1.
 
+#### Rung 1 pre-flight probe — measured 2026-08-02, artifact `evals/probes/probe-rung-1.json`
+
+Run under the narrow approval of 2026-08-02: the seven documents are a **probe set, not an ingest set**. They were fetched, parsed, chunked and embedded into a **scratch database seeded with a copy of the corpus**, measured, and removed. The corpus database was never written — verified after the run at 358 chunks / 3 documents, and the scratch database was dropped.
+
+**Format probe: all seven parse.** Every candidate produced a hierarchy at least two levels deep under its unmodified loader, so none is dropped on format grounds. Chunk counts landed within −23 % / +25 % of the fetch-planning estimates. Two observations that are not failures but belong in the record: `nist-sp-800-37r2` yields only 51 sections for 180 chunks and its first two section titles are both "Revision 2", so its outline extraction is the weakest of the set; and `machinery-regulation` produced six chunker warnings for annex chunks exceeding `target_max` after the breadcrumb.
+
+**Competition probe — the ranking criterion is competition per chunk, and it separates the set by a factor of fifty.** `appearances` counts candidate chunks reaching the top 8 across the 26 questions; `q` is how many distinct questions it reached; `density` is appearances per chunk added.
+
+| Candidate | Chunks | Appearances (hybrid) | q | **Density** | Gold displaced (h/v) |
+|---|---:|---:|---:|---:|---:|
+| nist-csf-2-0 | 20 | 9 | 2 | **0.450** | 0 / 0 |
+| nist-ai-600-1 | 57 | 22 | 5 | **0.386** | 0 / 0 |
+| nist-sp-1270 | 86 | 25 | 6 | **0.291** | 0 / 0 |
+| cyber-resilience-act | 111 | 13 | 3 | 0.117 | 0 / 0 |
+| gdpr | 117 | 10 | 4 | 0.085 | 0 / 0 |
+| nist-sp-800-37r2 | 180 | 14 | 5 | 0.078 | 0 / 0 |
+| machinery-regulation | 112 | **1** | 1 | **0.009** | 0 / 0 |
+
+**All seven together: 683 chunks added (2.9× the corpus), and `recall@8` does not move.** Hybrid 1.000 → 1.000, vector-only 1.000 → 1.000, **discordant pairs 0**, `neither` 0, **zero gold chunks displaced on either arm**. Across all 26 questions only **four** gold ranks moved at all on hybrid (mean +1.75 places) and **one** on vector-only.
+
+**Finding 1 — Key decision 13's hypothesis is falsified, and this is the measurement that does it.** That decision predicted "Tier 1 alone (~646 new chunks) de-saturates recall@8 and Tiers 2–3 are never fetched." 683 chunks of deliberately confusable material moved the primary metric by exactly nothing. **Fetching Rung 2 on the current reasoning would be repeating a disproved experiment at twice the size**, and Key decision 14 already says what a rung that leaves recall unchanged means: re-examine the selection, do not fetch the next one.
+
+**Finding 2 — the binding constraint may be the question set, not the corpus.** Zero displacements is expected on a hard corpus; *four rank movements out of 26* is not. The gold chunks are not winning narrowly, they are winning by a distance that 683 competing chunks barely dented. The 26 smoke questions were authored from the corpus with an expected section in hand, which makes each gold chunk a lexical bullseye — and no amount of *other* text competes with a bullseye. **This is a hypothesis, not a finding, and it is falsifiable**: if the effect is the questions, a set of harder questions de-saturates at the current corpus size, and that costs no fetch at all. It should be tested before another rung is fetched, because it is cheaper and because SPEC-007 KD-12 amendment 1 already requires authoring 94 more retrieval questions for unrelated reasons.
+
+**Finding 3 — size and competition are nearly uncorrelated, which is the argument for this probe existing.** The largest candidate (`nist-sp-800-37r2`, 180 chunks) ranks sixth of seven on density. The smallest (`nist-csf-2-0`, 20 chunks) ranks first. `machinery-regulation` adds 112 chunks and reaches the top 8 **once, for one question** — a document that costs money to embed and moves no number, indistinguishable from a good candidate on any size-based measure and separated from one immediately here.
+
+**No recommendation is made about the selection**, which is the owner's review under the narrow approval. What the numbers support is that the set is not uniform: three candidates compete an order of magnitude harder per chunk than the other four.
+
+**Cost:** 878,578 embedding tokens, **$0.0176**. Half of that was waste — each candidate was embedded twice, once alone and once in the combined run — and the probe now caches vectors by `source_uri`, so a re-run costs ~$0.0088.
+
 **The ladder stops here pending approval, not pending evidence.** The evidence for escalating to Rung 1 is complete and recorded above. What is missing is the approval to fetch — see the Status block: the corpus-expansion amendment is still **DRAFT**, and its own text says nothing is fetched until it is approved and Rung 1's probe output is reviewed.

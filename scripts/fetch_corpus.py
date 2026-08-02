@@ -1,98 +1,135 @@
-"""Fetch the three corpus documents into corpus/ (SPEC-003 Interface).
+"""Fetch registry documents into corpus/ (SPEC-003 AC-12).
 
-- EDGAR requires a descriptive User-Agent with contact info.
-- EUR-Lex sits behind an AWS WAF JavaScript challenge (verified 2026-07-25):
-  plain HTTP gets a 202 challenge page. We try the direct URL, fall back to
-  the Cellar content-negotiation endpoint, and otherwise print manual
-  instructions. A minimum-size check keeps a challenge page from silently
-  passing as corpus.
+Registry-driven and **resumable**: a file already present and passing its own
+size guard is skipped, so a failure on document 6 of 7 does not refetch the
+first five. Failures are collected and reported together rather than aborting on
+the first one — a partial rung with a named list of what is missing is more
+useful than a traceback on whichever document happened to come first.
+
+Two provider quirks, both verified 2026-08-02 and both worth stating because
+each produces a *plausible* wrong answer rather than an error:
+
+- **`nvlpubs.nist.gov` returns 404 to HEAD and 200 to GET.** A pre-flight
+  existence check written the obvious way reports every NIST document missing.
+- **EUR-Lex sits behind an AWS WAF that answers with a 202 challenge page.** It
+  was not challenging on 2026-08-02, but the fallback stays: the challenge page
+  is a few KB of valid HTML and would be chunked and embedded as a document
+  without the size guard.
+
+Usage:
+    uv run python -m scripts.fetch_corpus --rung rung-1 --purpose probe
 """
 
+import argparse
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
 
+from rag_qa.ingest.registry import RegisteredDocument, for_rung, load
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+REGISTRY = REPO_ROOT / "corpus" / "corpus.toml"
+CORPUS_DIR = REPO_ROOT / "corpus"
 USER_AGENT = "enterprise-rag-qa (thompsn79@gmail.com)"
-MIN_BYTES = 100_000
-
-NIST_URL = "https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.100-1.pdf"
-EDGAR_URL = "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/nvda-20260125.htm"
-EURLEX_URL = "https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=OJ:L_202401689"
-CELLAR_URL = "http://publications.europa.eu/resource/celex/32024R1689"
-
-EURLEX_MANUAL_HELP = (
-    "EUR-Lex could not be fetched over plain HTTP (AWS WAF challenge).\n"
-    f"Download manually in a browser from:\n  {EURLEX_URL}\n"
-    "and save as corpus/eu-ai-act-2024-1689.html"
-)
+TIMEOUT = 120.0
 
 
-def _looks_like_challenge(response: httpx.Response) -> bool:
-    return (
-        response.status_code == 202
-        or len(response.content) < MIN_BYTES
-        or b"awsWaf" in response.content[:4096]
+@dataclass
+class Outcome:
+    document: RegisteredDocument
+    status: str  # "skipped" | "fetched" | "failed"
+    detail: str
+    byte_size: int = 0
+
+
+def looks_like_challenge(status_code: int, content: bytes, minimum: int) -> bool:
+    return status_code == 202 or len(content) < minimum or b"awsWaf" in content[:4096]
+
+
+def _attempt(client: httpx.Client, url: str, minimum: int) -> tuple[bytes | None, str]:
+    try:
+        response = client.get(url)
+    except httpx.HTTPError as exc:
+        return None, f"{type(exc).__name__}: {exc}"
+    if response.status_code != 200:
+        return None, f"HTTP {response.status_code}"
+    if looks_like_challenge(response.status_code, response.content, minimum):
+        return None, f"challenge or truncated response ({len(response.content)} bytes)"
+    return response.content, f"{len(response.content):,} bytes"
+
+
+def fetch_one(client: httpx.Client, document: RegisteredDocument) -> Outcome:
+    target = CORPUS_DIR / document.filename
+    # Resumability is a size check, not an existence check: a half-written file
+    # from an interrupted run exists and is useless, and skipping it on presence
+    # alone would make that failure permanent and silent.
+    if target.exists() and target.stat().st_size >= document.min_bytes:
+        return Outcome(document, "skipped", "already present", target.stat().st_size)
+
+    content, detail = _attempt(client, document.url, document.min_bytes)
+    if content is None and document.fallback_url:
+        content, fallback_detail = _attempt(client, document.fallback_url, document.min_bytes)
+        detail = f"{detail}; fallback: {fallback_detail}"
+    if content is None:
+        return Outcome(document, "failed", detail)
+
+    target.write_bytes(content)
+    return Outcome(document, "fetched", detail, len(content))
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--rung", default="rung-1")
+    parser.add_argument(
+        "--purpose",
+        choices=("probe", "ingest"),
+        default="probe",
+        help=(
+            "`probe` evaluates a candidate; `ingest` prepares it for the corpus. "
+            "Probe-candidate documents refuse `ingest` — the Rung 1 set is "
+            "approved as a probe set, not an ingest set."
+        ),
     )
+    args = parser.parse_args(argv)
 
+    documents = for_rung(load(REGISTRY), args.rung)
+    if not documents:
+        print(f"no documents registered for {args.rung}", file=sys.stderr)
+        return 2
 
-def _save(path: Path, content: bytes, source: str) -> None:
-    if len(content) < MIN_BYTES:
-        raise RuntimeError(
-            f"{source}: got {len(content)} bytes (< {MIN_BYTES}); refusing to write {path.name}"
+    # The approval gate, enforced rather than documented. A probe-candidate is
+    # approved to be *evaluated*; nothing here may prepare one for the corpus.
+    blocked = [d.id for d in documents if args.purpose == "ingest" and d.is_probe_only]
+    if blocked:
+        print(
+            f"refusing --purpose ingest for probe-candidate documents: {', '.join(blocked)}.\n"
+            "The Rung 1 set is approved as a PROBE set only (SPEC-003 status block). "
+            "Change `status` in corpus/corpus.toml once the ladder is approved.",
+            file=sys.stderr,
         )
-    path.write_bytes(content)
-    print(f"{path.name}: {len(content):,} bytes from {source}")
+        return 3
 
-
-def fetch_nist(client: httpx.Client, corpus: Path) -> None:
-    response = client.get(NIST_URL)
-    response.raise_for_status()
-    _save(corpus / "nist-ai-rmf-100-1.pdf", response.content, NIST_URL)
-
-
-def fetch_edgar(client: httpx.Client, corpus: Path) -> None:
-    response = client.get(EDGAR_URL)
-    response.raise_for_status()
-    _save(corpus / "nvda-10k-2026.htm", response.content, EDGAR_URL)
-
-
-def fetch_eurlex(client: httpx.Client, corpus: Path) -> None:
-    target = corpus / "eu-ai-act-2024-1689.html"
-    response = client.get(EURLEX_URL)
-    if not _looks_like_challenge(response):
-        _save(target, response.content, EURLEX_URL)
-        return
-
-    print(f"EUR-Lex direct fetch blocked (HTTP {response.status_code}); trying Cellar…")
-    fallback = client.get(
-        CELLAR_URL,
-        headers={"Accept": "text/html", "Accept-Language": "en"},
-    )
-    if fallback.status_code == 200 and len(fallback.content) >= MIN_BYTES:
-        _save(target, fallback.content, CELLAR_URL)
-        return
-
-    raise RuntimeError(EURLEX_MANUAL_HELP)
-
-
-def main() -> int:
-    corpus = Path(__file__).resolve().parent.parent / "corpus"
-    corpus.mkdir(exist_ok=True)
-    failures: list[str] = []
-
+    CORPUS_DIR.mkdir(parents=True, exist_ok=True)
+    outcomes: list[Outcome] = []
     with httpx.Client(
-        headers={"User-Agent": USER_AGENT}, follow_redirects=True, timeout=120
+        headers={"User-Agent": USER_AGENT}, follow_redirects=True, timeout=TIMEOUT
     ) as client:
-        for fetch in (fetch_nist, fetch_edgar, fetch_eurlex):
-            try:
-                fetch(client, corpus)
-            except Exception as exc:
-                failures.append(f"{fetch.__name__}: {exc}")
+        for document in documents:
+            outcome = fetch_one(client, document)
+            outcomes.append(outcome)
+            print(f"{outcome.status:<8} {document.id:<24} {outcome.detail}")
 
-    for failure in failures:
-        print(f"\nFAILED — {failure}", file=sys.stderr)
-    return 1 if failures else 0
+    failed = [o for o in outcomes if o.status == "failed"]
+    if failed:
+        print(f"\n{len(failed)} document(s) could not be fetched:", file=sys.stderr)
+        for outcome in failed:
+            print(f"  {outcome.document.id}: {outcome.detail}", file=sys.stderr)
+            print(f"    manual download: {outcome.document.url}", file=sys.stderr)
+            print(f"    save as: corpus/{outcome.document.filename}", file=sys.stderr)
+        return 1
+    return 0
 
 
 if __name__ == "__main__":

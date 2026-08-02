@@ -1,0 +1,169 @@
+# Corpus registry — SPEC-003 amendment, step 2.
+#
+# `status` is the approval gate, not a comment:
+#   ingested        — in the corpus today.
+#   probe-candidate — approved as a PROBE SET only (owner, 2026-08-02).
+#                     Fetching one to evaluate it is authorised; ingesting one
+#                     is NOT. Selection, near-miss criteria, and the ladder stay
+#                     Draft until the probe output has been read.
+#
+# `min_bytes` is per document on purpose. A single global floor would reject the
+# smaller NIST publications while passing a WAF challenge page served in place of
+# a 700 KB regulation, so each floor is sized to the document it protects — set
+# to roughly half the observed size, which catches a truncated or substituted
+# response without failing on a routine revision.
+#
+# `estimated_chunks` is a fetch-planning estimate carried over from the SPEC-003
+# amendment. It is never a target and nothing depends on it being right.
+
+# --- Rung 0: the corpus as ingested -------------------------------------------
+
+[[document]]
+id = "nist-ai-rmf"
+status = "ingested"
+rung = "rung-0"
+loader = "nist_pdf"
+filename = "nist-ai-rmf-100-1.pdf"
+url = "https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.100-1.pdf"
+min_bytes = 500_000
+title = "NIST AI Risk Management Framework (AI RMF 1.0)"
+doc_label = "NIST AI RMF 1.0"
+doc_type = "standard"
+source_uri = "https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.100-1.pdf"
+
+[[document]]
+id = "eu-ai-act"
+status = "ingested"
+rung = "rung-0"
+loader = "eurlex_html"
+filename = "eu-ai-act-2024-1689.html"
+url = "https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=OJ:L_202401689"
+fallback_url = "http://publications.europa.eu/resource/celex/32024R1689"
+min_bytes = 500_000
+title = "Regulation (EU) 2024/1689 (Artificial Intelligence Act)"
+doc_label = "EU AI Act"
+doc_type = "regulation"
+source_uri = "https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=OJ:L_202401689"
+
+[[document]]
+id = "nvda-10k"
+status = "ingested"
+rung = "rung-0"
+loader = "edgar_10k"
+filename = "nvda-10k-2026.htm"
+url = "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/nvda-20260125.htm"
+min_bytes = 500_000
+title = "NVIDIA Corporation Form 10-K (fiscal year 2026)"
+doc_label = "NVIDIA 10-K FY2026"
+doc_type = "filing"
+source_uri = "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/nvda-20260125.htm"
+
+# --- Rung 1: PROBE SET ONLY. Not approved for ingestion. ----------------------
+
+[[document]]
+id = "nist-csf-2-0"
+status = "probe-candidate"
+rung = "rung-1"
+loader = "nist_pdf"
+filename = "nist-csf-2-0.pdf"
+url = "https://nvlpubs.nist.gov/nistpubs/CSWP/NIST.CSWP.29.pdf"
+min_bytes = 400_000
+title = "NIST Cybersecurity Framework 2.0 (CSWP 29)"
+doc_label = "NIST CSF 2.0"
+doc_type = "standard"
+source_uri = "https://nvlpubs.nist.gov/nistpubs/CSWP/NIST.CSWP.29.pdf"
+competes_with = "GOVERN collides by name with AI RMF Core's Govern — same word, different framework"
+estimated_chunks = 26
+
+[[document]]
+id = "nist-ai-600-1"
+status = "probe-candidate"
+rung = "rung-1"
+loader = "nist_pdf"
+filename = "nist-ai-600-1.pdf"
+url = "https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.600-1.pdf"
+min_bytes = 300_000
+title = "NIST AI 600-1 (Generative AI Profile)"
+doc_label = "NIST AI 600-1"
+doc_type = "standard"
+source_uri = "https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.600-1.pdf"
+competes_with = "literally an AI RMF profile; competes with 'AI RMF Profiles' directly"
+estimated_chunks = 51
+
+[[document]]
+id = "nist-sp-800-37r2"
+status = "probe-candidate"
+rung = "rung-1"
+loader = "nist_pdf"
+filename = "nist-sp-800-37r2.pdf"
+url = "https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-37r2.pdf"
+min_bytes = 1_000_000
+title = "NIST SP 800-37 Rev. 2 (Risk Management Framework for Information Systems)"
+doc_label = "NIST SP 800-37r2"
+doc_type = "standard"
+source_uri = "https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-37r2.pdf"
+competes_with = "'Risk Management Framework' name collision with AI RMF"
+estimated_chunks = 146
+
+[[document]]
+id = "nist-sp-1270"
+status = "probe-candidate"
+rung = "rung-1"
+loader = "nist_pdf"
+filename = "nist-sp-1270.pdf"
+url = "https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.1270.pdf"
+min_bytes = 800_000
+title = "NIST SP 1270 (Towards a Standard for Identifying and Managing Bias in AI)"
+doc_label = "NIST SP 1270"
+doc_type = "standard"
+source_uri = "https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.1270.pdf"
+competes_with = "competes with AI RMF 'Fair – with Harmful Bias Managed'"
+estimated_chunks = 69
+
+[[document]]
+id = "gdpr"
+status = "probe-candidate"
+rung = "rung-1"
+loader = "eurlex_html"
+filename = "gdpr-2016-679.html"
+url = "https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:32016R0679"
+fallback_url = "http://publications.europa.eu/resource/celex/32016R0679"
+min_bytes = 400_000
+title = "Regulation (EU) 2016/679 (General Data Protection Regulation)"
+doc_label = "GDPR"
+doc_type = "regulation"
+source_uri = "https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:32016R0679"
+competes_with = "Art. 22 automated decision-making; DPIA vs. the AI Act's FRIA (Art. 27)"
+estimated_chunks = 120
+
+[[document]]
+id = "machinery-regulation"
+status = "probe-candidate"
+rung = "rung-1"
+loader = "eurlex_html"
+filename = "machinery-2023-1230.html"
+url = "https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:32023R1230"
+fallback_url = "http://publications.europa.eu/resource/celex/32023R1230"
+min_bytes = 400_000
+title = "Regulation (EU) 2023/1230 (Machinery Regulation)"
+doc_label = "Machinery Regulation"
+doc_type = "regulation"
+source_uri = "https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:32023R1230"
+competes_with = "cross-referenced by AI Act Annex I; near-identical CE-marking/conformity vocabulary"
+estimated_chunks = 120
+
+[[document]]
+id = "cyber-resilience-act"
+status = "probe-candidate"
+rung = "rung-1"
+loader = "eurlex_html"
+filename = "cra-2024-2847.html"
+url = "https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:32024R2847"
+fallback_url = "http://publications.europa.eu/resource/celex/32024R2847"
+min_bytes = 400_000
+title = "Regulation (EU) 2024/2847 (Cyber Resilience Act)"
+doc_label = "Cyber Resilience Act"
+doc_type = "regulation"
+source_uri = "https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:32024R2847"
+competes_with = "product cybersecurity + conformity assessment; competes with AI Act Art. 15 and Ch. III §5"
+estimated_chunks = 114

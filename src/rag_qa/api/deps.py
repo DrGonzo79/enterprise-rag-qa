@@ -1,9 +1,12 @@
 """Settings and per-app state (SPEC-006 KD-11).
 
-`Settings.from_env()` never raises: importing `rag_qa.main` must not depend on a
-configured environment, or the whole test suite needs a database to import an app
-that serves `/healthz`. Validation that *does* raise runs in `lifespan`, so a
-misconfigured deployment fails at startup with a named cause instead of serving
+`Settings.from_env()` never raises **on absence**: importing `rag_qa.main` must
+not depend on a configured environment, or the whole test suite needs a database
+to import an app that serves `/healthz`. It does raise on a value that is
+*present and unparseable*, because that is not absence — it is an operator who
+meant something, and defaulting past it silently substitutes a number they did
+not choose. Validation of what the values *mean together* runs in `lifespan`, so
+a misconfigured deployment fails at startup with a named cause instead of serving
 404s on an endpoint that quietly was not mounted.
 """
 
@@ -36,12 +39,50 @@ class ConfigurationError(RuntimeError):
 
 def _int(name: str, default: int) -> int:
     raw = os.environ.get(name)
-    return int(raw) if raw else default
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise ConfigurationError(f"{name}={raw!r} is not an integer") from exc
 
 
 def _float(name: str, default: float) -> float:
     raw = os.environ.get(name)
-    return float(raw) if raw else default
+    if not raw:
+        return default
+    try:
+        return float(raw)
+    except ValueError as exc:
+        raise ConfigurationError(f"{name}={raw!r} is not a number") from exc
+
+
+_TRUE = frozenset({"1", "true", "yes", "on"})
+_FALSE = frozenset({"", "0", "false", "no", "off"})
+
+
+def _bool(name: str) -> bool:
+    """Parse a flag, rejecting anything that is neither.
+
+    **`bool(os.environ.get(name))` was the bug**, and it was in the one place
+    where being wrong disables authentication: every non-empty string is truthy,
+    so `RAG_QA_ALLOW_ANONYMOUS=false` — which an operator writes precisely to
+    say *no* — turned auth off. `=0`, `=no`, and `=off` did the same. A flag
+    whose "off" spellings all mean "on" is worse than no flag, because it reads
+    as protection in the file where someone went looking to confirm it.
+
+    An unrecognised value raises rather than defaulting: guessing which side of
+    a security switch `RAG_QA_ALLOW_ANONYMOUS=maybe` belongs on is exactly the
+    decision a process should refuse to make.
+    """
+    raw = os.environ.get(name, "").strip().lower()
+    if raw in _TRUE:
+        return True
+    if raw in _FALSE:
+        return False
+    raise ConfigurationError(
+        f"{name}={raw!r} is not a boolean; use one of {sorted(_TRUE)} or {sorted(_FALSE - {''})}"
+    )
 
 
 def _decimal(name: str) -> Decimal | None:
@@ -67,6 +108,10 @@ class Settings:
     sse_heartbeat_seconds: float = 15.0
     ingest_max_chunks: int = 5000
     corpus_root: Path = field(default=DEFAULT_CORPUS_ROOT)
+    # Explicit opt-out, exactly like `allow_anonymous` and for the same reason:
+    # a guard that silently disables itself when a variable is unset is worse
+    # than no guard, because it looks armed.
+    allow_unlimited_spend: bool = False
     monthly_budget_usd: Decimal | None = None
     # Unset means "derive from the monthly budget" (KD-16): the monthly figure is
     # the one an owner can commit to, and a daily ceiling picked on its own has a
@@ -82,7 +127,8 @@ class Settings:
             openai_api_key=os.environ.get("OPENAI_API_KEY"),
             api_key=os.environ.get("RAG_QA_API_KEY"),
             admin_api_key=os.environ.get("RAG_QA_ADMIN_API_KEY"),
-            allow_anonymous=bool(os.environ.get("RAG_QA_ALLOW_ANONYMOUS")),
+            allow_anonymous=_bool("RAG_QA_ALLOW_ANONYMOUS"),
+            allow_unlimited_spend=_bool("RAG_QA_ALLOW_UNLIMITED_SPEND"),
             max_concurrent_queries=_int("RAG_QA_MAX_CONCURRENT_QUERIES", MAX_CONCURRENT_QUERIES),
             sse_heartbeat_seconds=_float("RAG_QA_SSE_HEARTBEAT_SECONDS", 15.0),
             ingest_max_chunks=_int("INGEST_MAX_CHUNKS", 5000),
@@ -119,6 +165,20 @@ class Settings:
                 "no API key configured: set RAG_QA_API_KEY (and optionally "
                 "RAG_QA_ADMIN_API_KEY), or set RAG_QA_ALLOW_ANONYMOUS=1 to serve "
                 "without authentication deliberately"
+            )
+        # The same argument, applied to the guard five review rounds went into
+        # making exact. Unset, `SpendGuard` is simply off: no ceiling, no
+        # breaker, no reservations, and a `/metrics` page with no headroom
+        # series to alert on. Everything else in this service fails closed; this
+        # was the one thing that failed open, and it failed open in front of a
+        # metered API (SPEC-006 Key decision 16, amendment 8).
+        has_ceiling = self.monthly_budget_usd or self.daily_budget_usd
+        if not self.allow_unlimited_spend and not has_ceiling:
+            raise ConfigurationError(
+                "no spend ceiling configured: set RAG_QA_MONTHLY_BUDGET_USD to the "
+                "amount you are willing to spend in a month (the daily ceiling "
+                "derives from it), or set RAG_QA_ALLOW_UNLIMITED_SPEND=1 to serve a "
+                "metered API with no ceiling deliberately"
             )
 
     def _check_budget_shape(self) -> None:

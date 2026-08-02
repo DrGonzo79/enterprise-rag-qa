@@ -1630,3 +1630,57 @@ async def test_the_context_manager_releases_on_a_clean_exit_too(
             reservation.settle(Decimal("0.65"))
     assert guard.reserved == Decimal("0")
     assert guard.recorded == Decimal("0.65")
+
+
+# --- the guard has to be armed, not merely available (KD-16 amendment 8) ------
+#
+# Five review rounds went into making the ceiling exact, and it was unset by
+# default: `RAG_QA_MONTHLY_BUDGET_USD` absent means no ceiling, no breaker, no
+# reservations, and no headroom series to alert on. Everything else in this
+# service fails closed. This was the one thing that failed open, in front of a
+# metered API.
+
+
+def test_serving_without_a_spend_ceiling_is_a_startup_error() -> None:
+    with pytest.raises(ConfigurationError, match="no spend ceiling configured"):
+        settings().require_serving(needs_providers=False)
+
+
+def test_an_unlimited_deployment_must_say_so_out_loud() -> None:
+    """The opt-out exists — a local run against a stubbed provider has nothing to
+    protect — but it is a sentence someone typed, which is the whole difference
+    between an unguarded deployment and an unnoticed one."""
+    settings(allow_unlimited_spend=True).require_serving(needs_providers=False)
+
+
+@pytest.mark.parametrize(
+    "configured",
+    [{"monthly_budget_usd": Decimal("20.00")}, {"daily_budget_usd": Decimal("0.50")}],
+    ids=["monthly", "daily-only"],
+)
+def test_either_ceiling_alone_satisfies_the_requirement(configured: dict[str, Decimal]) -> None:
+    settings(**configured).require_serving(needs_providers=False)
+
+
+async def test_a_configured_ceiling_that_is_not_armed_fails_at_startup() -> None:
+    """Configured is not the same as armed. `SpendGuard.enabled` needs a session
+    factory as well as a limit, so a deployment that sets a budget and reaches
+    lifespan without a database handle would serve with the ceiling silently
+    off — the operator having done everything right and been overruled by a
+    wiring gap."""
+    app = build_app(daily_budget_usd=Decimal("5.00"))  # no session_factory
+    assert not app.state.rag.budget.enabled
+    with pytest.raises(ConfigurationError, match="not armed"):
+        async with app.router.lifespan_context(app):
+            pass
+
+
+async def test_an_armed_ceiling_starts_normally(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """The other side of the pair, so the check above is not passing because
+    lifespan raises for some unrelated reason."""
+    app = build_app(session_factory=session_factory, daily_budget_usd=Decimal("5.00"))
+    assert app.state.rag.budget.enabled
+    async with app.router.lifespan_context(app):
+        pass

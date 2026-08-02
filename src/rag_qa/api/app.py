@@ -21,7 +21,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from rag_qa.api.budget import SpendGuard
 from rag_qa.api.context import current_request_id, install_log_record_factory, record_outcome
-from rag_qa.api.deps import AppState, Settings
+from rag_qa.api.deps import AppState, ConfigurationError, Settings
 from rag_qa.api.errors import ApiError, envelope
 from rag_qa.api.metrics import Metrics
 from rag_qa.api.middleware import MetricsMiddleware, RequestContextMiddleware
@@ -99,6 +99,19 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
     if needs_providers:
         _build_dependencies(state)
+
+    # Configured is not the same as armed. `SpendGuard.enabled` needs a session
+    # factory as well as a limit, so a deployment that sets a budget and reaches
+    # here without a database handle would serve with the ceiling silently off —
+    # the operator having done everything right and been quietly overruled by a
+    # wiring gap. Checked after `_build_dependencies`, which is where the factory
+    # appears (SPEC-006 Key decision 16, amendment 8).
+    if (settings.monthly_budget_usd or settings.daily_budget_usd) and not state.budget.enabled:
+        raise ConfigurationError(
+            "a spend ceiling is configured but the guard is not armed: it has no "
+            "database session factory, so no ceiling would be enforced. This is a "
+            "wiring error, not a configuration one."
+        )
 
     logger.info(
         "api starting",

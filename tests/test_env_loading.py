@@ -58,3 +58,60 @@ def test_load_env_is_a_noop_without_dotenv(tmp_path: Path, monkeypatch: pytest.M
     monkeypatch.setenv("DATABASE_URL", "unchanged")
     load_env()
     assert os.environ["DATABASE_URL"] == "unchanged"
+
+
+# --- flags that only look like flags (KD-16 amendment 8) ----------------------
+
+
+@pytest.mark.parametrize("value", ["0", "false", "FALSE", "no", "off", ""])
+def test_a_falsey_spelling_does_not_enable_anonymous_access(
+    value: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`bool(os.environ.get(...))` was the implementation, and every non-empty
+    string is truthy — so `RAG_QA_ALLOW_ANONYMOUS=false`, which an operator
+    writes precisely to say *no*, turned authentication off. A flag whose "off"
+    spellings all mean "on" is worse than no flag: it reads as protection in the
+    file where someone went looking to confirm it."""
+    from rag_qa.api.deps import Settings
+
+    monkeypatch.setenv("RAG_QA_ALLOW_ANONYMOUS", value)
+    assert Settings.from_env().allow_anonymous is False
+
+
+@pytest.mark.parametrize("value", ["1", "true", "TRUE", "yes", "on"])
+def test_a_truthy_spelling_does_enable_it(value: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    from rag_qa.api.deps import Settings
+
+    monkeypatch.setenv("RAG_QA_ALLOW_ANONYMOUS", value)
+    assert Settings.from_env().allow_anonymous is True
+
+
+def test_an_unrecognised_flag_value_refuses_to_guess(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Guessing which side of a security switch `=maybe` belongs on is exactly
+    the decision a process should decline to make."""
+    from rag_qa.api.deps import ConfigurationError, Settings
+
+    monkeypatch.setenv("RAG_QA_ALLOW_ANONYMOUS", "maybe")
+    with pytest.raises(ConfigurationError, match="not a boolean"):
+        Settings.from_env()
+
+
+@pytest.mark.parametrize(
+    ("name", "value", "match"),
+    [
+        ("RAG_QA_MAX_CONCURRENT_QUERIES", "four", "not an integer"),
+        ("RAG_QA_SSE_HEARTBEAT_SECONDS", "soon", "not a number"),
+        ("RAG_QA_MONTHLY_BUDGET_USD", "twenty", "not a decimal"),
+    ],
+)
+def test_a_present_but_unparseable_value_names_itself(
+    name: str, value: str, match: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Absence defaults; a value that is present and unparseable does not.
+    Defaulting past it silently substitutes a number the operator did not
+    choose — and two of these three feed a spend ceiling."""
+    from rag_qa.api.deps import ConfigurationError, Settings
+
+    monkeypatch.setenv(name, value)
+    with pytest.raises(ConfigurationError, match=match):
+        Settings.from_env()

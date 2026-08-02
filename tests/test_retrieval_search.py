@@ -67,6 +67,109 @@ async def test_fulltext_search_no_lexical_match_returns_empty(
     assert rows == []
 
 
+# --- AC-12(b) amendment 5: the OR fallback ------------------------------------
+
+
+async def test_a_working_conjunction_is_left_alone(
+    session_factory: async_sessionmaker[AsyncSession], seeded_corpus: SeededCorpus
+) -> None:
+    """The fallback must change nothing that already works, or the branch's
+    precision drops on every query rather than only on the silent ones.
+
+    **The query has to be multi-term.** An earlier version of this test used
+    `quarklebit` alone, and a single-term OR is identical to a single-term AND —
+    so it passed while a mutant that skipped the conjunction entirely and always
+    fell back went undetected. `quarklebit govern` separates them: 1 chunk under
+    AND, 3 under OR.
+    """
+    async with session_factory() as session:
+        rows = await fulltext_search(session, "quarklebit govern")
+    assert [row.text for row in rows] == [LEXICAL_ONLY_TEXT], (
+        "the conjunction matched one chunk; a wider result means the fallback ran"
+    )
+
+
+async def test_a_sentence_that_ands_to_nothing_falls_back_and_finds_it(
+    session_factory: async_sessionmaker[AsyncSession], seeded_corpus: SeededCorpus
+) -> None:
+    """The defect, at synthetic scale. Every content word here is in the corpus
+    except `say`, and under a conjunction one absent word empties the result --
+    which is how a three-register corpus makes cross-document questions
+    unanswerable (SPEC-004 AC-12, amendment 5)."""
+    sentence = "What does the quarklebit provision say about exceptional derogation?"
+    async with session_factory() as session:
+        conjunction = await session.execute(
+            text("SELECT count(*) FROM chunks WHERE tsv @@ websearch_to_tsquery('english', :q)"),
+            {"q": sentence},
+        )
+        assert conjunction.scalar_one() == 0, "premise: the AND form finds nothing"
+        rows = await fulltext_search(session, sentence)
+
+    assert rows, "the fallback returned nothing"
+    assert LEXICAL_ONLY_TEXT in [row.text for row in rows]
+
+
+async def test_the_fallback_still_pushes_filters_into_the_query(
+    session_factory: async_sessionmaker[AsyncSession], seeded_corpus: SeededCorpus
+) -> None:
+    """AC-10 must hold on the second attempt too. A fallback that dropped the
+    predicate would leak chunks from documents the caller excluded -- and it
+    would do so only on the queries that reach the fallback, so it would look
+    correct in every test that used a matching query."""
+    filing_id = seeded_corpus.document_ids["filing"]
+    # `passage` appears in all three synthetic documents and `say` in none, so
+    # the conjunction is empty and the fallback reaches every document -- which
+    # is what makes the filter's effect observable.
+    # A pool wider than the default, because the regulation's 199 filler chunks
+    # otherwise fill all 50 slots on rank alone and the unfiltered call would
+    # span one document -- making the comparison below vacuous rather than wrong.
+    sentence = "What does the passage say about quarklebit obligations?"
+    async with session_factory() as session:
+        unfiltered = await fulltext_search(session, sentence, pool=250)
+        filtered = await fulltext_search(
+            session, sentence, RetrievalFilters(document_ids=(filing_id,)), pool=250
+        )
+
+    # The premise the assertion needs: without the filter the fallback reaches
+    # more than one document, so restricting to one is a real restriction rather
+    # than a description of what it would have returned anyway.
+    assert len({row.document_id for row in unfiltered}) > 1, (
+        "premise: the unfiltered fallback spans documents"
+    )
+    assert filtered, "the filtered fallback returned nothing"
+    assert {row.document_id for row in filtered} == {filing_id}
+
+
+async def test_a_query_of_only_stop_words_is_empty_not_an_error(
+    session_factory: async_sessionmaker[AsyncSession], seeded_corpus: SeededCorpus
+) -> None:
+    """`to_tsvector` yields no lexemes, so the aggregate is NULL and the cast is
+    a NULL tsquery. That must match nothing rather than raise: an empty result is
+    a defined outcome and fusion degrades to vector order."""
+    async with session_factory() as session:
+        assert await fulltext_search(session, "the and of") == []
+
+
+async def test_the_fallback_escapes_lexemes_from_hostile_input(
+    session_factory: async_sessionmaker[AsyncSession], seeded_corpus: SeededCorpus
+) -> None:
+    """Arbitrary punctuation reaching the fallback must not raise. These inputs
+    get there precisely because they match nothing under the conjunction.
+
+    **What this does NOT prove: that `quote_literal` is doing anything.** No
+    PostgreSQL text-search configuration tried (`english`, `simple`) emits a
+    lexeme containing a single quote — the parser strips apostrophes — so no
+    input to this function can distinguish escaped concatenation from bare
+    concatenation. Verified by mutation: removing `quote_literal` leaves every
+    test here green. The escaping is kept as defence against a future
+    configuration change, and is recorded as untestable-by-construction rather
+    than filed as covered (CLAUDE.md rule 3).
+    """
+    for hostile in ("' | 'x", "quarklebit' & !'", "a'b c\\d", "!!! ') (&|"):
+        async with session_factory() as session:
+            assert isinstance(await fulltext_search(session, hostile), list)
+
+
 async def test_embedder_identities_are_corpus_wide(
     session_factory: async_sessionmaker[AsyncSession], seeded_corpus: SeededCorpus
 ) -> None:

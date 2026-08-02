@@ -251,11 +251,17 @@ None. Query embedding reuses `openai` (SPEC-003); everything else is SQLAlchemy 
 - **AC-11 (ef_search GUC, review amendment 1)** — During a `retrieve()` call on a connection drawn fresh from the pool, `SHOW hnsw.ef_search` inside the vector branch's transaction reads 50; after the call, the same pooled connection outside any retrieval transaction reads the default (40) — `SET LOCAL` scoped correctly, no leakage across pool recycling.
 - **AC-12 (degenerate inputs, review amendment 3)** — (a) `retrieve("")` and `retrieve("   \n")` raise `ValueError` with **zero** embedding calls and zero SQL issued. (b) A query with no lexical match (`websearch_to_tsquery` yields no `@@` hits) returns k results in vector order without error, `fulltext_rank is None` on all. (c) A corpus/filter combination holding fewer than k chunks returns exactly that many, no padding, no error.
 
-  **PROPOSED AMENDMENT — not applied** *(raised 2026-08-02; CLAUDE.md rule 4: an amendment proposed unprompted stops at proposed)*. **AC-12(b) describes the branch's normal case as if it were a degenerate one. It is not degenerate — it is the majority.**
+  **AMENDMENT 5 — APPLIED, option (i)** *(2026-08-02; owner-approved, CLAUDE.md rule 4's owner-asked clause)*. **AC-12(b) describes the branch's normal case as if it were a degenerate one. It is not degenerate — it is the majority.**
 
-  **Measured 2026-08-02 against the 358-chunk corpus.** `fulltext_search` returns **zero candidates** on **12 of the 26** smoke questions (46 %) and **13 of the 14** pilot questions (93 %). Where it returns nothing the fused result is the vector ranking unchanged: the pilot's top-8 was byte-identical to vector-only on **14 of 14** questions.
+  #### The reason, which is about registers and not about conversational words
 
-  **The mechanism, verified rather than inferred.** `websearch_to_tsquery` ANDs every content term, and a question phrased as a sentence contributes conversational words the corpus does not contain. The repository's own flagship citation question is an instance:
+  **This corpus is three documents in three registers, and `websearch_to_tsquery` ANDs every content term. A query therefore cannot satisfy two registers at once, so a question spanning documents is close to guaranteed to return nothing.** The EU AI Act legislates in *shall*; NIST advises in *should*; the 10-K speaks in first-person *we*. Measured while authoring pilot-2: `shall` is a keyword for the AI Act and a **query-killer for every NIST chunk**, and `must` kills AI Act queries because the Act never says it.
+
+  **That is a product defect independent of any evaluation consideration.** The system's stated purpose is retrieval-augmented Q&A *across* public compliance documents; a full-text branch that cannot match across the corpus it indexes fails the central claim, and it would fail it with a saturated eval, an unsaturated one, or no eval at all. **The conversational-word case — `"What does Article 6(2) say…"` returning zero because no chunk contains `say` — is the symptom that surfaced this, not the argument for fixing it.**
+
+  #### What was measured
+
+  `fulltext_search` returned **zero candidates** on 12 of 26 smoke questions (46 %) and 13 of 14 pilot-1 questions (93 %). Where it returns nothing the fused result is the vector ranking unchanged — pilot-1's top-8 was byte-identical to vector-only on 14 of 14. Verified mechanism:
 
   ```
   "What does Article 6(2) say about classifying high-risk AI systems?"
@@ -264,13 +270,70 @@ None. Query embedding reuses `openai` (SPEC-003); everything else is SQLAlchemy 
     -> 'articl' & '6' & '2' & 'high-risk'                                          -> 33 hits
   ```
 
-  **`say` is the term that empties it.** No chunk contains the word, so the conjunction is unsatisfiable, and the branch built to nail exact citations returns nothing for the exact-citation query.
+  **The branch itself is not broken** — SPEC-007 pilot-2 put 14 lexically-anchored questions through it and **0 of 14** returned zero candidates. The mechanism works; its operating envelope was far narrower than the architecture assumed.
 
-  **Why this matters beyond a tuning detail.** The stack rationale in CLAUDE.md is *"regulatory text is dense with terms of art and exact citations … Embeddings blur exact terms; full-text search nails them."* On the queries a user actually types, that branch is silent about half the time and near-always for natural-language questions — so **the project's central retrieval claim is currently untested rather than false**, and the hybrid-vs-vector-only comparison Key decision 12 defers to SPEC-007 would, run today, compare one arm against itself (SPEC-007 Key decision 12, amendment 2, Result 3).
+  #### The change
 
-  **What this would change, with the options ranked but not chosen.** All of them touch fusion, which is why none is applied here: (i) fall back to an OR-of-terms `tsquery` when the AND form yields no rows — smallest change, preserves precision when the strict form works; (ii) strip a stop-list of interrogative/conversational tokens before building the query — cheap but a hand-maintained list; (iii) `plainto_tsquery` — no better, it also ANDs; (iv) accept it and re-scope the hybrid claim to citation-shaped queries only, which is the honest do-nothing option and is not free, because it narrows a claim the README makes.
+  **When the `websearch_to_tsquery` conjunction returns zero rows, re-issue the same search with the query's lexemes OR-ed together.** The fallback runs **only** where the branch currently contributes nothing, so **no query that works today changes**. Same session, same filters, same ranking, same candidate pool — one extra round trip on the fallback path only.
 
-  **Not applied**, because it changes approved retrieval behaviour on my own initiative, and because SPEC-004 Key decision 12 already reserves fusion changes for SPEC-007 with data. **This is the data.**
+  **Rejected alternatives, recorded so they are visibly rejected rather than quietly untried:**
+  - **(ii) a stop-list of conversational tokens.** The list is unbounded and *corpus-specific*: eighteen pilot-2 drafts alone surfaced `must`, `shall`, `long`, `mean`, `principal`, `identify`, and **`shall` would have to be a stopword for NIST and a keyword for the AI Act simultaneously**. A hand-maintained per-document vocabulary is a maintenance burden that decays silently.
+  - **(iii) `plainto_tsquery`.** Verified to also AND. Does nothing.
+  - **(iv) change nothing, re-scope the claim to citation-shaped queries.** Not free: it keeps the second branch, the fusion step, the `tsvector` column and this spec's two-connection design while serving roughly half of queries, and `/query` accepts sentences.
+
+  #### Pre-registered interpretation — written before the effect on retrieval is measured
+
+  **(i) was chosen on correctness grounds and a negative effect on retrieval quality does not reverse it.** Recorded here, before the number exists, because written afterwards this is a rationalisation.
+
+  - **If `recall@8` or the hybrid arm degrades once the branch starts working, that is evidence about RRF, not about this fix.** It would mean fusion handles a low-precision lexical candidate set badly — which is **SPEC-007 Key decision 12's question**, and one this repository already has a hint of: RRF measured as a *loss* on paraphrase queries on 2026-07-26, when the branch was firing on some of them.
+  - **The fix is not conditional on the comparison improving.** A branch that returns nothing for structural reasons is broken whether or not fixing it flatters the metric. Reverting on a bad number would be selecting the implementation that makes hybrid win — SPEC-007 KD-12's substitution one layer down.
+  - **What the re-measurement is for:** it tells us what RRF does with a working lexical branch. That is an input to SPEC-007, not a verdict on this amendment.
+
+  #### Pre-specified failure mode, and the successor named now
+
+  **How (i) fails: OR-of-terms on a sentence matches any chunk containing a common lexeme — `system`, `data`, `provider` — so the fallback can return a large, low-precision candidate set exactly where the AND form was silent.** Fusion then has to rank it, and RRF gives a candidate credit for its position in *either* list.
+
+  **The falsifier, stated as an observable: fallback candidates displacing good vector results in the fused top-k.** Concretely — a question where hybrid's `recall@8` is worse than vector-only's *and* the displacing chunks carry a `fulltext_rank` originating from a fallback query. The `c` cell of the McNemar table (vector-only succeeds, hybrid fails) is where this shows up, and it was **0** across both pilots before the change.
+
+  **The successor, named now so nobody reaches for (ii) later because it is the nearest thing to hand: prune the OR-set by corpus-derived chunk frequency — computed, never maintained.** A lexeme appearing in more than some fraction of chunks carries no retrieval signal and is dropped from the fallback query. The frequency comes from the indexed corpus itself (`ts_stat` over the `tsv` column, or a materialised count), so it **adapts to the corpus automatically and has no per-document list to maintain** — which is precisely the property (ii) lacks. It is not implemented now because the failure it addresses has not been observed.
+
+  #### Measured after the change — 2026-08-02
+
+  **Coverage: the defect is closed.** Questions on which the branch returns zero candidates:
+
+  | Set | Before | After |
+  |---|---:|---:|
+  | smoke (26) | 12 (46 %) | **0** |
+  | pilot-1, natural language (14) | 13 (93 %) | **0** |
+  | pilot-2, lexically anchored (14) | 0 | **0** |
+
+  **Nothing that worked stopped working.** Pilot-2 is byte-identical before and after on every measure — same `recall@8` (1.000 / 0.857), same discordance (b = 2, c = 0), same 6-of-14 identical top-8 — which is the direct check that the fallback only fires where the conjunction was silent. The count of questions where hybrid's top-8 equals vector-only's fell from 13/26 to 1/26 on the smoke set and 14/14 to 1/14 on pilot-1: **the second branch now differentiates.**
+
+  **`recall@8` improved or held everywhere.** Pilot-1 hybrid 0.714 → **0.857** against an unchanged vector-only 0.714; smoke and pilot-2 unchanged.
+
+  **And the pre-specified failure mode occurred.** `recall@1` on the smoke set:
+
+  | | Before | After |
+  |---|---:|---:|
+  | hybrid overall | 0.769 | **0.500** |
+  | hybrid citation | 0.929 | **0.714** |
+  | hybrid paraphrase | 0.583 | **0.250** |
+  | vector-only (all three) | 0.885 / 0.857 / 0.917 | unchanged |
+
+  **Mechanism confirmed rather than assumed: of the 13 smoke questions that now miss at k = 1, 8 have a top-1 chunk that is full-text rank 1 and arrived through the fallback** (the conjunction returned zero for that query). RRF scores a fallback candidate at `1/(60+1)` for its lexical rank, which outranks a genuinely relevant chunk sitting at vector rank 3. This is the low-precision candidate set displacing good vector results, exactly as written down before the measurement.
+
+  **The pre-specified falsifier was too narrow, and that is recorded rather than glossed.** It named only the `recall@8` manifestation — "hybrid's `recall@8` worse than vector-only's". That did **not** happen; `recall@8` improved. The failure appeared one rank-level up, as top-1 displacement. A falsifier that names one manifestation of a mechanism will miss the others, and this one did.
+
+  **Consequence: AC-6 is now RED, and it stays red pending an owner decision.** AC-6 asserts hybrid `recall@1` on citation queries beats vector-only; measured 0.714 against 0.857. Under the pre-registered interpretation above **this does not reverse the change** — the correctness argument for (i) never depended on the comparison improving, and reverting on a bad number would be selecting the implementation that makes hybrid win. Three ways forward, **none applied**:
+
+  1. **Demote AC-6's k = 1 assertion to *recorded*.** The strongest case on the merits and the weakest on process: Key decision 12 already says the k = 1 citation result on 26 questions is *"noise, not evidence"*, so AC-6 asserts a quantity this spec elsewhere disclaims — the same defect AC-8's withdrawn p50 had. But it is also, unavoidably, changing a test because it went red, and it should be reviewed as such.
+  2. **Implement the named successor** (frequency pruning) and re-measure. Addresses the mechanism rather than the assertion, and the failure it targets has now been observed, which is the trigger it was waiting for.
+  3. **Leave it red** until SPEC-007 Key decision 12 settles fusion with data. Honest, and it makes the suite uninformative in the meantime.
+
+  **Recommendation: (2), then re-measure, and only then revisit AC-6.** The assertion is measuring something real — hybrid got worse at rank 1 — and demoting it first would remove the signal that the successor is supposed to move.
+
+
+
 - **AC-13 (baseline artifacts are produced deliberately, never as a test side effect — Key decision 14)** *(added 2026-07-26, third review)* — asserted on **exit codes**, since the guard's entire job is to fail a run:
   - **Gated:** `uv run pytest` writes nothing under `evals/baselines/` and does not modify `evals/retrieval_baseline.json`. The quality tier's *assertions still run* — only the disk write is skipped, and the measured table is printed instead. `uv run pytest --write-baseline` performs the write.
   - **Guarded:** a run that changes any guarded artifact without `--write-baseline` **exits non-zero** with a message naming the file, the change (created / modified / deleted), and the flag. Verified by staging a throwaway artifact, never by overwriting a committed one.

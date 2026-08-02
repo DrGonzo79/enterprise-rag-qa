@@ -875,6 +875,27 @@ reader who has not opened the repository:
 
     **prereg-2's `N = 120` is now inside the interval and close to the power-0.8 figure of 140**, which is a coincidence worth naming rather than a vindication: 120 was `6/0.05` with the 0.05 assumed, and it lands near a defensible number for a reason unrelated to how it was derived.
 
+    #### Both pilots re-run against the fixed branch — 2026-08-02
+
+    Artifacts `evals/pilot-1-post-fix.json`, `evals/pilot-2-post-fix.json`. Same corpus, same questions, same measurement path; the only change is SPEC-004 AC-12 amendment 5.
+
+    | | pilot-1 pre | pilot-1 **post** | pilot-2 pre | pilot-2 **post** |
+    |---|---:|---:|---:|---:|
+    | Zero full-text candidates | 13/14 | **0/14** | 0/14 | 0/14 |
+    | Hybrid top-8 = vector-only's | 14/14 | **1/14** | 6/14 | 6/14 |
+    | `recall@8` hybrid | 0.714 | **0.857** | 1.000 | 1.000 |
+    | `recall@8` vector-only | 0.714 | 0.714 | 0.857 | 0.857 |
+    | b / c | 0 / 0 | **3 / 1** | 2 / 0 | 2 / 0 |
+    | `r` | 0.000 | **0.2857** | 0.1429 | 0.1429 |
+
+    **Pilot-1 answers "do natural-language queries recover": yes.** Coverage went from 7 % to 100 %, hybrid gained 0.143 of `recall@8` over an unchanged vector-only arm, and discordance became measurable for the first time on that set.
+
+    **Pilot-2 answers "did anything that worked stop working": no.** Every figure is identical before and after — which is the direct check that the fallback fires only where the conjunction was silent, and it is worth more than the improvement, because a fix that helps one shape at the cost of another would look like progress on pilot-1 alone.
+
+    **`c = 1` appeared in pilot-1 for the first time.** One question where vector-only succeeds at k = 8 and hybrid does not. That cell was 0 across both pilots before the change, and it is the cell SPEC-004's pre-specified failure mode predicted would fill. **`n_discordant = 4` is still below the floor of 6, so the comparison remains inconclusive** and no reading of the b/c split is licensed.
+
+    **The two `r` values disagree and that is the finding, not a nuisance: 0.2857 (pilot-1) against 0.1429 (pilot-2).** `r` is a property of the *question recipe*, exactly as amendment 2 pre-registered — it does not transfer between shapes, so a confirmatory set drawing on both would need its own measurement rather than either number. **No sizing is done here**, because prereg-2's `N` cannot be fixed while the mix of question shapes in the confirmatory set is undecided, and choosing the mix after seeing which one yields the larger `r` would be the substitution this key decision exists to prevent.
+
     #### Pilot-1 results — measured 2026-08-02, artifact `evals/pilot-1.json`
 
     14 questions, unchanged 358-chunk corpus, nothing fetched, nothing ingested.

@@ -78,9 +78,19 @@ Current spec state (2026-07-26): SPEC-001 (scaffold), SPEC-002 (data model), SPE
 
 > **SCOPED UNDER RULE 7 — 2026-08-02, unverified at the time it was relied on, and recorded before any fix.** "Full-text search nails them" is the load-bearing claim under this architecture, it has **no test and no stated bound**, and it is the reason for the second retrieval branch, the RRF fusion step, the `tsvector` column, and SPEC-004's two-connection design. **Measured**: `fulltext_search` returns **zero candidates** on 12 of the 26 smoke questions (46 %) and 13 of 14 pilot questions (93 %) against the 358-chunk corpus. `websearch_to_tsquery` ANDs every content term, so a question phrased as a sentence contributes words the corpus does not contain and the conjunction is unsatisfiable. **The example is this repository's own flagship citation query**: `"What does Article 6(2) say about classifying high-risk AI systems?"` → 0 hits, because no chunk contains the word `say`; `"Article 6(2) high-risk"` → 33 hits.
 >
-> **The honest scope of the sentence today, until a measurement replaces it:** *full-text search retrieves exact terms when the query is reduced to those terms; it retrieves nothing when the query is a sentence, which is the form the API accepts and the frontend will send.* Whether the branch helps on queries it does fire for is **not yet measured** — SPEC-007 Key decision 12 owns that comparison and it cannot run until the branch fires often enough to differ from vector-only.
+> **The honest scope of the sentence at that moment:** *full-text search retrieves exact terms when the query is reduced to those terms; it retrieves nothing when the query is a sentence, which is the form the API accepts and the frontend will send.*
 >
-> **This note is deliberately written before the fix and must not be deleted by one.** The record should show that the claim was unverified while the architecture rested on it; a note added afterwards would read as a fixed bug rather than as an assumption nobody checked for three specs. See SPEC-004 AC-12(b) proposed amendment and SPEC-007 KD-12 amendment 2, Result 3.
+> **This note was written before the fix and is amended rather than deleted by it.** The record should show that the claim was unverified while the architecture rested on it; a note replaced afterwards would read as a fixed bug rather than as an assumption nobody checked for three specs.
+>
+> **AMENDED 2026-08-02, after SPEC-004 AC-12 amendment 5 (the OR fallback). The envelope changed; the sentence still is not verified.** Coverage — questions on which the branch returns zero candidates:
+>
+> | Set | Before | After |
+> |---|---:|---:|
+> | smoke, citation + paraphrase (26) | 12 (46 %) | **0** |
+> | pilot-1, natural language (14) | 13 (93 %) | **0** |
+> | pilot-2, lexically anchored (14) | 0 | **0** |
+>
+> **What is now true:** the branch fires on every question measured, and it differentiates — hybrid's top-8 matched vector-only's on 13 of 26 smoke questions before and 1 of 26 after. **What is still not established is the sentence itself.** "Full-text search nails them" is a claim that the lexical branch *improves retrieval*, and the first measurement after the fix points the other way at rank 1: hybrid `recall@1` on citation queries fell from 0.929 to 0.714 against an unchanged vector-only 0.857, with 8 of 13 top-1 misses traced to a fallback candidate outranking a good vector result. `recall@8` improved (pilot-1 hybrid 0.714 → 0.857). **So the branch now runs, and whether it helps is an open question with evidence on both sides** — SPEC-007 Key decision 12 owns it. Do not restate the rationale as settled until that lands.
 
 ## Scope-cut ladder
 

@@ -278,6 +278,34 @@ reader who has not opened the repository:
      refused it. A scheduled eval on the 28th of an expensive month declines
      rather than being the thing that exhausts the month.
 
+   **The reservation is per-run, not per-question, and that is not an oversight
+   waiting to be optimised.** The arithmetic looks indefensible: **$3.86 held to
+   spend $0.65**, a 5.9× over-claim, held for the length of a run against a $20
+   month — 19 % of the month's headroom, unavailable, to spend 3 %. Reserving
+   per question would hold ~$0.077 at a time and look obviously better. It is
+   worse, and the reason is not about money:
+
+   - **A per-question reservation converts "refuse to start" into "stop at
+     question 34".** The refusal does not go away; it moves to the middle of the
+     run, where it produces a *partial artifact* — 33 answers, a report whose
+     denominator is 33, and a recordings file missing whatever came after.
+   - **A partial measurement is worse than none, because its denominator is
+     chosen by budget exhaustion.** The cases are in **authored order**, not
+     random order, so "the first 33 questions" is a subset selected by when the
+     author happened to write them — the same authoring bias Key decision 3
+     spends a table fighting, re-entering through the metric instead of through
+     the case. A refusal rate over that subset is a number with a warrant that
+     `not_a_claim` cannot honestly state.
+   - **What is actually being conserved is availability, not money.** The
+     reserved amount is not spent; it is unavailable for the minutes the run
+     takes. The optimisation trades a real correctness property for a brief
+     accounting nicety.
+   - **If the 5.9× ever does bite** — a month tight enough that a run cannot
+     reserve — the correct responses are to raise the budget, wait for the
+     window, or shrink the *question set deliberately and say so in the report*.
+     They are not to make the run interruptible. **This paragraph exists so that
+     optimisation is rejected on sight rather than rediscovered.**
+
 6. **50 golden questions predates any power analysis, and is not defended here.**
    SPEC-004 KD-12a says power comes from the retrieval-only set, not from the
    golden set and not from more documents. So the golden set is sized for
@@ -349,6 +377,49 @@ reader who has not opened the repository:
     and SPEC-006 Key decision 16 already binds the honesty requirement onto that
     spec rather than this one.
 
+12. **The de-saturation target is pre-registered here, before any de-saturation
+    work, and a run reporting something else must show it as a deviation**
+    *(added 2026-08-02, owner review)*. Key decision 3 makes
+    `edited_after_seeing_results` invalidate a *case*; this is the same bias one
+    level up, operating on the *metric*. `recall@8` is 1.000 for both methods, so
+    de-saturating means changing the corpus, `k`, or the questions — and choosing
+    which lever **after** seeing which one separates the methods is choosing the
+    measurement to fit the result. Nothing in this spec forbade it until now.
+
+    **The pre-registration, stated as values so a diff shows any change:**
+
+    ```
+    preregistered_at:     2026-08-02
+    primary_metric:       recall@8          # SPEC-004 AC-6a, inherited not chosen here
+    k:                    8                 # the API default; held fixed
+    diagnostic_metrics:   MRR@8, recall@{1,3}, discordant-pair counts
+    lever:                corpus growth     # SPEC-003 AC-10's measured rungs
+    levers_held_fixed:    k, the question set, the chunker config, the embedder
+    informative_when:     recall@8 < 1.000  AND  discordant_pairs >= 25
+    comparison:           hybrid (RRF) vs vector-only, same query embeddings
+    ```
+
+    **`discordant_pairs >= 25` is a claim about the set's power, not about the
+    result.** SPEC-004 Key decision 12 established discordant pairs as the honest
+    instrument after recall@1's "win" turned out to be a 2–1 split of three
+    decided questions. At 25 discordant pairs an 18–7 split reaches p ≈ 0.04 on
+    an exact binomial; below that, no split the set can produce is
+    distinguishable from a coin flip, so a run that clears
+    `recall@8 < 1.000` but not this threshold has de-saturated the corpus without
+    making the comparison answerable. **The threshold says what the set must be
+    able to detect. It does not predict, require, or prefer a hybrid win** — Key
+    decision 10 already states that "vector-only wins" is an allowed answer.
+
+    **Deviations are visible or the run is invalid.** The report's `methodology`
+    carries a `preregistration` block echoing these values and a `deviations`
+    array. A run whose primary metric, `k`, or lever differs from the block must
+    carry a deviation entry with a reason; a report where they differ and
+    `deviations` is empty **fails to render** (AC-14). Changing the target is
+    allowed — discovering that `recall@8` cannot be de-saturated by corpus growth
+    alone is a legitimate finding — but it is allowed *out loud*, in a diff, with
+    a date, and not by quietly reporting MRR@8 instead because that is the one
+    that moved.
+
 ## Acceptance criteria
 
 - **AC-1 (no bare scalar is publishable)** — Every figure carries `n`, `decided`,
@@ -419,6 +490,7 @@ reader who has not opened the repository:
   budget is spent and the demo has been taken down to produce it, at which point
   the fix costs a second run and a second demo-down window. **The paid run is not
   the first exercise of this path.**
+- **AC-14 (a deviation from the pre-registration is visible or the report is invalid — Key decision 12)** *(added 2026-08-02)* — The report embeds a `preregistration` block whose values match Key decision 12's, asserted against the spec text so the two cannot drift. A run whose `primary_metric`, `k`, or `lever` differs from that block and whose `deviations` array is empty **fails to render**, naming the field that differs. A run that differs *and* records a deviation with a reason renders, and the deviation appears in the panel beside the figure — a substitution the reader cannot see is the failure this criterion exists to prevent, and hiding it in the repo is the same failure with an extra step.
 - **AC-11 (the report contract cannot drift)** — `contracts/eval-report.schema.json`
   is generated from the report model and regenerated in the test, failing on any
   difference — the same guard `contracts/conditions.json` gets, for the same

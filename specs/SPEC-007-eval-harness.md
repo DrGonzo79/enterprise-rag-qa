@@ -1086,6 +1086,52 @@ reader who has not opened the repository:
 
     ---
 
+    #### Block 2, its difficulty proxy, and the cumulative estimate — measured 2026-08-04, artifact `evals/interim-block-2.json`
+
+    30 questions, composition 21 / 4 / 5 as committed for block 2, document share 17 / 10 / 3, same authoring rule and same quality bar. Retained, like block 1.
+
+    **A gold label was wrong, and prefix matching is why.** `con-056`'s gold was written as `EU AI Act › Annex I`, which prefix-matches **`Annex Ii`, `Annex Iii`, `Annex Iv` and `Annex Ix`** — five annexes scoring as one, four wrong answers counting as right, and that single question silently four times easier than every other in the set. **Nothing in the numbers afterwards would have said so**; it looks exactly like a question that was easy. Caught by the pre-flight check added with the proxy, which now refuses to spend an embedding when a prefix matches a section path **mid-word** rather than at a component break. Fixed to `EU AI Act › Annex I — ANNEX I`, and the rule is pinned by test.
+
+    | | Block 1 | **Block 2** | Cumulative |
+    |---|---:|---:|---:|
+    | `n` | 30 | 30 | **60** |
+    | `n_discordant` | 7 | **2** | **9** |
+    | `r` | 0.2333 | **0.0667** | **0.1500** |
+    | 95 % CI on `r` | [0.0993, 0.4228] | [0.0082, 0.2207] | **[0.0710, 0.2657]** |
+    | Silent full-text branch | 0 / 30 | 0 / 30 | 0 / 60 |
+    | vector-only `recall@8` | 0.9000 | 0.9667 | — |
+    | vector-only **`MRR@8`** (banded) | 0.6511 | **0.7423** | — |
+
+    **The proxy did not breach, and it moved in the same direction as `r`.** `MRR@8` rose by **+0.0912** against a band of ±0.19 — comfortably inside, and worth reporting precisely because it is the second number moving the same way. The vector arm found block 2's gold chunks *more easily*, and block 2 produced *fewer* discordant pairs. Two agreeing movements are not two pieces of evidence when one plausibly causes the other.
+
+    **Is the drop in `r` real?** Fisher's exact on 7/30 against 2/30 gives **p = 0.146**. At these block sizes the difference is entirely consistent with sampling noise, and it is reported as such rather than as a finding.
+
+    **A mechanism, named because the proxy exists to make one nameable — and it is not the one amendment 6 predicted.** Amendment 6 anticipated an author getting *better* at writing discriminating questions. What appears to have happened is the opposite: block 2 drew more heavily on **topically-titled sections** — Art 9 *Risk management system*, Art 15 *Accuracy, robustness and cybersecurity*, Art 17 *Quality management system*, Art 57 *AI regulatory sandboxes*, Art 72 *Post-market monitoring*, Art 78 *Confidentiality* — where the section title is inside the chunk text and states the question's topic. Block 1 leaned more on answers sitting in sections whose titles do **not** announce them (Art 73's deadlines, Art 26(7)'s duty to workers, Art 5(1)(f)'s workplace emotion prohibition). **A title that states the topic is easy for both arms**, which lifts the proxy and suppresses discordance together. This is a hypothesis with one block of support, not a finding.
+
+    #### What the cumulative estimate does to N = 150
+
+    | | at `r` = 0.15 | at CI low 0.0710 | at CI high 0.2657 |
+    |---|---:|---:|---:|
+    | N for the floor (6) | 40 | 85 | 23 |
+    | N for power 0.5 (15) | 100 | 212 | 57 |
+    | **N for power 0.8 (23)** | **154** | 325 | 87 |
+
+    **N = 150 now sits essentially exactly on the power-0.8 boundary**: 150 × 0.15 = **22.5 expected discordant pairs against the 23 required**. Half a pair short, well inside the estimate's own noise, and the floor is still cleared across the whole 95 % interval (85 at the pessimistic end).
+
+    **The cheap option, stated because it is cheap: N = 160 restores the margin** — 160 × 0.15 = 24 ≥ 23 — for ten more questions, roughly 25–40 minutes. That is an owner decision and is not taken here. **The pre-registered position stands unless the owner moves it**: N = 150 was approved, and amendment 4 already accepts an inconclusive result on a representative set as an outcome rather than a failure.
+
+    #### Deviation record (AC-14): this is the second interim look
+
+    **Amendment 5 pre-committed one interim look, at 30.** This is look two, at 60, **owner-asked**. Recorded here rather than absorbed silently:
+
+    - **The statistical argument is untouched.** `r` is a nuisance parameter at every look, not only the first; the blinding is unchanged, `b` and `c` were never computed, and pooling is done from the artifacts, which contain per-case discordance and nothing else — there is no split on disk to pool.
+    - **What is actually spent is the thing the one-look rule was reserving:** each look is another opportunity to negotiate with the set. Amendment 5 said exactly this when it set the limit, so the cost is the one that was anticipated, not a new one.
+    - **Pooling is only valid across a constant corpus**, and the artifacts carry `corpus_chunks` so the tooling can say whether it was. Both blocks: 358.
+
+    **The split remains sealed.** Nine pairs disagreed across 60 questions. Which arm won each is not recorded anywhere in this repository.
+
+    ---
+
     #### Pilot-2 results — measured 2026-08-02, artifact `evals/pilot-2.json`
 
     14 questions, unchanged 358-chunk corpus, identical measurement path to pilot-1 (the same script, parameterised — a second copy would have been a second chance to differ from it).

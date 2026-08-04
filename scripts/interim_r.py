@@ -238,27 +238,50 @@ def sizing(n_discordant: int, n: int) -> dict[str, Any]:
     }
 
 
-async def unresolvable_prefixes(session: Any, cases: list[dict[str, Any]]) -> list[str]:
-    """Gold labels that name no section in the ingested corpus.
+def straddles_a_component(prefix: str, section_path: str) -> bool:
+    """True when `prefix` matches `section_path` mid-word rather than at a break.
 
-    A prefix that resolves to nothing scores as a miss for **both** arms on
-    every run, forever, and looks exactly like a hard question. It is the one
-    labelling error that cannot be found by staring at the number afterwards,
-    so it is refused before any embedding is bought.
+    **The bug this exists for was live**: gold `EU AI Act > Annex I` matched
+    `Annex Ii`, `Annex Iii`, `Annex Iv` and `Annex Ix` — five different annexes
+    scoring as one, so four wrong answers counted as right and the question was
+    silently four times easier than every other. Prefix matching is the right
+    scoring rule and this is the sharp edge on it: a prefix must end where a
+    path component ends, not in the middle of a word.
     """
-    missing: list[str] = []
+    rest = section_path[len(prefix) :]
+    return bool(rest) and (rest[0].isalnum() or rest[0] == "_")
+
+
+async def unresolvable_prefixes(session: Any, cases: list[dict[str, Any]]) -> list[str]:
+    """Gold labels that name no section, or that match one mid-word.
+
+    A prefix resolving to nothing scores as a miss for **both** arms on every
+    run, forever, and looks exactly like a hard question. A prefix resolving too
+    *widely* is worse, because it looks exactly like an easy one. Neither can be
+    found by staring at the number afterwards, so both are refused before any
+    embedding is bought.
+    """
+    problems: list[str] = []
     for case in cases:
         for key in ("expected_section_prefix", "also_contains"):
             prefix = case.get(key)
             if prefix is None:
                 continue
             found = await session.execute(
-                text("SELECT 1 FROM chunks WHERE section_path LIKE :p LIMIT 1"),
+                text("SELECT DISTINCT section_path FROM chunks WHERE section_path LIKE :p"),
                 {"p": f"{prefix}%"},
             )
-            if found.first() is None:
-                missing.append(f"{case['id']}.{key}: {prefix}")
-    return missing
+            paths = [row[0] for row in found]
+            if not paths:
+                problems.append(f"{case['id']}.{key}: matches no section — {prefix}")
+                continue
+            straddled = [p for p in paths if straddles_a_component(str(prefix), p)]
+            if straddled:
+                problems.append(
+                    f"{case['id']}.{key}: matches mid-word — {prefix} also matches "
+                    f"{len(straddled)} other section(s), e.g. {straddled[0]}"
+                )
+    return problems
 
 
 async def measure(
@@ -271,7 +294,7 @@ async def measure(
         missing = await unresolvable_prefixes(session, cases)
     if missing:
         await engine.dispose()
-        raise ValueError("gold labels that name no section:\n  " + "\n  ".join(missing))
+        raise ValueError("unusable gold labels:\n  " + "\n  ".join(missing))
     embedder = OpenAIEmbeddingClient()
     retriever = Retriever(factory, embedder)
 
@@ -332,6 +355,47 @@ def _rank_of(chunks: list[RetrievedChunk], prefix: str) -> int | None:
     return None
 
 
+def cumulative(up_to: int) -> dict[str, Any] | None:
+    """Pool the blocks measured so far, from their artifacts rather than by re-running.
+
+    The artifacts carry per-case discordance and nothing else, so pooling them
+    is as blind as producing them was — there is no split on disk to pool.
+
+    **Each pooled look is a deviation from amendment 5's one-interim rule and is
+    recorded as one (AC-14).** The statistical argument is untouched: `r` is a
+    nuisance parameter at every look, not only the first. What the one-look rule
+    was protecting against is negotiation with the set, and that cost is paid
+    per look regardless of what the arithmetic permits.
+    """
+    blocks: list[dict[str, Any]] = []
+    for block in range(1, up_to + 1):
+        path = REPO_ROOT / "evals" / f"interim-block-{block}.json"
+        if path.exists():
+            blocks.append(json.loads(path.read_text(encoding="utf-8")))
+    if len(blocks) < 2:
+        return None
+    n = sum(int(b["summary"]["n"]) for b in blocks)
+    n_discordant = sum(int(b["summary"]["n_discordant"]) for b in blocks)
+    corpora = {int(b["corpus_chunks"]) for b in blocks}
+    return {
+        "blocks": [b["interim_id"] for b in blocks],
+        "per_block_n_discordant": [int(b["summary"]["n_discordant"]) for b in blocks],
+        "per_block_mrr_at_8": [b.get("difficulty", {}).get("mrr_at_8") for b in blocks],
+        "n": n,
+        "n_discordant": n_discordant,
+        "r": round(n_discordant / n, 4),
+        "sizing": sizing(n_discordant, n),
+        # Pooling across different corpus states would silently mix populations.
+        "corpus_chunks_consistent": len(corpora) == 1,
+        "deviation": (
+            "Amendment 5 pre-committed ONE interim look, at 30. This is look "
+            f"{len(blocks)}, owner-asked. Recorded under AC-14. Blinding is "
+            "unchanged and so is the Type I argument; what is spent is the "
+            "negotiation risk the one-look rule was reserving."
+        ),
+    }
+
+
 def git_sha() -> str:
     result = subprocess.run(
         ["git", "rev-parse", "HEAD"], cwd=REPO_ROOT, capture_output=True, text=True
@@ -373,6 +437,16 @@ async def run(block: int) -> int:
     print(f"  implied N at CI high (better){plan['N_at_r_ci_high']}")
     print("\n  b and c are not computed by this script and are not in the artifact.")
 
+    pooled = cumulative(block)
+    if pooled:
+        blocks_seen = len(pooled["blocks"])
+        print(f"\n  cumulative over {blocks_seen} blocks (AC-14 deviation, see artifact):")
+        print(f"    n / n_discordant           {pooled['n']} / {pooled['n_discordant']}")
+        print(f"    r                          {pooled['r']}")
+        print(f"    per-block n_discordant     {pooled['per_block_n_discordant']}")
+        print(f"    per-block MRR@8            {pooled['per_block_mrr_at_8']}")
+        print(f"    implied N                  {pooled['sizing']['N_at_r_point']}")
+
     out = REPO_ROOT / "evals" / f"interim-block-{block}.json"
     payload = {
         "interim_id": f"confirmatory-block-{block}",
@@ -397,6 +471,7 @@ async def run(block: int) -> int:
         },
         "summary": summary,
         "sizing": plan,
+        "cumulative": pooled,
         "per_case": records,
         "blinding_note": (
             "b and c are never computed on this path (SPEC-007 AC-17). Per-case "

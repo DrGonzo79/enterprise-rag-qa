@@ -154,11 +154,38 @@ def sizing(n_discordant: int, n: int) -> dict[str, Any]:
     }
 
 
+async def unresolvable_prefixes(session: Any, cases: list[dict[str, Any]]) -> list[str]:
+    """Gold labels that name no section in the ingested corpus.
+
+    A prefix that resolves to nothing scores as a miss for **both** arms on
+    every run, forever, and looks exactly like a hard question. It is the one
+    labelling error that cannot be found by staring at the number afterwards,
+    so it is refused before any embedding is bought.
+    """
+    missing: list[str] = []
+    for case in cases:
+        for key in ("expected_section_prefix", "also_contains"):
+            prefix = case.get(key)
+            if prefix is None:
+                continue
+            found = await session.execute(
+                text("SELECT 1 FROM chunks WHERE section_path LIKE :p LIMIT 1"),
+                {"p": f"{prefix}%"},
+            )
+            if found.first() is None:
+                missing.append(f"{case['id']}.{key}: {prefix}")
+    return missing
+
+
 async def measure(cases: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int, int]:
     engine = create_async_engine(CORPUS_URL, pool_size=4, max_overflow=2)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     async with factory() as session:
         chunk_count = (await session.execute(text("SELECT count(*) FROM chunks"))).scalar_one()
+        missing = await unresolvable_prefixes(session, cases)
+    if missing:
+        await engine.dispose()
+        raise ValueError("gold labels that name no section:\n  " + "\n  ".join(missing))
     embedder = OpenAIEmbeddingClient()
     retriever = Retriever(factory, embedder)
 

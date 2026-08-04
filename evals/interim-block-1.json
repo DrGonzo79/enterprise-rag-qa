@@ -1,0 +1,201 @@
+{
+  "interim_id": "confirmatory-block-1",
+  "measured_at": "2026-08-04",
+  "git_sha": "fda2667b76ef2e1a7b3c2b5ef1b9fa8451df572a",
+  "corpus_chunks": 358,
+  "k": 8,
+  "blinded": true,
+  "questions_with_no_fulltext_candidates": 0,
+  "summary": {
+    "n": 30,
+    "n_discordant": 7,
+    "r": 0.2333,
+    "shape_composition": {
+      "citation-anchored": 5,
+      "cross-section": 4,
+      "natural-language": 21
+    }
+  },
+  "sizing": {
+    "theta_assumed": 0.8,
+    "required_discordant": {
+      "floor": 6,
+      "power_0.5": 15,
+      "power_0.8": 23
+    },
+    "r_point": 0.2333,
+    "r_ci95": [
+      0.0993,
+      0.4228
+    ],
+    "N_at_r_point": {
+      "floor": 26,
+      "power_0.5": 65,
+      "power_0.8": 99
+    },
+    "N_at_r_ci_low": {
+      "floor": 61,
+      "power_0.5": 151,
+      "power_0.8": 232
+    },
+    "N_at_r_ci_high": {
+      "floor": 15,
+      "power_0.5": 36,
+      "power_0.8": 55
+    }
+  },
+  "per_case": [
+    {
+      "id": "con-001",
+      "shape": "natural-language",
+      "discordant": false
+    },
+    {
+      "id": "con-002",
+      "shape": "natural-language",
+      "discordant": false
+    },
+    {
+      "id": "con-003",
+      "shape": "natural-language",
+      "discordant": false
+    },
+    {
+      "id": "con-004",
+      "shape": "natural-language",
+      "discordant": true
+    },
+    {
+      "id": "con-005",
+      "shape": "natural-language",
+      "discordant": false
+    },
+    {
+      "id": "con-006",
+      "shape": "natural-language",
+      "discordant": true
+    },
+    {
+      "id": "con-007",
+      "shape": "natural-language",
+      "discordant": false
+    },
+    {
+      "id": "con-008",
+      "shape": "natural-language",
+      "discordant": false
+    },
+    {
+      "id": "con-009",
+      "shape": "natural-language",
+      "discordant": true
+    },
+    {
+      "id": "con-010",
+      "shape": "natural-language",
+      "discordant": true
+    },
+    {
+      "id": "con-011",
+      "shape": "natural-language",
+      "discordant": true
+    },
+    {
+      "id": "con-012",
+      "shape": "natural-language",
+      "discordant": false
+    },
+    {
+      "id": "con-013",
+      "shape": "natural-language",
+      "discordant": false
+    },
+    {
+      "id": "con-014",
+      "shape": "natural-language",
+      "discordant": false
+    },
+    {
+      "id": "con-015",
+      "shape": "natural-language",
+      "discordant": false
+    },
+    {
+      "id": "con-016",
+      "shape": "natural-language",
+      "discordant": false
+    },
+    {
+      "id": "con-017",
+      "shape": "natural-language",
+      "discordant": false
+    },
+    {
+      "id": "con-018",
+      "shape": "natural-language",
+      "discordant": false
+    },
+    {
+      "id": "con-019",
+      "shape": "natural-language",
+      "discordant": true
+    },
+    {
+      "id": "con-020",
+      "shape": "natural-language",
+      "discordant": false
+    },
+    {
+      "id": "con-021",
+      "shape": "natural-language",
+      "discordant": false
+    },
+    {
+      "id": "con-022",
+      "shape": "citation-anchored",
+      "discordant": false
+    },
+    {
+      "id": "con-023",
+      "shape": "citation-anchored",
+      "discordant": false
+    },
+    {
+      "id": "con-024",
+      "shape": "citation-anchored",
+      "discordant": true
+    },
+    {
+      "id": "con-025",
+      "shape": "citation-anchored",
+      "discordant": false
+    },
+    {
+      "id": "con-026",
+      "shape": "citation-anchored",
+      "discordant": false
+    },
+    {
+      "id": "con-027",
+      "shape": "cross-section",
+      "discordant": false
+    },
+    {
+      "id": "con-028",
+      "shape": "cross-section",
+      "discordant": false
+    },
+    {
+      "id": "con-029",
+      "shape": "cross-section",
+      "discordant": false
+    },
+    {
+      "id": "con-030",
+      "shape": "cross-section",
+      "discordant": false
+    }
+  ],
+  "blinding_note": "b and c are never computed on this path (SPEC-007 AC-17). Per-case records carry only id, shape and discordance, so the split cannot be reconstructed from this artifact; the measured ranks were discarded and the confirmatory run re-measures from scratch.",
+  "not_a_claim": "This is a sizing estimate, not a result. No comparison is decided here and no arm is reported as winning."
+}

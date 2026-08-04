@@ -996,6 +996,39 @@ reader who has not opened the repository:
 
     ---
 
+    #### Block 1 authored, and the blinded interim — measured 2026-08-04, artifact `evals/interim-block-1.json`
+
+    30 questions, `evals/retrieval_confirmatory.jsonl`, composition 21 / 5 / 4 as committed and enforced by `tests/test_confirmatory_set.py`.
+
+    **Two authoring choices amendment 4 did not cover, recorded because they were made rather than derived:**
+
+    - **Document distribution follows corpus share.** 201 / 119 / 38 chunks is 56 / 33 / 11 %, so the block is 17 EU AI Act, 10 10-K, 3 AI RMF. This is not a traffic estimate — nobody has traffic — and it is the only rule available that is not chosen from a measurement. It is applied to the block as a whole rather than within each shape, which is why citation-anchored questions are 3 EU and 2 10-K with no AI RMF case.
+    - **"Without an expected section in hand" holds more weakly here than it did for the pilots, and the difference is stated rather than glossed.** The author knows these three instruments, so for questions like the serious-incident deadline the answering article was anticipated before it was confirmed. **What was actually controlled is vocabulary**: every question is phrased as a reader would phrase it and not as the corpus phrases it — *"software that reads its employees' emotions at work"* against the corpus's *"infer emotions of a natural person in the areas of workplace"*, *"buy back stock"* against *"share repurchase authorization"*. That is the property whose absence made the smoke set a set of lexical bullseyes, and it is the one that matters for this comparison. Anticipating the article is not the same defect and pretending otherwise would make the record less useful, not more honest.
+
+    | | Block 1 |
+    |---|---:|
+    | `n` | 30 |
+    | **`n_discordant`** | **7** |
+    | `r` | **0.2333** |
+    | 95 % CI on `r` | [0.0993, 0.4228] |
+    | Questions with a silent full-text branch | **0 of 30** |
+
+    **Which anchor it is near: neither of the ones that would have forced a decision.** It sits between the mid anchor (0.1876) and the high one (0.3114), closer to high, and **nowhere near the low case**. The low case was the one that would have put the choice between "author 481" and "accept inconclusive" on the table, and the CI's lower bound of 0.0993 sits above the smoke set's whole upper bound of 0.1088 only marginally — but the point estimate is not the smoke set's population and does not behave like it.
+
+    | | at `r` = 0.2333 | at CI low 0.0993 | at CI high 0.4228 |
+    |---|---:|---:|---:|
+    | N for the floor (6) | 26 | 61 | 15 |
+    | N for power 0.5 (15) | 65 | 151 | 36 |
+    | **N for power 0.8 (23)** | **99** | 232 | 55 |
+
+    **N = 150 stands, and the interim's job is done by that sentence.** At the point estimate 150 questions are expected to yield ~35 discordant pairs against the 23 that power 0.8 needs; **at the pessimistic end of the interval 150 still yields ~15**, which clears the floor of 6 outright and lands exactly on the power-0.5 requirement. **No part of the 95 % interval leaves 150 unable to clear the floor**, which is the property that separates a set that can answer from one that cannot. Extending to 232 would buy power 0.8 even at the interval's floor, at another ten hours; that is not worth it against a point estimate of 99.
+
+    **What is still not known, deliberately: `b` and `c`.** The split was never computed. Seven pairs disagreed; which arm won each is not recorded anywhere in this repository and will not be until the full 150 runs.
+
+    **The caveat that survives the good news.** `r` was measured on questions authored in one sitting by one author. The per-block mix constraint controls **shape** drift and does nothing about **difficulty** drift, so blocks 2–5 could land easier or harder than block 1 for reasons no rule here catches. The estimate is what block 1 supports, and it is reported as such.
+
+    ---
+
     #### Pilot-2 results — measured 2026-08-02, artifact `evals/pilot-2.json`
 
     14 questions, unchanged 358-chunk corpus, identical measurement path to pilot-1 (the same script, parameterised — a second copy would have been a second chance to differ from it).

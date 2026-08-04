@@ -860,22 +860,24 @@ reader who has not opened the repository:
 
     **The authoring rule is unchanged from the pilots** — written from corpus text without an expected section in hand, gold determined by verification after the question exists — with one addition: **the shape is assigned before the question is written**, so the mix is a design input rather than a description of what happened to get written.
 
-    **Exclusions, by id:** every `pil-*` and `anc-*` case. **Proposed, requiring the owner's call:** SPEC-004's cross-spec note calls the existing 26-question smoke set *"the seed of the retrieval set"*. It should **not** be part of the confirmatory set — every one of those questions was authored with its expected section in hand, which is the property pilot-1 identified as making them lexical bullseyes. Retaining them as a **regression** set is free and useful; folding them into a set meant to be representative would import a known bias into 26 of its cases. **Not applied**, since it departs from an approved note.
+    **Exclusions, by id:** every `pil-*` and `anc-*` case. ~~**Proposed, requiring the owner's call:**~~ **APPROVED 2026-08-04 (amendment 5).** SPEC-004's cross-spec note calls the existing 26-question smoke set *"the seed of the retrieval set"*. It is **not** part of the confirmatory set — every one of those questions was authored with its expected section in hand, which is the property pilot-1 identified as making them lexical bullseyes. They are retained as a **regression** set.
 
     #### Sizing against that mix — the owner picks N
 
     **The mix was fixed first; this arithmetic follows it.** Using measured `r` is legitimate *here* and would not have been legitimate for choosing the shares.
 
     Discordant pairs required, from the exact binomial at α = 0.05 two-sided, θ = 0.8:
-    **floor (rejection possible at all) = 6 · power 0.50 = 12 · power 0.80 = 20.**
+    ~~**floor (rejection possible at all) = 6 · power 0.50 = 12 · power 0.80 = 20.**~~ **CORRECTED in amendment 5 to 6 · 15 · 23** — power is not monotone in `n` for a discrete test, and 12 and 20 are first crossings it falls back below.
 
     `r` for the mix is a weighted sum of per-shape rates. **All three scenarios are extrapolations and the middle one is not more likely than the others** — the pilots were authored to be *hard* and the smoke set was authored with its answer in hand, so the confirmatory set sits between two anchors that both miss it in known directions.
 
+    > **SUPERSEDED by amendment 5 on both axes** — the required counts were wrong (12/20 → 15/23) and the low scenario's `r` was not derivable from anything. The table is kept as written because it is the table the owner chose N against.
+
     | Scenario | `r` (mix) | N at floor | N at power 0.5 | **N at power 0.8** |
     |---|---:|---:|---:|---:|
-    | **Low** — smoke-like, questions land easily | 0.042 | 145 | 289 | **481** |
-    | **Mid** — blend | 0.175 | 35 | 69 | **114** |
-    | **High** — pilot-like, questions land hard | 0.322 | 19 | 38 | **63** |
+    | ~~**Low** — smoke-like, questions land easily~~ | ~~0.042~~ | ~~145~~ | ~~289~~ | ~~**481**~~ |
+    | ~~**Mid** — blend~~ | ~~0.175~~ | ~~35~~ | ~~69~~ | ~~**114**~~ |
+    | ~~**High** — pilot-like, questions land hard~~ | ~~0.322~~ | ~~19~~ | ~~38~~ | ~~**63**~~ |
 
     **Authoring cost, at 2.5 min per question (SPEC-004 estimates 2–3 min; a retrieval question needs a verified *label*, not a verified answer):**
 
@@ -891,7 +893,108 @@ reader who has not opened the repository:
 
     **The recommendation is N = 150.** It clears the floor under every scenario including the low one (145), reaches power 0.8 under mid and high, and costs 6–10 hours. **It does not rescue the low scenario's power**, and no affordable N does — 481 questions is twenty hours, which is not an afternoon and would be the largest single artifact in the repository.
 
-    **`r` is re-measured on the first 30 authored questions and reported before the remainder is written.** If it lands near the low anchor, the choice between "author 481" and "accept inconclusive" should be made with 1.25 hours spent rather than 6. **This is not a stopping rule that can change the analysis** — the target metric, test, sidedness, α and floor are all fixed above; only how many questions get written, and that decision is the owner's.
+    **`r` is re-measured on the first 30 authored questions and reported before the remainder is written.** If it lands near the low anchor, the choice between "author 481" and "accept inconclusive" should be made with 1.25 hours spent rather than 6.
+
+    > ~~**This is not a stopping rule that can change the analysis** — the target metric, test, sidedness, α and floor are all fixed above; only how many questions get written, and that decision is the owner's.~~
+    >
+    > **WITHDRAWN 2026-08-04 as insufficient (amendment 5).** The conclusion stands; the argument for it does not, and the argument is the part that has to be right. **Adaptive sizing can inflate Type I error with metric, test, sidedness, α and floor all pinned** — that list is equally true of an unblinded interim look, which is exactly the unsafe case. The correct reason is that `r` is a *nuisance parameter*, and it is written out in amendment 5 with the constraint it implies.
+
+    ---
+
+    ### Amendment 5 — N, the smoke set, and the blinded interim *(2026-08-04, owner decision)*
+
+    Three owner decisions, and a correction to the reasoning under one of them.
+
+    #### 1. The smoke set does not seed the confirmatory set — approved
+
+    The Proposed marker in amendment 4 comes off. **26 of 150 is 17 % of a representative set, and every one of those 26 was authored with its expected section in hand** — the property pilot-1 identified as the cause of the saturation that made `recall@8` uninformative in the first place. Importing it to save four hours of authoring would put a known bias in a sixth of the instrument.
+
+    The smoke set is **retained as a regression set**, which is what it is good at: 26 cases with stable expected sections, cheap to re-run, and sensitive to exactly the ranking changes that broke AC-6. **SPEC-004's cross-spec note calling it "the seed of the retrieval set" is superseded by this amendment**, and is annotated there rather than deleted.
+
+    #### 2. N = 150 — approved, with the reason the hours are justified
+
+    Recorded because "N = 150" standing alone reads as a default, and a default is the thing nobody defends later:
+
+    - **Vector-only winning is a deletion.** It removes the full-text branch, the second concurrent connection SPEC-002 KD-5 exists to provide, the RRF fusion step, and the generated `tsvector` column — plus the OR fallback and the pruning toggle that now hang off them. That is a smaller system with fewer moving parts and one fewer index to maintain.
+    - **Hybrid winning is a verification.** It establishes the claim this architecture has rested on, untested, since SPEC-001 — the one CLAUDE.md's stack rationale is scoped under rule 7 for making without evidence.
+    - **Inconclusive is the only outcome that pays nothing**, and it is the outcome N buys down. The hours are not buying a preferred answer; they are buying against the answer that leaves every decision exactly where it is.
+
+    #### 3. The interim at 30 — the correct justification, and the constraint it implies
+
+    **What was wrong with the withdrawn argument.** "Metric, test, sidedness, α and floor are fixed" does not establish that a data-dependent sample size is safe. **Adaptive sizing can inflate Type I error with all of those pinned** — the standard case is re-estimating N from an interim look at the *effect*, where the continuation decision becomes correlated with the test statistic. Every word of the withdrawn sentence is equally true of that unsafe design, so it distinguishes nothing. **It would have licensed an unblinded re-estimation**, and the whole safety of this interim lies in one property it never mentioned.
+
+    **The correct reason: `r` is a nuisance parameter, and this is a blinded internal pilot.** McNemar's exact test **conditions on** `n = b + c`; conditional on `n`, the statistic is `b`, and under H₀ `b ~ Binomial(n, ½)`. The interim estimates `r`, which is a rate of `n` — **a quantity the test conditions on carries no information about the statistic it conditions toward.** If the sizing rule is a function of the discordance *indicators* only, then under H₀ each discordant pair's direction remains an independent fair coin independent of which questions were discordant, so conditional on the *final* `n` the null distribution of `b` is unchanged and the test's size is preserved. Being a discrete exact test, the achieved size is ≤ α rather than = α; adaptivity of this kind does not move it upward.
+
+    **The assumption that carries it, stated so it can be checked:** the sizing decision must depend on the discordance indicators and on nothing else. **The moment `b` and `c` are inspected separately, the argument above is void** — not weakened, void, because the continuation decision is then a function of the statistic.
+
+    **The constraint, therefore: the split is sealed until the full set runs.** The interim reports `n_discordant` and nothing from which the direction can be reconstructed. Seeing 8–1 at question 30 and choosing to continue **is** peeking at the effect, whatever is said about the reason for continuing.
+
+    **Enforced in the tooling rather than by a note asking nobody to look** (`scripts/interim_r.py`, AC-17):
+
+    | Mechanism | What it forecloses |
+    |---|---|
+    | Discordance is computed as `hit(hybrid) != hit(vector)`. **No expression on the interim path asks which side is true.** | The split is never materialised, so it cannot be printed by accident or added by a later edit that "just needed one more field". |
+    | The artifact carries **no per-case ranks** and no per-arm recall. The measured ranks are discarded, not stored; the full run re-measures from scratch. | Reconstruction from the artifact, which is how a sealed summary usually leaks. |
+    | Top-level and per-case keys are asserted against an **allowlist**, not a denylist. | A field added later is a test failure by default. Blinding is a property that has to fail closed. |
+    | The summariser is asserted **invariant under swapping the arms**: mirrored inputs must produce byte-identical output. | A summariser that leaks direction through any channel — a field, a rounding, an ordering — fails this test. |
+
+    **Stated bound (rule 7), because this is a guarantee and it does not cover everything.** This is a property of the *reporting path*, not a cryptographic seal. The questions, the corpus and the measurement code are all in a public repository, so anyone who wants the split can deliberately re-measure it in about a minute. **What the tooling guarantees is that the split cannot be seen as a side effect of asking for the interim number** — accidental unblinding is structurally impossible; deliberate unblinding is possible and would be an act with a commit attached to it. That distinction is the whole of what is claimed.
+
+    **One interim look, at 30.** Further looks would remain blinded and would remain safe under the same argument, but each is another opportunity to negotiate with the set, so the number is pre-committed at one. **Any additional look is a deviation and is recorded as one (AC-14).**
+
+    **What the interim may decide, and what it may not.** It decides **N alone** — continue to 150, extend beyond it, or stop and accept an inconclusive result. It may not change the target metric, the test, the sidedness, α, the floor of 6, or the 70/15/15 mix. All six are fixed by amendments 1 and 4 and are not in scope at the interim.
+
+    #### 4. Composition and status of the first 30
+
+    **Drawn in the committed 70/15/15 proportions, not 30 natural-language questions first.** A block that is not the mix estimates `r` for a population the confirmatory set does not contain, which is the same error as choosing the mix from the data, arriving through the back door.
+
+    **The rounding rule is pre-committed** so the blocks compose exactly: 15 % of 30 is 4.5, so the two minority shapes alternate across blocks of 30.
+
+    | Block | Natural-language | Citation-anchored | Cross-section |
+    |---|---:|---:|---:|
+    | 1 (the interim) | 21 | 5 | 4 |
+    | 2 | 21 | 4 | 5 |
+    | 3 | 21 | 5 | 4 |
+    | 4 | 21 | 4 | 5 |
+    | 5 | 21 | 5 | 4 |
+    | **Total** | **105** | **23** | **22** |
+    | Target (150 × share) | 105 | 22.5 | 22.5 |
+
+    **The 30 are retained in the final set and authored at final quality.** An internal pilot keeps its data — that is what makes it internal rather than a discarded rehearsal, and it is why the interim costs 1.25 hours rather than 1.25 wasted hours. They are not warm-up, they are not revisited after the interim, and they carry the same authoring rule as the rest: written from corpus text without an expected section in hand, gold determined by verification after the question exists, shape assigned before the question is written.
+
+    #### 5. Two corrections to the sizing table N = 150 was chosen against
+
+    Both were found while writing the interim tooling, because the arithmetic had to be executed rather than asserted. **Neither changes the decision** — N = 150 survives both, and one of them improves its standing — but the table the owner read was wrong in two places and the corrections are recorded before anything is authored.
+
+    **Correction 1 — the required discordant counts are 6 / 15 / 23, not 6 / 12 / 20.** **Power is not monotone in `n` for a discrete test.** Adding a discordant pair moves the critical value in steps, and the step can cost more power than the pair buys:
+
+    | `n` discordant | 12 | 13 | 14 | 15 | … | 20 | 21 | 22 | 23 |
+    |---|---:|---:|---:|---:|---|---:|---:|---:|---:|
+    | power at θ = 0.8 | **0.558** | 0.502 | **0.448** | 0.648 | | **0.804** | 0.769 | **0.733** | 0.840 |
+
+    12 and 20 are *first crossings*. At 14 discordant pairs the power of a set sized for 0.5 is **0.448**, and at 22 the power of a set sized for 0.8 is **0.733** — so the published numbers bought a promise that one or two more discordant pairs could take back. **Sizing takes the sustained crossing**: the smallest `n` at which power reaches the target *and stays there*. Pinned by `tests/test_interim_blinding.py::test_power_is_not_monotone_in_n_so_sizing_uses_the_sustained_crossing`, which asserts the dip itself rather than only the replacements, and is mutation-verified against the first-crossing implementation.
+
+    **Correction 2 — the low scenario's `r = 0.042` implied a lower bound on `r` that no measurement provides.** It was not reconstructible from any artifact, which is the tell: **a number in a table with no derivation is the shape rule 7 exists for**, and it went into a table the owner was asked to choose against. The three anchors are now written out with their arithmetic:
+
+    | Input | Measured | Rate |
+    |---|---|---:|
+    | smoke set, 26 questions authored with the section in hand | 0 discordant | 0 → one-sided 95 % upper bound **0.1088** |
+    | pilot-1, 14 hard natural-language | 4 discordant | **0.2857** |
+    | pilot-2, 14 hard lexically anchored | 2 discordant | **0.1429** |
+    | spanning questions pooled across both pilots | 3 of 5 | **0.600** |
+
+    | Scenario | Composition | `r` | N floor | N p0.5 | **N p0.8** |
+    |---|---|---:|---:|---:|---:|
+    | **High** — questions land as hard as the pilots' | 0.70(0.2857) + 0.15(0.1429) + 0.15(0.600) | 0.3114 | 20 | 49 | **74** |
+    | **Mid** — natural-language at the smoke set's bound | 0.70(0.1088) + 0.15(0.1429) + 0.15(0.600) | 0.1876 | 32 | 80 | **123** |
+    | **Low** — every shape behaves like the smoke set | 0 discordant in 26 | **0** | — | — | **—** |
+    | *Low, at the bound the smoke set does support* | `r ≤ 0.1088` | ≤ 0.1088 | ≥ 56 | ≥ 138 | **≥ 212** |
+
+    **The low row is em-dashes, not 481, and the difference is the whole point.** 0 of 26 places an *upper* bound on `r` and no lower bound at all, so it yields a lower bound on N and **no finite N**. The old table's 481 read as "expensive but purchasable"; the truth is "not purchasable at any price, and that outcome is already accepted by amendment 4". **Mid is a planning figure and says so**: it blends one bound with two point estimates, none of them from a representatively-authored question.
+
+    **What this does to N = 150.** Nothing, and slightly in its favour. It clears the floor under high (20) and mid (32) and reaches **power 0.8 under mid at 123 with 27 questions of margin** — where the superseded table put mid's power-0.8 figure at 114 against a required count that was itself too low. Under the low scenario no N suffices, which was true before the correction and is now stated as such.
+
+    ---
 
     #### Pilot-2 results — measured 2026-08-02, artifact `evals/pilot-2.json`
 
@@ -1095,6 +1198,13 @@ reader who has not opened the repository:
   difference — the same guard `contracts/conditions.json` gets, for the same
   reason: SPEC-009 binds to this shape, and a consumer reading a stale schema
   fails silently in the direction of rendering nothing.
+
+- **AC-17 (the interim sizing look cannot see which arm won — Key decision 12 amendment 5)** *(added 2026-08-04)* — `scripts/interim_r.py` reduces paired outcomes to `n`, `n_discordant`, `r` and the shape composition, and:
+  - **The summary is invariant under swapping the arms.** For any input, `summarise(rows) == summarise(mirror(rows))`, asserted on a maximally lopsided case (9 hybrid-only vs 1 vector-only, mirrored to 1 vs 9) so that a leak has something to leak. A summariser that reveals direction through *any* channel — a field, a rounding, an ordering — fails this, which is why it is stated as invariance rather than as a list of forbidden fields.
+  - **Top-level and per-case keys match an allowlist**, not a denylist: a key the allowlist does not name fails the test whether or not anyone judges it to encode direction. Blinding fails closed or it does not hold.
+  - **Per-case records carry no rank and no per-arm hit** — only `id`, `shape`, and `discordant` — so the split cannot be reconstructed from the artifact after the fact.
+  - **Verified by mutation:** adding `hybrid_only` to the summary fails the invariance test; adding a per-case `hybrid_rank` fails the allowlist test; computing discordance as `b + c` from two directional counts rather than as `hit_a != hit_b` fails neither on its own, which is why the invariance test is the load-bearing one and the allowlist is the backstop.
+  - **Bound:** this covers the reporting path, not the data. Anyone can re-measure the split deliberately from the public repository in about a minute; what is foreclosed is seeing it as a side effect of asking for the interim number.
 
 ## Test plan
 

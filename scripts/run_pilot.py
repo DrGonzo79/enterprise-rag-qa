@@ -29,6 +29,11 @@ from rag_qa.ingest.embedder import OpenAIEmbeddingClient
 from rag_qa.retrieval.search import vector_search
 from rag_qa.retrieval.service import Retriever
 from rag_qa.retrieval.types import RetrievedChunk
+from scripts.mcnemar import (
+    MIN_DISCORDANT_FOR_ANY_REJECTION,
+    mcnemar_exact_two_sided,
+    power,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PILOT_SET = REPO_ROOT / os.environ.get("RAG_QA_PILOT_SET", "evals/retrieval_pilot.jsonl")
@@ -36,8 +41,6 @@ SMOKE_SET = REPO_ROOT / "evals" / "retrieval_smoke.jsonl"
 OUT = REPO_ROOT / os.environ.get("RAG_QA_PILOT_OUT", "evals/pilot-1.json")
 K = 8
 PILOT_ID = os.environ.get("RAG_QA_PILOT_ID", "pilot-1")
-# Derived from the exact binomial and alpha alone: 2 * 2**-n >= 0.05 for n <= 5.
-MIN_DISCORDANT_FOR_ANY_REJECTION = 6
 
 load_env()
 # The pilot set is parameterised so pilot-2 reuses the identical measurement
@@ -56,23 +59,6 @@ def rank_of(chunks: list[RetrievedChunk], prefix: str) -> int | None:
         if chunk.section_path.startswith(prefix):
             return rank
     return None
-
-
-def mcnemar_exact_two_sided(b: int, c: int) -> float:
-    n = b + c
-    if n == 0:
-        return 1.0
-    lower = sum(math.comb(n, i) for i in range(min(b, c) + 1)) / 2**n
-    return min(1.0, 2 * lower)
-
-
-def reject_set(n: int, alpha: float = 0.05) -> set[int]:
-    return {b for b in range(n + 1) if mcnemar_exact_two_sided(b, n - b) < alpha}
-
-
-def power(n: int, theta: float, alpha: float = 0.05) -> float:
-    """P(reject | n discordant pairs, theta = P(hybrid wins | discordant))."""
-    return sum(math.comb(n, b) * theta**b * (1 - theta) ** (n - b) for b in reject_set(n, alpha))
 
 
 async def measure(cases: list[dict[str, str]]) -> list[dict[str, object]]:

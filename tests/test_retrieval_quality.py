@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from scripts.section_match import matches_section
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from rag_qa.env import load_env
@@ -95,7 +96,7 @@ def load_cases() -> list[dict[str, str]]:
 def hit(chunks: list[RetrievedChunk], prefix: str) -> int | None:
     """1-based rank of the first chunk whose section_path matches, else None."""
     for rank, chunk in enumerate(chunks, start=1):
-        if chunk.section_path.startswith(prefix):
+        if matches_section(prefix, chunk.section_path):
             return rank
     return None
 

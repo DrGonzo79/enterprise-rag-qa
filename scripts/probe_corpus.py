@@ -49,6 +49,7 @@ from rag_qa.ingest.registry import RegisteredDocument, for_rung, load
 from rag_qa.ingest.types import IngestConfig, ParsedDocument
 from rag_qa.retrieval.search import vector_search
 from rag_qa.retrieval.service import Retriever
+from scripts.section_match import matches_section
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 REGISTRY = REPO_ROOT / "corpus" / "corpus.toml"
@@ -206,7 +207,7 @@ class ArmResult:
 
 def _gold_rank(chunks: list[object], prefix: str) -> int | None:
     for rank, chunk in enumerate(chunks, start=1):
-        if chunk.section_path.startswith(prefix):  # type: ignore[attr-defined]
+        if matches_section(prefix, chunk.section_path):  # type: ignore[attr-defined]
             return rank
     return None
 

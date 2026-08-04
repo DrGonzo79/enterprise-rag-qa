@@ -50,6 +50,7 @@ from scripts.mcnemar import (
     clopper_pearson,
     min_discordant_for_power,
 )
+from scripts.section_match import matches_section, straddles_a_component
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CONFIRMATORY_SET = REPO_ROOT / "evals" / "retrieval_confirmatory.jsonl"
@@ -68,7 +69,27 @@ COMMITTED_BLOCK_MIX: dict[int, dict[str, int]] = {
     3: {"natural-language": 21, "citation-anchored": 5, "cross-section": 4},
     4: {"natural-language": 21, "citation-anchored": 4, "cross-section": 5},
     5: {"natural-language": 21, "citation-anchored": 5, "cross-section": 4},
+    # Blocks 6 and 7 exist because the design is now inverse sampling with a cap
+    # at 200 (amendment 7), not a fixed 150. Six blocks of 30 plus one of 20
+    # compose to 200 at EXACTLY 140/30/30 -- 70/15/15 with no rounding left over.
+    6: {"natural-language": 21, "citation-anchored": 4, "cross-section": 5},
+    7: {"natural-language": 14, "citation-anchored": 3, "cross-section": 3},
 }
+
+# --- The stopping rule (SPEC-007 KD-12 amendment 7) --------------------------
+#
+# Author until n_discordant reaches TARGET, capped at N_CAP. Inverse sampling
+# delivers the count the power calculation needs instead of its expectation:
+# a fixed N = 150 at r = 0.15 has mean 22.5 discordant pairs with SD 4.4, so it
+# reaches 23 about half the time.
+#
+# Valid under exactly the blinding already in place: the exact test conditions
+# on n = b + c, and under H0 the direction of each discordant pair is an
+# independent fair coin regardless of WHICH questions were discordant. A rule
+# that reads only the discordance indicators therefore leaves b ~ Binomial(n, 1/2)
+# conditional on the realized n. The four structural blinds are that condition.
+TARGET_DISCORDANT = 23
+N_CAP = 200
 
 # --- The single-arm difficulty proxy (SPEC-007 KD-12 amendment 6) ------------
 #
@@ -208,6 +229,43 @@ def drift_breach(mrr: float, block: int) -> str | None:
     return None
 
 
+def stopping_state(n: int, n_discordant: int) -> dict[str, Any]:
+    """Where the set stands against the stopping rule, in questions.
+
+    Evaluated at **block boundaries**, not per question: stopping mid-block
+    would break the shape mix at the moment the set is frozen, and the mix is
+    the thing amendment 4 chose a priori. The price is a small overshoot --
+    E[N] = 165 against 153 for exact stopping at r = 0.15 -- and overshoot only
+    adds power.
+    """
+    remaining_discordant = max(0, TARGET_DISCORDANT - n_discordant)
+    r_hat = n_discordant / n if n else 0.0
+    expected_more = math.ceil(remaining_discordant / r_hat) if r_hat > 0 else None
+    room = N_CAP - n
+    if remaining_discordant == 0:
+        verdict = f"STOP: {n_discordant} >= {TARGET_DISCORDANT} discordant pairs at N = {n}"
+    elif room <= 0:
+        verdict = (
+            f"STOP: cap N = {N_CAP} reached with {n_discordant} pairs — report as underpowered"
+        )
+    else:
+        verdict = (
+            f"CONTINUE: {remaining_discordant} more pairs needed, {room} questions left to cap"
+        )
+    return {
+        "target_discordant": TARGET_DISCORDANT,
+        "n_cap": N_CAP,
+        "n_so_far": n,
+        "n_discordant_so_far": n_discordant,
+        "discordant_remaining": remaining_discordant,
+        # At the CURRENT r estimate, which is itself uncertain -- this is a
+        # planning figure, not a promise about where the set will stop.
+        "expected_questions_remaining": expected_more,
+        "questions_remaining_to_cap": room,
+        "verdict": verdict,
+    }
+
+
 def sizing(n_discordant: int, n: int) -> dict[str, Any]:
     """Implied N, from the discordance rate alone.
 
@@ -238,20 +296,6 @@ def sizing(n_discordant: int, n: int) -> dict[str, Any]:
     }
 
 
-def straddles_a_component(prefix: str, section_path: str) -> bool:
-    """True when `prefix` matches `section_path` mid-word rather than at a break.
-
-    **The bug this exists for was live**: gold `EU AI Act > Annex I` matched
-    `Annex Ii`, `Annex Iii`, `Annex Iv` and `Annex Ix` — five different annexes
-    scoring as one, so four wrong answers counted as right and the question was
-    silently four times easier than every other. Prefix matching is the right
-    scoring rule and this is the sharp edge on it: a prefix must end where a
-    path component ends, not in the middle of a word.
-    """
-    rest = section_path[len(prefix) :]
-    return bool(rest) and (rest[0].isalnum() or rest[0] == "_")
-
-
 async def unresolvable_prefixes(session: Any, cases: list[dict[str, Any]]) -> list[str]:
     """Gold labels that name no section, or that match one mid-word.
 
@@ -261,17 +305,20 @@ async def unresolvable_prefixes(session: Any, cases: list[dict[str, Any]]) -> li
     found by staring at the number afterwards, so both are refused before any
     embedding is bought.
     """
+    found = await session.execute(text("SELECT DISTINCT section_path FROM chunks"))
+    all_paths = [row[0] for row in found]
     problems: list[str] = []
     for case in cases:
         for key in ("expected_section_prefix", "also_contains"):
             prefix = case.get(key)
             if prefix is None:
                 continue
-            found = await session.execute(
-                text("SELECT DISTINCT section_path FROM chunks WHERE section_path LIKE :p"),
-                {"p": f"{prefix}%"},
-            )
-            paths = [row[0] for row in found]
+            # No SQL LIKE: `_` and `%` are wildcards there, so a label
+            # containing either would match more paths than it names -- the same
+            # class of bug one level down, and it would corrupt the check that
+            # exists to catch that class. 263 distinct paths; filtering in
+            # Python is exact and free.
+            paths = [p for p in all_paths if p.startswith(str(prefix))]
             if not paths:
                 problems.append(f"{case['id']}.{key}: matches no section — {prefix}")
                 continue
@@ -350,7 +397,7 @@ async def measure(
 
 def _rank_of(chunks: list[RetrievedChunk], prefix: str) -> int | None:
     for rank, chunk in enumerate(chunks, start=1):
-        if chunk.section_path.startswith(prefix):
+        if matches_section(prefix, chunk.section_path):
             return rank
     return None
 
@@ -385,6 +432,7 @@ def cumulative(up_to: int) -> dict[str, Any] | None:
         "n_discordant": n_discordant,
         "r": round(n_discordant / n, 4),
         "sizing": sizing(n_discordant, n),
+        "stopping_rule": stopping_state(n, n_discordant),
         # Pooling across different corpus states would silently mix populations.
         "corpus_chunks_consistent": len(corpora) == 1,
         "deviation": (
@@ -446,6 +494,12 @@ async def run(block: int) -> int:
         print(f"    per-block n_discordant     {pooled['per_block_n_discordant']}")
         print(f"    per-block MRR@8            {pooled['per_block_mrr_at_8']}")
         print(f"    implied N                  {pooled['sizing']['N_at_r_point']}")
+        stop = pooled["stopping_rule"]
+        print(f"\n  stopping rule (amendment 7): {TARGET_DISCORDANT} pairs, cap N = {N_CAP}")
+        print(f"    pairs still needed         {stop['discordant_remaining']}")
+        print(f"    questions expected at r    {stop['expected_questions_remaining']}")
+        print(f"    questions left to the cap  {stop['questions_remaining_to_cap']}")
+        print(f"    {stop['verdict']}")
 
     out = REPO_ROOT / "evals" / f"interim-block-{block}.json"
     payload = {

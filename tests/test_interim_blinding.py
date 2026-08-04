@@ -32,11 +32,13 @@ from scripts.interim_r import (
     BLOCK_1_REFERENCE_MRR,
     COMMITTED_BLOCK_MIX,
     DIFFICULTY_BAND,
+    N_CAP,
     case_record,
     check_mix,
     drift_breach,
     single_arm_difficulty,
     sizing,
+    stopping_state,
     summarise,
 )
 from scripts.mcnemar import (
@@ -164,15 +166,57 @@ def test_the_interim_refuses_a_block_that_is_not_the_committed_mix() -> None:
     assert problem is not None and "composition" in problem
 
 
-def test_the_blocks_compose_to_the_committed_150() -> None:
-    """105/23/22 exactly, which is what the 5/4 alternation is for."""
+def test_the_blocks_compose_to_the_cap_at_exactly_70_15_15() -> None:
+    """Six blocks of 30 plus one of 20 make 200 at 140/30/30 — no rounding left.
+
+    Under amendment 7 the design is inverse sampling with a cap, so the blocks
+    have to compose to the *cap* rather than to a fixed 150. The alternation
+    that made 150 land on 105/23/22 lands the cap on exact 70/15/15, which is a
+    better property than the one it replaced: at the cap there is no residue at
+    all, and at every earlier boundary the mix is off by at most one question.
+    """
     totals: dict[str, int] = {}
-    for mix in COMMITTED_BLOCK_MIX.values():
-        assert sum(mix.values()) == 30
+    for block, mix in COMMITTED_BLOCK_MIX.items():
+        assert sum(mix.values()) == (30 if block <= 6 else 20)
         for shape, count in mix.items():
             totals[shape] = totals.get(shape, 0) + count
-    assert totals == {"natural-language": 105, "citation-anchored": 23, "cross-section": 22}
-    assert sum(totals.values()) == 150
+    assert sum(totals.values()) == N_CAP == 200
+    assert totals == {"natural-language": 140, "citation-anchored": 30, "cross-section": 30}
+    assert totals["natural-language"] / N_CAP == 0.70
+    assert totals["citation-anchored"] / N_CAP == 0.15
+
+
+def test_the_stopping_rule_reports_questions_not_expectations() -> None:
+    """The failure amendment 7 corrects: reading E[n_discordant] as the count.
+
+    A fixed N = 150 at r = 0.15 has mean 22.5 pairs and reaches 23 about half
+    the time. The rule therefore counts pairs and reports questions remaining,
+    and it never claims a target has been met on the strength of an average.
+    """
+    mid = stopping_state(60, 9)
+    assert mid["discordant_remaining"] == 14
+    assert mid["expected_questions_remaining"] == 94  # ceil(14 / 0.15)
+    assert mid["questions_remaining_to_cap"] == 140
+    assert mid["verdict"].startswith("CONTINUE")
+
+    assert stopping_state(150, 23)["verdict"].startswith("STOP")
+    # Overshoot is fine and only adds power; it must not read as an error.
+    assert stopping_state(180, 27)["discordant_remaining"] == 0
+    # The cap binds and the result is reported as underpowered, not as a stop.
+    capped = stopping_state(200, 19)
+    assert capped["verdict"].startswith("STOP: cap")
+    assert "underpowered" in capped["verdict"]
+
+
+def test_the_stopping_rule_survives_a_zero_rate() -> None:
+    """`expected_questions_remaining` is undefined at r = 0, not infinite.
+
+    The same distinction KD-12 amendment 1 was written to preserve: a rate of
+    zero makes the projection undefined rather than large, and a number here
+    would be a fabrication in the direction that flatters the plan.
+    """
+    assert stopping_state(30, 0)["expected_questions_remaining"] is None
+    assert stopping_state(30, 0)["questions_remaining_to_cap"] == 170
 
 
 def test_the_floor_of_six_is_derived_not_chosen() -> None:

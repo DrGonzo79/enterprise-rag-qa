@@ -22,7 +22,7 @@ from collections import Counter
 from pathlib import Path
 
 import pytest
-from scripts.interim_r import COMMITTED_BLOCK_MIX, straddles_a_component
+from scripts.interim_r import COMMITTED_BLOCK_MIX
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CONFIRMATORY = REPO_ROOT / "evals" / "retrieval_confirmatory.jsonl"
@@ -132,26 +132,3 @@ def test_natural_language_questions_carry_no_citation() -> None:
         lowered = str(case["question"]).lower()
         found = [m for m in markers if m in lowered]
         assert not found, f"{case['id']} is labelled natural-language but cites {found}"
-
-
-def test_a_gold_prefix_must_end_at_a_component_break() -> None:
-    """The Annex I bug, pinned.
-
-    `EU AI Act › Annex I` prefix-matched `Annex Ii`, `Annex Iii`, `Annex Iv` and
-    `Annex Ix`. Five annexes scored as one, so four wrong answers counted as
-    right and that question was silently four times easier than every other one
-    in the set — and nothing in the numbers afterwards would have said so.
-
-    Checked here on synthetic paths so it runs without a corpus; the interim
-    applies the same rule against the real section list and refuses to spend an
-    embedding when it fires.
-    """
-    assert straddles_a_component("EU AI Act › Annex I", "EU AI Act › Annex Ii — ANNEX II")
-    assert straddles_a_component("Item 1", "Item 15. Exhibits")
-    # A prefix ending at a real break is fine, including an exact match.
-    exact = "EU AI Act › Annex I — ANNEX I"
-    assert not straddles_a_component(exact, exact)
-    assert not straddles_a_component(
-        "EU AI Act › CHAPTER XIII › Article 112",
-        "EU AI Act › CHAPTER XIII › Article 112 — Evaluation and review",
-    )

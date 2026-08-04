@@ -1053,6 +1053,60 @@ reader who has not opened the repository:
 
     ---
 
+    ### Amendment 7 — inverse sampling replaces the fixed N *(2026-08-04, owner decision)*
+
+    **The trigger was a design error in the fixed-N framing, not an interim number.** Every sizing table in amendments 4, 5 and 6 compared a *realized* count against a required one — "150 × 0.15 = 22.5 against the 23 required" — as though `n_discordant` were `N × r`. It is not. **`n_discordant ~ Binomial(N, r)`**, with SD ≈ 4.4 at these numbers, and the comparison silently swapped a random variable for its expectation. **The correction holds whatever `r` turned out to be**, which is why it is recorded as a design error rather than as a response to block 2.
+
+    What the fixed-N numbers actually bought, at `r` = 0.15:
+
+    | N | E[`n_discordant`] | SD | **P(reach 23)** |
+    |---:|---:|---:|---:|
+    | 150 | 22.5 | 4.4 | **0.489** |
+    | 160 | 24.0 | 4.5 | **0.621** |
+    | 180 | 27.0 | 4.8 | **0.826** |
+
+    **Ten questions bought thirteen points of probability while reading as though they bought power 0.8.** Reaching ~80 % probability of *achieving* power 0.8 is about N = 180, not 160. (For completeness: a fixed N = 150 has *unconditional* power 0.79 at θ = 0.8, because runs that overshoot 23 have more power than runs that fall short have less. That is a real number and it does not rescue the framing — it is an average over designs, and the set only gets run once.)
+
+    #### The design
+
+    > **Author until `n_discordant` = 23, capped at N = 200.**
+
+    - **Expected cost is 23 / 0.15 ≈ 153 questions** — what was already planned — and it **delivers the count** rather than its expectation.
+    - **The cap bounds the tail if `r` drops.** P(reaching 200 without 23 pairs) is 0.065 at `r` = 0.15, 0.38 at `r` = 0.12, 0.73 at `r` = 0.10. If the cap binds, the result is reported as **underpowered and inconclusive**, which amendment 4 already accepts as an outcome.
+
+    #### Why it is valid, and why it needs no new machinery
+
+    **The exact test conditions on `n = b + c`.** Under H₀ the direction of each discordant pair is an independent fair coin **regardless of which questions turned out to be discordant**, so a stopping rule that reads only the discordance *indicators* leaves `b ~ Binomial(n, ½)` conditional on the realized `n`. Size is preserved; being a discrete exact test it stays ≤ α.
+
+    **The four structural blinds from AC-17 are exactly that condition**, and they were built before this design existed: the split is never computed, the artifact carries no per-case ranks, keys are an allowlist, and the published quantities leave `c` free. **Nothing new is needed — the blinding that made one interim look safe makes an arbitrary number of them safe**, because the argument never depended on the number of looks. Amendment 5's one-look limit was protecting against negotiation with the set, not against inflated α; under inverse sampling, looking *is* the design and there is nothing left to negotiate, because the rule fixes in advance what every look decides.
+
+    **One consequence worth stating rather than discovering: the final question is always a discordant one.** That changes the distribution of `N`, not of `b` given `n`, and the analysis conditions on `n`.
+
+    #### Evaluated at block boundaries, which is my refinement and not the owner's instruction
+
+    Stopping mid-block would break the shape mix at the moment the set is frozen, and the mix is the thing amendment 4 chose a priori and refused to let the data touch. **So the rule is evaluated after each block**, and the realized count will be ≥ 23 rather than exactly 23.
+
+    | | Exact stopping | **Block-boundary stopping** |
+    |---|---:|---:|
+    | E[N] at `r` = 0.15 | 153.3 | **164.8** |
+    | Overshoot | — | **+11.5 questions** (≈ 30–45 min) |
+
+    Overshoot only adds power. **The price is under an hour of authoring and the thing it buys is that the committed mix holds exactly at every checkpoint**, which is worth more than eleven questions.
+
+    P(stopping at each boundary) at `r` = 0.15: N = 120 → 0.12, **N = 150 → 0.36**, N = 180 → 0.34, N = 200 → 0.11, cap binds → 0.065.
+
+    #### Blocks now compose to the cap, exactly
+
+    Six blocks of 30 plus a final block of 20:
+
+    | Blocks 1–6 (30 each) | Block 7 (20) | **Total at the cap** |
+    |---|---|---|
+    | 126 / 27 / 27 | 14 / 3 / 3 | **140 / 30 / 30 = 200** |
+
+    **That is 70 / 15 / 15 with no rounding residue at all** — a better property than the one it replaces, since fixed-150 landed on 105/23/22 and had to carry the half-question in its rounding rule. At every earlier boundary the mix is off by at most one question.
+
+    ---
+
     #### Block 1 authored, and the blinded interim — measured 2026-08-04, artifact `evals/interim-block-1.json`
 
     30 questions, `evals/retrieval_confirmatory.jsonl`, composition 21 / 5 / 4 as committed and enforced by `tests/test_confirmatory_set.py`.

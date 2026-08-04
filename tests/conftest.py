@@ -578,8 +578,15 @@ def _is_test_database(url: str) -> bool:
     """The dev `rag` database holds the real ingested corpus. CI injects
     `…/rag` for a throwaway service container, so the name alone cannot decide —
     which is why the sweep below is id-scoped rather than name-scoped, and this
-    guard only gates the *bulk* path."""
-    return url.rsplit("/", 1)[1].startswith("rag_test")
+    guard only gates the *bulk* path.
+
+    **Matched at a component break, not by raw prefix** (the Annex I sweep,
+    2026-08-04): `startswith("rag_test")` also accepted `rag_testing` and
+    `rag_test_of_someone_elses`, which is the same over-match that made a gold
+    label four times easier — a plausible pass where a visible failure belonged.
+    A deliberate variant still works if it is separated at an underscore."""
+    name = url.rsplit("/", 1)[1]
+    return name == "rag_test" or name.startswith("rag_test_")
 
 
 async def _query_log_ids(engine: AsyncEngine) -> set[str]:

@@ -34,6 +34,7 @@ from scripts.mcnemar import (
     mcnemar_exact_two_sided,
     power,
 )
+from scripts.section_match import matches_section
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PILOT_SET = REPO_ROOT / os.environ.get("RAG_QA_PILOT_SET", "evals/retrieval_pilot.jsonl")
@@ -56,7 +57,7 @@ def load_cases(path: Path) -> list[dict[str, str]]:
 
 def rank_of(chunks: list[RetrievedChunk], prefix: str) -> int | None:
     for rank, chunk in enumerate(chunks, start=1):
-        if chunk.section_path.startswith(prefix):
+        if matches_section(prefix, chunk.section_path):
             return rank
     return None
 

@@ -1,9 +1,11 @@
 """Branch-search tests from SPEC-004 AC-10 (filter push-down) and AC-11
 (ef_search GUC scoping), against the dockerized Postgres."""
 
+import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+import rag_qa.retrieval.search as search_module
 from conftest import (
     DENSE_ONLY_TEXT,
     LEXICAL_ONLY_TEXT,
@@ -13,6 +15,7 @@ from conftest import (
 )
 from rag_qa.retrieval.search import (
     CANDIDATE_POOL,
+    PRUNING_CANDIDATE_FRACTION,
     fetch_embedder_identities,
     fulltext_search,
     vector_search,
@@ -20,6 +23,14 @@ from rag_qa.retrieval.search import (
 from rag_qa.retrieval.types import RetrievalFilters
 
 HNSW_EF_SEARCH_DEFAULT = "40"
+
+
+@pytest.fixture
+def pruning_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Frequency pruning is OFF by default and pending a decision against the
+    confirmatory set (SPEC-004 AC-12 amendment 7). Its tests turn it on
+    explicitly, so the code stays exercised while the default stays off."""
+    monkeypatch.setattr(search_module, "MAX_LEXEME_CHUNK_FRACTION", PRUNING_CANDIDATE_FRACTION)
 
 
 # --- branch behavior ----------------------------------------------------------
@@ -117,10 +128,9 @@ async def test_the_fallback_still_pushes_filters_into_the_query(
     would do so only on the queries that reach the fallback, so it would look
     correct in every test that used a matching query."""
     filing_id = seeded_corpus.document_ids["filing"]
-    # Every lexeme here survives frequency pruning: `passage` and `obligations`
-    # are in ~199 of 215 chunks and would be dropped, leaving one document.
-    # `quarklebit` (1 chunk), `manufacturing` (filing) and `govern` (standard)
-    # are rare enough to survive and reach three documents between them.
+    # Chosen so the unfiltered fallback reaches three documents with pruning
+    # either on or off: `quarklebit` (regulation), `manufacturing` (filing) and
+    # `govern` (standard) are all rare enough to survive the 25% threshold.
     sentence = "What does manufacturing say about quarklebit govern?"
     async with session_factory() as session:
         unfiltered = await fulltext_search(session, sentence, pool=250)
@@ -142,7 +152,9 @@ async def test_the_fallback_still_pushes_filters_into_the_query(
 
 
 async def test_a_corpus_common_lexeme_is_pruned_from_the_fallback(
-    session_factory: async_sessionmaker[AsyncSession], seeded_corpus: SeededCorpus
+    session_factory: async_sessionmaker[AsyncSession],
+    seeded_corpus: SeededCorpus,
+    pruning_enabled: None,
 ) -> None:
     """`passage` is in 213 of 215 chunks; `quarklebit` is in one. Without pruning
     the OR set returns essentially the whole corpus and the rare term is buried.
@@ -164,7 +176,9 @@ async def test_a_corpus_common_lexeme_is_pruned_from_the_fallback(
 
 
 async def test_a_query_of_only_common_lexemes_returns_nothing(
-    session_factory: async_sessionmaker[AsyncSession], seeded_corpus: SeededCorpus
+    session_factory: async_sessionmaker[AsyncSession],
+    seeded_corpus: SeededCorpus,
+    pruning_enabled: None,
 ) -> None:
     """Correct, not a regression. A query whose every term is corpus-common has
     no lexical signal at all, and returning the resulting candidates would be

@@ -836,6 +836,63 @@ reader who has not opened the repository:
 
     **The asymmetry, stated in advance because it governs how much the result is worth.** Pilot-2 is a **best case for the branch**, constructed by constraining vocabulary to what the corpus contains. **Failure here is decisive; success is weak** — it would show the branch works when queried in a register a user may never use, and the API accepts sentences. A "works" result therefore licenses no claim about production behaviour, only about the mechanism.
 
+    ---
+
+    ### Amendment 4 — the confirmatory set's shape mix, chosen a priori *(2026-08-04, owner decision)*
+
+    **This is an owner decision, not a measurement.** The mix cannot come from the data: picking the recipe with the larger `r` is the substitution this key decision exists to prevent, one level up from choosing the threshold. **So it is chosen on product grounds — the mix mirrors what the system will actually receive — and whatever `r` follows is accepted, including an `r` that leaves the comparison underpowered and the result inconclusive.**
+
+    **Committed before authoring. No sentence in the justification below refers to discordance, `r`, or any pilot result.**
+
+    | Shape | Share | What it is |
+    |---|---:|---|
+    | **Natural-language** | **70 %** | A question typed as an ordinary English sentence, no citation, answer in one section |
+    | **Citation-anchored** | **15 %** | The asker names the instrument or article: "Article 6", "Item 1A", "the Govern function" |
+    | **Cross-section** | **15 %** | An ordinary question whose answer is genuinely spread across two sections |
+
+    **Why 70 % natural-language.** The frontend is a text box and `/query` accepts a string; SPEC-009 sends sentences and users type sentences. **This is the modal input by construction**, not by estimate — every visitor who does not know the corpus produces one, and a public demo's visitors mostly do not know the corpus. A set that under-weights it measures a system other than the one being shipped.
+
+    **Why 15 % citation-anchored.** The corpus is three *named*, article-structured instruments, and a compliance reader who arrives already knowing the AI Act will type "Article 6" because that is how the instrument is navigated. But this is a public demo linked from a README, not an internal compliance tool: **most visitors will not know an article number to cite.** Roughly one in seven is the share I would defend as arriving with that knowledge — high enough that the shape is real, low enough that it is not the system's centre of gravity.
+
+    **Why 15 % cross-section.** Not because anyone *intends* to ask a spanning question, but because **compliance obligations are cross-referenced by design**: Article 26 sends the reader to Articles 13, 49 and 72; Annex IV to Chapter III Section 2; the AI RMF's Core functions reference each other explicitly. A question asked in complete good faith lands on a spread answer often enough to be a real minority of traffic. 15 % is deliberately conservative — it says "a real minority", not "common".
+
+    **Why the remaining categories are absent.** *Unanswerable* questions belong to the golden set, not here (SPEC-004's division of labor: the retrieval set measures recall and MRR against section labels, with no generation and no judge). *Wrong-lexical-match* and *near-miss* were **difficulty devices used to build the pilots**, not shapes a user chooses; **the confirmatory set is authored to be representative, and whatever difficulty results is the system's actual difficulty.** Engineering difficulty into a confirmatory set is the same act as engineering it out.
+
+    **The authoring rule is unchanged from the pilots** — written from corpus text without an expected section in hand, gold determined by verification after the question exists — with one addition: **the shape is assigned before the question is written**, so the mix is a design input rather than a description of what happened to get written.
+
+    **Exclusions, by id:** every `pil-*` and `anc-*` case. **Proposed, requiring the owner's call:** SPEC-004's cross-spec note calls the existing 26-question smoke set *"the seed of the retrieval set"*. It should **not** be part of the confirmatory set — every one of those questions was authored with its expected section in hand, which is the property pilot-1 identified as making them lexical bullseyes. Retaining them as a **regression** set is free and useful; folding them into a set meant to be representative would import a known bias into 26 of its cases. **Not applied**, since it departs from an approved note.
+
+    #### Sizing against that mix — the owner picks N
+
+    **The mix was fixed first; this arithmetic follows it.** Using measured `r` is legitimate *here* and would not have been legitimate for choosing the shares.
+
+    Discordant pairs required, from the exact binomial at α = 0.05 two-sided, θ = 0.8:
+    **floor (rejection possible at all) = 6 · power 0.50 = 12 · power 0.80 = 20.**
+
+    `r` for the mix is a weighted sum of per-shape rates. **All three scenarios are extrapolations and the middle one is not more likely than the others** — the pilots were authored to be *hard* and the smoke set was authored with its answer in hand, so the confirmatory set sits between two anchors that both miss it in known directions.
+
+    | Scenario | `r` (mix) | N at floor | N at power 0.5 | **N at power 0.8** |
+    |---|---:|---:|---:|---:|
+    | **Low** — smoke-like, questions land easily | 0.042 | 145 | 289 | **481** |
+    | **Mid** — blend | 0.175 | 35 | 69 | **114** |
+    | **High** — pilot-like, questions land hard | 0.322 | 19 | 38 | **63** |
+
+    **Authoring cost, at 2.5 min per question (SPEC-004 estimates 2–3 min; a retrieval question needs a verified *label*, not a verified answer):**
+
+    | N | At 2.5 min | At 4 min |
+    |---:|---:|---:|
+    | 50 | 2.1 h | 3.3 h |
+    | 100 | 4.2 h | 6.7 h |
+    | 150 | 6.2 h | 10.0 h |
+    | 200 | 8.3 h | 13.3 h |
+    | 300 | 12.5 h | 20.0 h |
+
+    **What an afternoon buys, stated plainly.** ~100 questions is four hours and covers power 0.8 *only if* `r` lands at or above the mid scenario; at the low scenario 100 questions does not even reach the floor. **The honest framing is that N buys a chance at a conclusive answer, not a conclusive answer** — and per this amendment, an inconclusive result on a representative set is the accepted outcome, not a failure of the set.
+
+    **The recommendation is N = 150.** It clears the floor under every scenario including the low one (145), reaches power 0.8 under mid and high, and costs 6–10 hours. **It does not rescue the low scenario's power**, and no affordable N does — 481 questions is twenty hours, which is not an afternoon and would be the largest single artifact in the repository.
+
+    **`r` is re-measured on the first 30 authored questions and reported before the remainder is written.** If it lands near the low anchor, the choice between "author 481" and "accept inconclusive" should be made with 1.25 hours spent rather than 6. **This is not a stopping rule that can change the analysis** — the target metric, test, sidedness, α and floor are all fixed above; only how many questions get written, and that decision is the owner's.
+
     #### Pilot-2 results — measured 2026-08-02, artifact `evals/pilot-2.json`
 
     14 questions, unchanged 358-chunk corpus, identical measurement path to pilot-1 (the same script, parameterised — a second copy would have been a second chance to differ from it).
@@ -912,6 +969,8 @@ reader who has not opened the repository:
     **`r` is unchanged on both sets: 0.2857 and 0.1429.** The two still disagree, still by recipe, and **no sizing is done** — for the same reason as before, and now with a second demonstration that `r` is a property of the question shape rather than of the system.
 
     **What the smoke set gained is one discordant pair in the `c` cell** (vector-only succeeds, hybrid fails) — the cell SPEC-004's failure mode predicted, now populated on a third set. Across smoke + pilot-1 + pilot-2 the totals are b = 5, c = 2, `n_discordant` = 7. **That is above the floor of 6 for the first time**, and it is **not** reported as a result: the three sets have different authoring recipes and pooling them would be exactly the shape-mix selection this key decision refuses to make after seeing the numbers.
+
+    > **Recorded at the owner's instruction, because the refusal is the point** *(2026-08-04)*. Eleven rounds of work were aimed at clearing that floor — three of them at a corpus ladder that turned out to be the wrong lever entirely — and the first time it cleared, it cleared by pooling three sets with three different authoring recipes. **Declining to report it is the discipline this whole arc was building toward**, and it is written here rather than left implicit because the next person to assemble a number out of convenient parts will be doing it in good faith, in a hurry, and with a floor in sight.
 
     #### Pilot-1 results — measured 2026-08-02, artifact `evals/pilot-1.json`
 

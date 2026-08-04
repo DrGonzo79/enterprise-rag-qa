@@ -23,13 +23,22 @@ from rag_qa.db.models import Chunk, Document
 from rag_qa.retrieval.types import RetrievalFilters
 
 CANDIDATE_POOL = 50
-# A lexeme present in more than this fraction of chunks is dropped from the OR
-# fallback (SPEC-004 AC-12 amendment 6). At a quarter of the corpus a term can
-# partition it 1:3 at best -- under one bit -- while contributing more OR
-# candidates than any discriminative term. Chosen from that arithmetic and
-# deliberately NOT tuned against a retrieval metric; tuning belongs to SPEC-007
-# KD-12, and tuning it here would be picking the implementation that wins.
-MAX_LEXEME_CHUNK_FRACTION = 0.25
+# Frequency pruning: a lexeme present in more than this fraction of chunks is
+# dropped from the OR fallback (SPEC-004 AC-12 amendment 6).
+#
+# **OFF by default (None), PENDING rather than rejected** (amendment 7). Every
+# movement it produced on the 26-question smoke set was a single question in
+# one direction or another, and unlike the fallback it has no correctness
+# argument that survives without those numbers: an unsatisfiable conjunction is
+# a defect whatever the metrics say, while dropping high-frequency lexemes is a
+# heuristic justified by its effect. It is decided against the confirmatory set,
+# not against 26 questions.
+#
+# 0.25 remains the value to evaluate, chosen from arithmetic rather than tuned:
+# a term in a quarter of the corpus partitions it 1:3 at best -- under one bit
+# -- while contributing more OR candidates than any discriminative term.
+MAX_LEXEME_CHUNK_FRACTION: float | None = None
+PRUNING_CANDIDATE_FRACTION = 0.25
 
 
 @dataclass(frozen=True)
@@ -160,6 +169,12 @@ def _discriminative_lexemes(query: str) -> ColumnElement[Any]:
     rejected option (ii) under another name.
     """
     lexeme: ColumnElement[str] = literal_column("lexeme", String)
+    stmt = select(func.string_agg(func.quote_literal(lexeme), literal(" | "))).select_from(
+        func.unnest(func.tsvector_to_array(func.to_tsvector("english", query))).alias("lexeme")
+    )
+    if MAX_LEXEME_CHUNK_FRACTION is None:
+        return stmt.scalar_subquery()
+
     total = select(func.count()).select_from(Chunk).scalar_subquery()
     occurrences = (
         select(func.count())
@@ -167,14 +182,9 @@ def _discriminative_lexemes(query: str) -> ColumnElement[Any]:
         .where(Chunk.tsv.op("@@")(cast(func.quote_literal(lexeme), TSQUERY)))
         .scalar_subquery()
     )
-    return (
-        select(func.string_agg(func.quote_literal(lexeme), literal(" | ")))
-        .select_from(
-            func.unnest(func.tsvector_to_array(func.to_tsvector("english", query))).alias("lexeme")
-        )
-        .where(occurrences <= func.ceil(total * literal(MAX_LEXEME_CHUNK_FRACTION)))
-        .scalar_subquery()
-    )
+    return stmt.where(
+        occurrences <= func.ceil(total * literal(MAX_LEXEME_CHUNK_FRACTION))
+    ).scalar_subquery()
 
 
 def _any_lexeme_tsquery(query: str) -> ColumnElement[Any]:

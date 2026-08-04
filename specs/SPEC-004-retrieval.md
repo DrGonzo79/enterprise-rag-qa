@@ -381,6 +381,18 @@ None. Query embedding reuses `openai` (SPEC-003); everything else is SQLAlchemy 
 
   **This is CLAUDE.md rule 9 being violated one commit after it was written, and it is recorded as that rather than as a surprise.** The prediction above enumerated `recall@1` and nothing else. Rule 9 says: name the mechanism, then enumerate the metrics it could appear in, or declare the falsifier metric-independent. Pruning's mechanism is *changing the candidate set*, which can move any rank-sensitive metric in either direction, and the correct falsifier was metric-independent from the start.
 
+  #### Amendment 7 — pruning is OFF by default and PENDING, not rejected *(2026-08-04, owner-approved)*
+
+  **Every movement pruning produced is one question on a 26-question set.** `recall@8` 1.000 → 0.962 is 1/26 (`par-11`). `recall@1` 0.500 → 0.538 is 1/26. Citation 0.714 → 0.786 is 11/14 against 10/14. `MRR@8` moved 0.002. **Four single-question movements in both directions is not evidence**, and reading it as any is the 2–1-of-three-decided-questions error Key decision 12 already recorded once.
+
+  **And unlike the fallback, pruning has no correctness argument that survives without the numbers.** That asymmetry is the reason the two are treated differently despite arriving together: an unsatisfiable conjunction is a defect whatever the metrics say — a multi-document system whose lexical branch cannot match across its own documents is broken by inspection. **Dropping high-frequency lexemes is a heuristic justified by its effect**, and a heuristic whose justification is its effect must be judged on evidence that can carry the weight.
+
+  **What it currently costs, written down so the pending decision has a price attached:** it improves `recall@1`, which Key decision 12 calls *noise, not evidence*, and it degrades `recall@8`, the **pre-registered primary metric** (SPEC-007 Key decision 12). A change that trades the primary metric for a disclaimed one is not a change to make on 26 questions in either direction.
+
+  **The code and the toggle stay.** `MAX_LEXEME_CHUNK_FRACTION` is `None` (off); `PRUNING_CANDIDATE_FRACTION = 0.25` is the value to evaluate. Its tests turn it on explicitly, so the implementation stays exercised while the default stays off — a disabled feature with no test coverage is a feature that will not work when it is enabled.
+
+  **Decided against the confirmatory set, not against 26 questions.**
+
   **Net position, stated without rounding in either direction.** Against the pre-fallback baseline the hybrid arm is worse at every k on the smoke set and better on the two pilot sets; against the no-pruning intermediate it is better at k = 1 and worse at k = 3 and k = 8. **The structural cause is untouched and was always going to be**: RRF cannot tell a confident branch from a desperate one. AC-6 stays `xfail(strict=True)` — the assertion still fails at 0.786 against 0.857 — and the trigger written into the marker is unchanged: it comes off when SPEC-007 Key decision 12 settles fusion with data, not when a threshold is nudged.
 
 

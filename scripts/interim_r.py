@@ -70,6 +70,45 @@ COMMITTED_BLOCK_MIX: dict[int, dict[str, int]] = {
     5: {"natural-language": 21, "citation-anchored": 5, "cross-section": 4},
 }
 
+# --- The single-arm difficulty proxy (SPEC-007 KD-12 amendment 6) ------------
+#
+# Per-block shape quotas control drift in the dimension that was committed and
+# nothing in difficulty. The mechanism they miss: over five blocks an author
+# gets better at writing questions that discriminate. That does not threaten
+# validity -- McNemar is paired and heterogeneity is fine -- but it erodes the
+# representativeness that is the entire justification for 70/15/15, and it is
+# tuning toward `r` through a door no rule guards.
+#
+# **VECTOR-ONLY, and the single arm is not a preference.** Publishing both
+# arms' recall beside `n_discordant` would determine the split exactly:
+# hybrid_hits = both + b, vector_hits = both + c, n_discordant = b + c, so
+# b = (n_discordant + hybrid_hits - vector_hits) / 2. The hybrid arm's recall is
+# therefore never computed here.
+#
+# **The banded proxy is MRR@8, not recall@8, and recall@8 was the first
+# choice.** Block 1's vector-only recall@8 is 0.90, so a two-sided band of any
+# useful width runs off the end of the scale — ±0.20 puts the upper edge at
+# 1.10, and even a noise-derived ±0.15 puts it at 1.05. **A band that only one
+# direction can ever breach is a one-sided band wearing a two-sided label**, and
+# the saturation doing it is the same saturation that made recall@8 useless on
+# the smoke set. MRR@8 sits at 0.65, moves continuously, and sees a block whose
+# gold chunks all slid from rank 1 to rank 6 — which recall@8 cannot.
+#
+# Band width is derived from block 1's own dispersion rather than chosen:
+# per-question reciprocal rank has SD 0.381 over the block, so the standard
+# error of a 30-question mean is 0.0696 and of the difference between two
+# blocks 0.0984. 1.96 x that is 0.1928, rounded **inward** to 0.19 — slightly
+# tighter than sampling noise alone would justify, because a false alarm costs
+# one paragraph and a missed drift costs the set's representativeness.
+DIFFICULTY_BAND = 0.19
+# Block 1's measured value, recorded before the band was set and before block 2
+# existed. Anchoring on a measured block rather than on a target is the point:
+# the question is whether later blocks drift from the one the mix was first
+# authored against, not whether they hit a number someone hoped for.
+BLOCK_1_REFERENCE_MRR = 0.6511
+# Reported beside it, with no band, for the reason above.
+BLOCK_1_REFERENCE_RECALL = 0.9
+
 load_env()
 CORPUS_URL = os.environ.get(
     "RAG_QA_CORPUS_DATABASE_URL", "postgresql+asyncpg://rag:rag@localhost:5432/rag"
@@ -122,6 +161,51 @@ def summarise(records: list[dict[str, Any]]) -> dict[str, Any]:
         "r": round(n_discordant / n, 4) if n else 0.0,
         "shape_composition": dict(sorted(shapes.items())),
     }
+
+
+def single_arm_difficulty(ranks: list[int | None]) -> dict[str, Any]:
+    """How hard the block is for **one** arm, aggregated over the whole block.
+
+    Aggregate, never per case, and that is load-bearing rather than tidy: a
+    per-case vector outcome published beside a per-case discordance flag would
+    give the split away one question at a time — a discordant case whose vector
+    arm hit is a `c`, one whose vector arm missed is a `b`. The aggregate leaves
+    exactly one free parameter (see `sizing`'s callers and AC-17).
+    """
+    n = len(ranks)
+    hits = [r for r in ranks if r is not None and r <= K]
+    histogram = {str(rank): sum(1 for r in hits if r == rank) for rank in range(1, K + 1)}
+    histogram["miss"] = n - len(hits)
+    return {
+        "arm": "vector-only",
+        "recall_at_8": round(len(hits) / n, 4) if n else 0.0,
+        # Finer-grained than recall@8, which moves in steps of 1/30 and cannot
+        # see a block whose gold chunks all slid from rank 1 to rank 7.
+        "mrr_at_8": round(sum(1 / r for r in hits) / n, 4) if n else 0.0,
+        "gold_rank_histogram": histogram,
+    }
+
+
+def drift_breach(mrr: float, block: int) -> str | None:
+    """None if the block sits inside the committed band, else the breach text.
+
+    A breach is not an error and does not stop the run — it is recorded as a
+    deviation under AC-14, which is the honest handling: the band is a tripwire
+    for a conversation, not a gate on authoring.
+    """
+    if block == 1:
+        return None
+    # Rounded to the precision the proxy is reported at, so a block sitting
+    # exactly on the band edge is inside it rather than inside-or-out depending
+    # on binary floating point.
+    delta = round(mrr - BLOCK_1_REFERENCE_MRR, 4)
+    if abs(delta) > DIFFICULTY_BAND:
+        return (
+            f"block {block} vector-only MRR@8 = {mrr:.4f}, "
+            f"{delta:+.4f} from block 1's {BLOCK_1_REFERENCE_MRR} "
+            f"(band ±{DIFFICULTY_BAND}) — record a deviation (AC-14)"
+        )
+    return None
 
 
 def sizing(n_discordant: int, n: int) -> dict[str, Any]:
@@ -177,7 +261,9 @@ async def unresolvable_prefixes(session: Any, cases: list[dict[str, Any]]) -> li
     return missing
 
 
-async def measure(cases: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int, int]:
+async def measure(
+    cases: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], int, int, dict[str, Any]]:
     engine = create_async_engine(CORPUS_URL, pool_size=4, max_overflow=2)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     async with factory() as session:
@@ -192,6 +278,7 @@ async def measure(cases: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], in
     from rag_qa.retrieval.search import fulltext_search
 
     records: list[dict[str, Any]] = []
+    vector_ranks: list[int | None] = []
     silent_branch = 0
     for case in cases:
         prefix = case["expected_section_prefix"]
@@ -218,18 +305,24 @@ async def measure(cases: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], in
             )
             for rank, row in enumerate(dense[:K], start=1)
         ]
-        # The two ranks exist for exactly one expression and are then out of
-        # scope. They are never collected, never returned and never written.
+        # The HYBRID rank exists for exactly one expression and is then out of
+        # scope: never collected, never returned, never written. The vector
+        # rank is collected, because the difficulty proxy needs it -- and it is
+        # collected into a flat list that is aggregated before it leaves this
+        # function, so no per-case vector outcome is ever paired back to a
+        # per-case discordance flag.
+        vector_rank = _rank_of(vector_only, prefix)
+        vector_ranks.append(vector_rank)
         records.append(
             case_record(
                 case["id"],
                 str(case.get("shape", "")),
                 _rank_of(hybrid, prefix),
-                _rank_of(vector_only, prefix),
+                vector_rank,
             )
         )
     await engine.dispose()
-    return records, chunk_count, silent_branch
+    return records, chunk_count, silent_branch, single_arm_difficulty(vector_ranks)
 
 
 def _rank_of(chunks: list[RetrievedChunk], prefix: str) -> int | None:
@@ -256,9 +349,10 @@ async def run(block: int) -> int:
         print(f"refusing to run: {problem}", file=sys.stderr)
         return 3
 
-    records, chunk_count, silent_branch = await measure(cases)
+    records, chunk_count, silent_branch, difficulty = await measure(cases)
     summary = summarise(records)
     plan = sizing(int(summary["n_discordant"]), int(summary["n"]))
+    breach = drift_breach(float(difficulty["mrr_at_8"]), block)
 
     print(f"\ncorpus: {chunk_count} chunks   block {block}, k = {K}\n")
     print(f"  n                            {summary['n']}")
@@ -266,6 +360,13 @@ async def run(block: int) -> int:
     print(f"  r                            {summary['r']}")
     print(f"  r 95% CI                     {plan['r_ci95']}")
     print(f"  questions with silent FTS    {silent_branch}")
+    print("\n  difficulty proxy (vector-only, single arm):")
+    print(f"    recall@8                   {difficulty['recall_at_8']}")
+    print(f"    MRR@8                      {difficulty['mrr_at_8']}")
+    print(f"    gold rank histogram        {difficulty['gold_rank_histogram']}")
+    print(f"    drift vs block 1           {'IN BAND' if breach is None else 'BREACH'}")
+    if breach:
+        print(f"    {breach}")
     print(f"\n  required discordant pairs    {plan['required_discordant']}")
     print(f"  implied N at r               {plan['N_at_r_point']}")
     print(f"  implied N at CI low  (worse) {plan['N_at_r_ci_low']}")
@@ -281,6 +382,19 @@ async def run(block: int) -> int:
         "k": K,
         "blinded": True,
         "questions_with_no_fulltext_candidates": silent_branch,
+        "difficulty": difficulty,
+        "difficulty_band": {
+            "reference_block": 1,
+            "banded_metric": "mrr_at_8",
+            "reference_mrr_at_8": BLOCK_1_REFERENCE_MRR,
+            "band": DIFFICULTY_BAND,
+            "reference_recall_at_8": BLOCK_1_REFERENCE_RECALL,
+            "recall_at_8_is_unbanded_because": (
+                "block 1 sits at 0.90, so any useful two-sided band runs past 1.0 "
+                "and only the harder direction could ever breach it"
+            ),
+            "breach": breach,
+        },
         "summary": summary,
         "sizing": plan,
         "per_case": records,

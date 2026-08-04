@@ -996,6 +996,63 @@ reader who has not opened the repository:
 
     ---
 
+    ### Amendment 6 — a single-arm difficulty proxy, banded before block 2 *(2026-08-04, owner decision)*
+
+    **The gap this closes.** Per-block shape quotas control drift in the dimension that was committed and **nothing in difficulty**. The mechanism: over five blocks an author gets better at writing questions that discriminate between the arms. **This is not a validity problem** — McNemar is paired and heterogeneous difficulty across pairs is fine — **it is a representativeness problem**, and representativeness is the entire justification amendment 4 gave for 70/15/15. It is also tuning toward `r` through a door no rule guards, which is the same failure as choosing the mix from the data, arriving later and more slowly.
+
+    #### The proxy is single-arm, and that is forced rather than chosen
+
+    Publishing both arms' recall beside `n_discordant` **determines the split exactly**:
+
+    ```
+    hybrid_hits = both + b        vector_hits = both + c        n_discordant = b + c
+    =>  b = (n_discordant + hybrid_hits - vector_hits) / 2
+    ```
+
+    So the hybrid arm's recall is not computed by the interim at all. **The proxy is vector-only**, which is what makes it compatible with the blinding: it says how hard the block is, and nothing about who won.
+
+    **It is also aggregate, never per case.** A per-case vector outcome published beside a per-case discordance flag would give the split away one question at a time — a discordant case whose vector arm hit is a `c`, one whose vector arm missed is a `b`.
+
+    #### The banded metric is MRR@8, and recall@8 was the first choice
+
+    Block 1's vector-only `recall@8` is **0.90**. A two-sided band of any useful width runs off the end of the scale: ±0.20 puts the upper edge at 1.10, and even a noise-derived ±0.15 puts it at 1.05. **A band only one direction can ever breach is a one-sided band wearing a two-sided label** — and the saturation doing it is the same saturation that made `recall@8` uninformative on the smoke set and set this entire arc in motion. Catching it before committing the band rather than after five blocks is the only reason it is a paragraph and not an amendment.
+
+    | | Block 1 | Banded? |
+    |---|---:|---|
+    | vector-only `recall@8` | 0.9000 | **No** — saturated, upper edge unreachable |
+    | vector-only **`MRR@8`** | **0.6511** | **Yes, ±0.19** |
+    | gold rank histogram (1…8, miss) | 15 / 6 / 3 / 0 / 1 / 2 / 0 / 0, 3 missed | Reported |
+
+    `MRR@8` sits mid-scale, moves continuously, and sees a block whose gold chunks all slid from rank 1 to rank 6 — which `recall@8` structurally cannot.
+
+    #### The band, derived rather than chosen, and committed before block 2's number
+
+    Per-question reciprocal rank has **SD 0.381** across block 1, so the standard error of a 30-question mean is **0.0696** and of the difference between two blocks **0.0984**. 1.96 × that is **0.1928**, rounded **inward to 0.19** — very slightly tighter than sampling noise alone would justify, because a false alarm costs one paragraph and a missed drift costs the set's representativeness.
+
+    - **Reference:** block 1's `MRR@8` = 0.6511, measured before the band existed and before block 2 was authored. Anchoring on a measured block rather than on a target is deliberate: the question is whether later blocks drift from the one the mix was first authored against, not whether they hit a number someone hoped for.
+    - **Breach → a deviation recorded under AC-14**, naming the block, both values and what changed in the authoring. **It is a tripwire for a conversation, not a gate on authoring** — a block is not rewritten because a proxy moved.
+    - **Two-sided.** A block that gets *easier* is drift too; banding only the predicted direction would assume the named mechanism is the only one there is.
+
+    **Bound, because this is a guarantee and it does not cover everything.** With 30 questions per block this catches a **step change** and is close to blind to a **gradual slope** — five points cannot test a trend with any power, and a drift of 0.03 per block would arrive at block 5 having never breached. **At block 5 the proxy is reported across all five blocks with its direction**, as a diagnostic that the reader can weigh, not as a gate that was passed.
+
+    #### What this does to AC-17's guarantee
+
+    **Arm-swap invariance still holds for the discordance summary and no longer holds for the artifact**, because a single-arm proxy is by construction not invariant under swapping the arms — swapping is exactly what it measures. Replacing it with a weaker claim would be the wrong move; the claim is replaced with the *right* one, which happens to be provable:
+
+    > The published artifact fixes `n`, `n_discordant = b + c`, and `vector_hits = both + c`. **Three equations, four unknowns** (`b`, `c`, `both`, `neither`) — so `c` is free across its whole feasible range, and every value of it produces a byte-identical artifact.
+
+    Tested both ways: one worked instance — `(b, c) = (7, 0)` against `(4, 3)`, same `n`, same discordant cases, same vector hits, identical output — **and** a sensitivity check showing that adding the hybrid arm's recall makes the same two splits distinguishable immediately.
+
+    #### The general rule from the sawtooth, stated where the sizing arithmetic lives
+
+    Recorded in `scripts/mcnemar.py`'s module docstring rather than only here, so that nobody re-derives 12 next year from a different table:
+
+    > **The first crossing is the wrong reading of any discrete power curve.** The rejection region changes in whole observations, so the critical value jumps as `n` grows and power follows a **sawtooth**. **The first crossing is a lower bound on the sustained requirement, never an upper one** — measured across θ ∈ {0.7, 0.75, 0.8, 0.9} and targets {0.5, 0.8}, it understates by 0 to 8 discordant pairs and never overstates. The error therefore has a **direction**: reading the first crossing always buys less power than the number advertises, and silently, because the arithmetic producing it is correct as far as it goes.
+
+    The test pins the general property — non-negative gap across all eight parameter combinations — not the two numbers that happened to be wrong here.
+
+    ---
+
     #### Block 1 authored, and the blinded interim — measured 2026-08-04, artifact `evals/interim-block-1.json`
 
     30 questions, `evals/retrieval_confirmatory.jsonl`, composition 21 / 5 / 4 as committed and enforced by `tests/test_confirmatory_set.py`.
@@ -1233,7 +1290,8 @@ reader who has not opened the repository:
   fails silently in the direction of rendering nothing.
 
 - **AC-17 (the interim sizing look cannot see which arm won — Key decision 12 amendment 5)** *(added 2026-08-04)* — `scripts/interim_r.py` reduces paired outcomes to `n`, `n_discordant`, `r` and the shape composition, and:
-  - **The summary is invariant under swapping the arms.** For any input, `summarise(rows) == summarise(mirror(rows))`, asserted on a maximally lopsided case (9 hybrid-only vs 1 vector-only, mirrored to 1 vs 9) so that a leak has something to leak. A summariser that reveals direction through *any* channel — a field, a rounding, an ordering — fails this, which is why it is stated as invariance rather than as a list of forbidden fields.
+  - **The discordance summary is invariant under swapping the arms.** For any input, `summarise(rows) == summarise(mirror(rows))`, asserted on a maximally lopsided case (9 hybrid-only vs 1 vector-only, mirrored to 1 vs 9) so that a leak has something to leak. A summariser that reveals direction through *any* channel — a field, a rounding, an ordering — fails this, which is why it is stated as invariance rather than as a list of forbidden fields.
+  - **The published artifact does not determine the split** *(amended 2026-08-04, amendment 6)*. Arm-swap invariance covers `summarise` and **cannot** cover the artifact once it carries a single-arm difficulty proxy, since a single-arm quantity is not invariant under swapping the arms by construction. The artifact-level guarantee is the provable one: `n`, `n_discordant = b + c` and `vector_hits = both + c` are three equations in four unknowns, so `c` is free across its feasible range. Asserted on the instance `(b, c) = (7, 0)` versus `(4, 3)` — same `n`, same discordant case ids, same vector hits, byte-identical output — with a paired sensitivity check showing that adding the hybrid arm's recall separates them at once.
   - **Top-level and per-case keys match an allowlist**, not a denylist: a key the allowlist does not name fails the test whether or not anyone judges it to encode direction. Blinding fails closed or it does not hold.
   - **Per-case records carry no rank and no per-arm hit** — only `id`, `shape`, and `discordant` — so the split cannot be reconstructed from the artifact after the fact.
   - **Verified by mutation:** adding `hybrid_only` to the summary fails the invariance test; adding a per-case `hybrid_rank` fails the allowlist test; computing discordance as `b + c` from two directional counts rather than as `hit_a != hit_b` fails neither on its own, which is why the invariance test is the load-bearing one and the allowlist is the backstop.

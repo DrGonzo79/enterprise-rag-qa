@@ -8,6 +8,34 @@ finding, and the floor is the number every sizing decision hangs off.
 interim (`scripts/interim_r.py`) never calls it — see SPEC-007 AC-17. Nothing
 here is what makes the interim blinded; that property belongs to what the
 interim *emits*, not to what it can import.
+
+--------------------------------------------------------------------------
+**RULE: the first crossing is the wrong reading of any discrete power curve.**
+
+This is stated generally because it is general, and because the specific
+instance of it — reading 12 and 20 off a table for this test at θ = 0.8 — was
+published here before it was caught. Anyone re-deriving a sample size from a
+different table, a different alpha, or a different test will meet the same shape.
+
+**Power is not monotone in n for a discrete test.** The rejection region can
+only change in whole observations, so as n grows the critical value jumps and
+the attained size drops; power follows a **sawtooth**, rising within a step and
+falling at each jump. At θ = 0.8 here: n = 12 gives 0.558, n = 13 gives 0.502,
+n = 14 gives **0.448**. A set sized at 12 for "power 0.5" has power 0.448 if it
+happens to collect 14 discordant pairs.
+
+**The consequence, which is the part to remember: the first crossing is a lower
+bound on the sustained requirement, never an upper one.** Measured across
+θ ∈ {0.7, 0.75, 0.8, 0.9} and targets {0.5, 0.8}, the first crossing understates
+the sustained requirement by 0 to 8 discordant pairs and **never overstates it**.
+So the error has a direction — reading the first crossing always buys *less*
+power than the number advertises, and it does so silently, because the
+arithmetic that produced it is correct as far as it goes.
+
+**Take the sustained crossing**: the smallest n whose power reaches the target
+*and stays at or above it*. That is what `min_discordant_for_power` returns, and
+the sawtooth itself is pinned by test rather than described only here.
+--------------------------------------------------------------------------
 """
 
 import math

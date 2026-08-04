@@ -1,11 +1,36 @@
 {
   "interim_id": "confirmatory-block-1",
   "measured_at": "2026-08-04",
-  "git_sha": "fda2667b76ef2e1a7b3c2b5ef1b9fa8451df572a",
+  "git_sha": "590fd825f7764dad7157e0bea6a6c60314f8064c",
   "corpus_chunks": 358,
   "k": 8,
   "blinded": true,
   "questions_with_no_fulltext_candidates": 0,
+  "difficulty": {
+    "arm": "vector-only",
+    "recall_at_8": 0.9,
+    "mrr_at_8": 0.6511,
+    "gold_rank_histogram": {
+      "1": 15,
+      "2": 6,
+      "3": 3,
+      "4": 0,
+      "5": 1,
+      "6": 2,
+      "7": 0,
+      "8": 0,
+      "miss": 3
+    }
+  },
+  "difficulty_band": {
+    "reference_block": 1,
+    "banded_metric": "mrr_at_8",
+    "reference_mrr_at_8": 0.6511,
+    "band": 0.19,
+    "reference_recall_at_8": 0.9,
+    "recall_at_8_is_unbanded_because": "block 1 sits at 0.90, so any useful two-sided band runs past 1.0 and only the harder direction could ever breach it",
+    "breach": null
+  },
   "summary": {
     "n": 30,
     "n_discordant": 7,

@@ -28,7 +28,17 @@ from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
-from scripts.interim_r import COMMITTED_BLOCK_MIX, case_record, check_mix, sizing, summarise
+from scripts.interim_r import (
+    BLOCK_1_REFERENCE_MRR,
+    COMMITTED_BLOCK_MIX,
+    DIFFICULTY_BAND,
+    case_record,
+    check_mix,
+    drift_breach,
+    single_arm_difficulty,
+    sizing,
+    summarise,
+)
 from scripts.mcnemar import (
     clopper_pearson,
     mcnemar_exact_two_sided,
@@ -191,3 +201,143 @@ def test_clopper_pearson_matches_the_published_pilot_interval() -> None:
     low, high = clopper_pearson(2, 14)
     assert (round(low, 3), round(high, 3)) == (0.018, 0.428)
     assert clopper_pearson(0, 26)[0] == 0.0
+
+
+# --- The single-arm difficulty proxy (amendment 6) ---------------------------
+
+
+def emitted(
+    pairs: Sequence[tuple[int | None, int | None]],
+) -> str:
+    """Everything the interim artifact exposes about outcomes, as one string.
+
+    Per-case discordance, the block summary, and the single-arm proxy — the
+    three things that are published together. If two different splits produce
+    the same string, the artifact does not determine the split.
+    """
+    records = [
+        case_record(f"con-{i:03d}", "natural-language", a, b) for i, (a, b) in enumerate(pairs, 1)
+    ]
+    return json.dumps(
+        {
+            "per_case": records,
+            "summary": summarise(records),
+            "difficulty": single_arm_difficulty([b for _, b in pairs]),
+        },
+        sort_keys=True,
+    )
+
+
+def test_the_published_artifact_does_not_determine_the_split() -> None:
+    """Two different (b, c) splits, one identical artifact.
+
+    This replaces arm-swap invariance as the guarantee for the *artifact*,
+    because the difficulty proxy is single-arm by construction and therefore
+    cannot be invariant under swapping the arms — swapping is exactly what it
+    measures. The property that survives, and the one that matters, is that the
+    published quantities leave the split underdetermined.
+
+    The algebra behind it: the artifact fixes `n`, `n_discordant = b + c` and
+    `vector_hits = both + c`. That is three equations in four unknowns
+    (b, c, both, neither), so `c` is free across its whole feasible range and
+    every value of it produces the same artifact. Below is one instance —
+    (b, c) = (7, 0) against (4, 3) — checked byte for byte.
+    """
+    # 7 hybrid-only, 0 vector-only, 13 both, 10 neither. vector hits = 13.
+    split_a: Sequence[tuple[int | None, int | None]] = (
+        [(1, None)] * 7 + [(1, 1)] * 13 + [(None, None)] * 10
+    )
+    # 4 hybrid-only, 3 vector-only, 10 both, 13 neither. vector hits = 13.
+    split_b: Sequence[tuple[int | None, int | None]] = (
+        [(1, None)] * 4 + [(None, 1)] * 3 + [(1, 1)] * 10 + [(None, None)] * 13
+    )
+    assert len(split_a) == len(split_b) == 30
+
+    assert emitted(split_a) == emitted(split_b)
+
+
+def test_the_indistinguishability_test_can_fail() -> None:
+    """Shown, not assumed — the sensitivity check rule 3 keeps asking for.
+
+    Adding the *hybrid* arm's recall to the artifact makes the two splits
+    distinguishable immediately, which is why the proxy is single-arm and why
+    that is a constraint rather than a preference.
+    """
+
+    def with_both_arms(pairs: Sequence[tuple[int | None, int | None]]) -> str:
+        hybrid_hits = sum(1 for a, _ in pairs if a is not None)
+        return json.dumps({"hybrid_recall": hybrid_hits / len(pairs)})
+
+    split_a: Sequence[tuple[int | None, int | None]] = (
+        [(1, None)] * 7 + [(1, 1)] * 13 + [(None, None)] * 10
+    )
+    split_b: Sequence[tuple[int | None, int | None]] = (
+        [(1, None)] * 4 + [(None, 1)] * 3 + [(1, 1)] * 10 + [(None, None)] * 13
+    )
+    assert with_both_arms(split_a) != with_both_arms(split_b)
+
+
+def test_the_proxy_reports_no_per_case_outcome() -> None:
+    """Aggregate only. A per-case vector outcome beside a per-case discordance
+    flag identifies the split one question at a time."""
+    proxy = single_arm_difficulty([1, 3, None, 8, 9])
+    assert set(proxy) == {"arm", "recall_at_8", "mrr_at_8", "gold_rank_histogram"}
+    assert proxy["arm"] == "vector-only"
+    # rank 9 is beyond k and counts as a miss, like everywhere else
+    assert proxy["recall_at_8"] == pytest.approx(0.6)
+    assert proxy["gold_rank_histogram"]["miss"] == 2
+
+
+def test_mrr_separates_blocks_that_recall_cannot() -> None:
+    """Why the proxy carries two numbers rather than one.
+
+    Both blocks below have identical `recall@8`; one has every gold chunk at
+    rank 1 and the other at rank 8. Drift of that kind is exactly what a
+    coarse proxy would miss, so the finer one is reported beside it.
+    """
+    top = single_arm_difficulty([1, 1, 1, 1])
+    bottom = single_arm_difficulty([8, 8, 8, 8])
+    assert top["recall_at_8"] == bottom["recall_at_8"]
+    assert top["mrr_at_8"] > bottom["mrr_at_8"]
+
+
+def test_the_drift_band_is_committed_and_two_sided() -> None:
+    """A block that gets *easier* is drift too.
+
+    The mechanism amendment 6 names is an author getting better at writing
+    discriminating questions, which moves difficulty up. Banding only that
+    direction would assume the mechanism is the only one there is.
+    """
+    assert drift_breach(BLOCK_1_REFERENCE_MRR, 2) is None
+    assert drift_breach(BLOCK_1_REFERENCE_MRR + DIFFICULTY_BAND, 2) is None
+    assert drift_breach(BLOCK_1_REFERENCE_MRR + DIFFICULTY_BAND + 0.001, 2) is not None
+    assert drift_breach(BLOCK_1_REFERENCE_MRR - DIFFICULTY_BAND - 0.001, 2) is not None
+    # Block 1 is the reference and cannot drift from itself.
+    assert drift_breach(0.0, 1) is None
+    # And the band must be reachable in both directions on the scale it uses:
+    # this is the check recall@8 would have failed at 0.90 + 0.19 = 1.09.
+    assert BLOCK_1_REFERENCE_MRR + DIFFICULTY_BAND <= 1.0
+
+
+def test_the_first_power_crossing_is_a_lower_bound_in_general() -> None:
+    """The rule stated in `scripts/mcnemar.py`, checked beyond the one table.
+
+    Pinning only theta = 0.8 would make the fix a fact about the numbers that
+    happened to be wrong, and someone re-deriving from a different table would
+    meet the same sawtooth with nothing to catch them. The direction of the
+    error is the load-bearing part: the first crossing never overstates.
+    """
+
+    def first_crossing(target: float, theta: float) -> int:
+        n = 1
+        while power(n, theta) < target:
+            n += 1
+        return n
+
+    gaps: list[int] = []
+    for theta in (0.7, 0.75, 0.8, 0.9):
+        for target in (0.5, 0.8):
+            gap = min_discordant_for_power(target, theta) - first_crossing(target, theta)
+            assert gap >= 0, f"first crossing overstated at theta={theta}, target={target}"
+            gaps.append(gap)
+    assert max(gaps) >= 3, "the sawtooth should be visible somewhere in this range"

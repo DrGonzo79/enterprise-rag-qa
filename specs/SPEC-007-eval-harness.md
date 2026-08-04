@@ -1186,6 +1186,55 @@ reader who has not opened the repository:
 
     ---
 
+    #### Block 3, and the first test of the topical-title hypothesis — measured 2026-08-04, artifact `evals/interim-block-3.json`
+
+    30 questions, composition 21 / 5 / 4 as committed, document share 17 / 10 / 3, same authoring rule and quality bar, retained.
+
+    **The prefix guard fired a second time, on its second use.** `con-082`'s gold was written `EU AI Act › Annex Xi`, which prefix-matches **`Annex Xii — ANNEX XII – Annex Xiii — ANNEX XIII`**. Caught before any embedding was spent, fixed to `EU AI Act › Annex Xi — ANNEX XI`. **Two instances in ninety questions is a rate, not an accident** — the Roman-numeral annex labels are a trap this corpus sets repeatedly, and a rule that catches them mechanically is worth more than the care of whoever writes the next block.
+
+    | | Block 1 | Block 2 | **Block 3** | Cumulative |
+    |---|---:|---:|---:|---:|
+    | `n_discordant` | 7 | 2 | **7** | **16 / 90** |
+    | `r` | 0.2333 | 0.0667 | **0.2333** | **0.1778** |
+    | Silent full-text branch | 0/30 | 0/30 | **0/30** | 0/90 |
+    | vector-only `recall@8` | 0.9000 | 0.9667 | **0.9667** | — |
+    | vector-only **`MRR@8`** (banded) | 0.6511 | 0.7434 | **0.5879** | — |
+
+    #### The topical-title hypothesis is not supported, and the proxy is why that is visible
+
+    Block 2's read was that the block drew on **topically-titled sections**, making both arms' job easier, lifting `MRR@8` and suppressing discordance together. **The prediction was that a block 3 agreeing with block 2 would turn that from noise into drift.**
+
+    **Block 3 went the other way on both numbers simultaneously**: `MRR@8` fell to 0.5879 — **below block 1**, −0.0632 from the reference — and `n_discordant` returned to 7. The two moved together again, in the opposite direction. So:
+
+    - **Across three blocks the proxy and `r` co-move consistently** (0.6511/7, 0.7434/2, 0.5879/7), which is evidence that the proxy measures something real about how hard a block is.
+    - **There is no monotone trend in either**, which is what drift would look like. Block 2 was the outlier and Fisher's exact already put it at p = 0.146.
+    - **The band did not fire, and by amendment 6's terms it should not have.** Reported as the hypothesis failing its first test, not as a surprise.
+
+    #### Where the set stands against the stopping rule
+
+    | | Value |
+    |---|---:|
+    | Discordant pairs so far | **16 of 23** |
+    | Pairs still needed | **7** |
+    | Questions expected at `r` = 0.1778 | **≈ 40** |
+    | Questions remaining to the cap | **110** |
+    | Verdict | **CONTINUE** |
+
+    At the current estimate the rule fires around **N ≈ 130**, i.e. during block 5 and therefore **at the block-5 boundary, N = 150** — which is where the superseded fixed-N plan would have stopped anyway, now reached by a rule that delivers the count instead of its expectation.
+
+    #### Two defects in the tooling, both found in flight and both recorded
+
+    **1. `cumulative` excluded the block that produced it.** It read artifacts from disk, and the current block's artifact is written *after* it runs — so the first block-3 run reported a pooled total over two blocks and called it three. **Wrong by exactly the newest data, and it produced a plausible smaller number rather than an error**, which is the same shape as the Annex bug one level up. The current block is now passed in rather than read back, and an artifact-level test asserts the pooled total equals the sum of the committed blocks.
+
+    **2. One measurement discrepancy that could not be reproduced, recorded rather than explained away.** Block 2's `MRR@8` printed 0.7423 on one run and 0.7434 on the next, with no scoring change between them — a difference of exactly `1/5 − 1/6` over 30 questions, i.e. **one question's gold chunk moving between rank 6 and rank 5**. Five subsequent runs (two on block 2, three on block 3) agree to the digit, and embeddings were checked and are **bit-identical** for the same input.
+
+    - **`n_discordant` — the quantity the stopping rule depends on — was stable across every run**, including the discrepant one.
+    - **Candidate mechanism, offered as a hypothesis and not as a finding:** the planner choosing an exact scan over the HNSW index (or the reverse) between runs, which changes the approximate candidate set. Not pinned down, and **the honest statement is that this measurement has not been shown to be reproducible**, only observed to be reproducible six times out of seven. Under rule 7 that is a guarantee with neither a test nor a bound, so it is recorded as an open item rather than claimed.
+
+    **The split remains sealed.** Sixteen pairs disagreed across 90 questions. Which arm won each is not recorded anywhere in this repository.
+
+    ---
+
     #### Pilot-2 results — measured 2026-08-02, artifact `evals/pilot-2.json`
 
     14 questions, unchanged 358-chunk corpus, identical measurement path to pilot-1 (the same script, parameterised — a second copy would have been a second chance to differ from it).

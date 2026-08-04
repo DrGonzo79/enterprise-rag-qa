@@ -1,5 +1,5 @@
 {
-  "interim_id": "confirmatory-block-2",
+  "interim_id": "confirmatory-block-3",
   "measured_at": "2026-08-04",
   "git_sha": "084672423241ea6504b5cb685cda8d9aa619993a",
   "corpus_chunks": 358,
@@ -9,16 +9,16 @@
   "difficulty": {
     "arm": "vector-only",
     "recall_at_8": 0.9667,
-    "mrr_at_8": 0.7434,
+    "mrr_at_8": 0.5879,
     "gold_rank_histogram": {
-      "1": 19,
-      "2": 4,
-      "3": 1,
-      "4": 2,
-      "5": 1,
+      "1": 12,
+      "2": 6,
+      "3": 3,
+      "4": 3,
+      "5": 3,
       "6": 0,
-      "7": 1,
-      "8": 1,
+      "7": 2,
+      "8": 0,
       "miss": 1
     }
   },
@@ -33,11 +33,11 @@
   },
   "summary": {
     "n": 30,
-    "n_discordant": 2,
-    "r": 0.0667,
+    "n_discordant": 7,
+    "r": 0.2333,
     "shape_composition": {
-      "citation-anchored": 4,
-      "cross-section": 5,
+      "citation-anchored": 5,
+      "cross-section": 4,
       "natural-language": 21
     }
   },
@@ -48,47 +48,51 @@
       "power_0.5": 15,
       "power_0.8": 23
     },
-    "r_point": 0.0667,
+    "r_point": 0.2333,
     "r_ci95": [
-      0.0082,
-      0.2207
+      0.0993,
+      0.4228
     ],
     "N_at_r_point": {
-      "floor": 90,
-      "power_0.5": 225,
-      "power_0.8": 345
+      "floor": 26,
+      "power_0.5": 65,
+      "power_0.8": 99
     },
     "N_at_r_ci_low": {
-      "floor": 734,
-      "power_0.5": 1835,
-      "power_0.8": 2813
+      "floor": 61,
+      "power_0.5": 151,
+      "power_0.8": 232
     },
     "N_at_r_ci_high": {
-      "floor": 28,
-      "power_0.5": 68,
-      "power_0.8": 105
+      "floor": 15,
+      "power_0.5": 36,
+      "power_0.8": 55
     }
   },
   "cumulative": {
     "blocks": [
       "confirmatory-block-1",
-      "confirmatory-block-2"
+      "confirmatory-block-2",
+      "confirmatory-block-3"
     ],
     "per_block_n": [
+      30,
       30,
       30
     ],
     "per_block_n_discordant": [
       7,
-      2
+      2,
+      7
     ],
     "per_block_mrr_at_8": [
       0.6511,
-      0.7434
+      0.7434,
+      0.5879
     ],
-    "n": 60,
-    "n_discordant": 9,
-    "r": 0.15,
+    "n": 90,
+    "n_discordant": 16,
+    "r": 0.1778,
     "sizing": {
       "theta_assumed": 0.8,
       "required_discordant": {
@@ -96,187 +100,187 @@
         "power_0.5": 15,
         "power_0.8": 23
       },
-      "r_point": 0.15,
+      "r_point": 0.1778,
       "r_ci95": [
-        0.071,
-        0.2657
+        0.1052,
+        0.2726
       ],
       "N_at_r_point": {
-        "floor": 40,
-        "power_0.5": 100,
-        "power_0.8": 154
+        "floor": 34,
+        "power_0.5": 85,
+        "power_0.8": 130
       },
       "N_at_r_ci_low": {
-        "floor": 85,
-        "power_0.5": 212,
-        "power_0.8": 325
+        "floor": 58,
+        "power_0.5": 143,
+        "power_0.8": 219
       },
       "N_at_r_ci_high": {
         "floor": 23,
-        "power_0.5": 57,
-        "power_0.8": 87
+        "power_0.5": 56,
+        "power_0.8": 85
       }
     },
     "stopping_rule": {
       "target_discordant": 23,
       "n_cap": 200,
-      "n_so_far": 60,
-      "n_discordant_so_far": 9,
-      "discordant_remaining": 14,
-      "expected_questions_remaining": 94,
-      "questions_remaining_to_cap": 140,
-      "verdict": "CONTINUE: 14 more pairs needed, 140 questions left to cap"
+      "n_so_far": 90,
+      "n_discordant_so_far": 16,
+      "discordant_remaining": 7,
+      "expected_questions_remaining": 40,
+      "questions_remaining_to_cap": 110,
+      "verdict": "CONTINUE: 7 more pairs needed, 110 questions left to cap"
     },
-    "deviation": "Amendment 5 pre-committed ONE interim look, at 30. This is look 2, owner-asked. Recorded under AC-14. Blinding is unchanged and so is the Type I argument; what is spent is the negotiation risk the one-look rule was reserving."
+    "deviation": "Amendment 5 pre-committed ONE interim look, at 30. This is look 3, owner-asked. Recorded under AC-14. Blinding is unchanged and so is the Type I argument; what is spent is the negotiation risk the one-look rule was reserving."
   },
   "per_case": [
     {
-      "id": "con-031",
+      "id": "con-061",
       "shape": "natural-language",
       "discordant": false
     },
     {
-      "id": "con-032",
+      "id": "con-062",
       "shape": "natural-language",
       "discordant": false
     },
     {
-      "id": "con-033",
-      "shape": "natural-language",
-      "discordant": false
-    },
-    {
-      "id": "con-034",
-      "shape": "natural-language",
-      "discordant": false
-    },
-    {
-      "id": "con-035",
-      "shape": "natural-language",
-      "discordant": false
-    },
-    {
-      "id": "con-036",
-      "shape": "natural-language",
-      "discordant": false
-    },
-    {
-      "id": "con-037",
-      "shape": "natural-language",
-      "discordant": false
-    },
-    {
-      "id": "con-038",
-      "shape": "natural-language",
-      "discordant": false
-    },
-    {
-      "id": "con-039",
-      "shape": "natural-language",
-      "discordant": false
-    },
-    {
-      "id": "con-040",
-      "shape": "natural-language",
-      "discordant": false
-    },
-    {
-      "id": "con-041",
-      "shape": "natural-language",
-      "discordant": false
-    },
-    {
-      "id": "con-042",
+      "id": "con-063",
       "shape": "natural-language",
       "discordant": true
     },
     {
-      "id": "con-043",
-      "shape": "natural-language",
-      "discordant": false
-    },
-    {
-      "id": "con-044",
-      "shape": "natural-language",
-      "discordant": false
-    },
-    {
-      "id": "con-045",
-      "shape": "natural-language",
-      "discordant": false
-    },
-    {
-      "id": "con-046",
-      "shape": "natural-language",
-      "discordant": false
-    },
-    {
-      "id": "con-047",
-      "shape": "natural-language",
-      "discordant": false
-    },
-    {
-      "id": "con-048",
-      "shape": "natural-language",
-      "discordant": false
-    },
-    {
-      "id": "con-049",
-      "shape": "natural-language",
-      "discordant": false
-    },
-    {
-      "id": "con-050",
-      "shape": "natural-language",
-      "discordant": false
-    },
-    {
-      "id": "con-051",
+      "id": "con-064",
       "shape": "natural-language",
       "discordant": true
     },
     {
-      "id": "con-052",
+      "id": "con-065",
+      "shape": "natural-language",
+      "discordant": false
+    },
+    {
+      "id": "con-066",
+      "shape": "natural-language",
+      "discordant": false
+    },
+    {
+      "id": "con-067",
+      "shape": "natural-language",
+      "discordant": true
+    },
+    {
+      "id": "con-068",
+      "shape": "natural-language",
+      "discordant": false
+    },
+    {
+      "id": "con-069",
+      "shape": "natural-language",
+      "discordant": false
+    },
+    {
+      "id": "con-070",
+      "shape": "natural-language",
+      "discordant": true
+    },
+    {
+      "id": "con-071",
+      "shape": "natural-language",
+      "discordant": false
+    },
+    {
+      "id": "con-072",
+      "shape": "natural-language",
+      "discordant": false
+    },
+    {
+      "id": "con-073",
+      "shape": "natural-language",
+      "discordant": false
+    },
+    {
+      "id": "con-074",
+      "shape": "natural-language",
+      "discordant": false
+    },
+    {
+      "id": "con-075",
+      "shape": "natural-language",
+      "discordant": true
+    },
+    {
+      "id": "con-076",
+      "shape": "natural-language",
+      "discordant": false
+    },
+    {
+      "id": "con-077",
+      "shape": "natural-language",
+      "discordant": true
+    },
+    {
+      "id": "con-078",
+      "shape": "natural-language",
+      "discordant": false
+    },
+    {
+      "id": "con-079",
+      "shape": "natural-language",
+      "discordant": false
+    },
+    {
+      "id": "con-080",
+      "shape": "natural-language",
+      "discordant": true
+    },
+    {
+      "id": "con-081",
+      "shape": "natural-language",
+      "discordant": false
+    },
+    {
+      "id": "con-082",
       "shape": "citation-anchored",
       "discordant": false
     },
     {
-      "id": "con-053",
+      "id": "con-083",
       "shape": "citation-anchored",
       "discordant": false
     },
     {
-      "id": "con-054",
+      "id": "con-084",
       "shape": "citation-anchored",
       "discordant": false
     },
     {
-      "id": "con-055",
+      "id": "con-085",
       "shape": "citation-anchored",
       "discordant": false
     },
     {
-      "id": "con-056",
+      "id": "con-086",
+      "shape": "citation-anchored",
+      "discordant": false
+    },
+    {
+      "id": "con-087",
       "shape": "cross-section",
       "discordant": false
     },
     {
-      "id": "con-057",
+      "id": "con-088",
       "shape": "cross-section",
       "discordant": false
     },
     {
-      "id": "con-058",
+      "id": "con-089",
       "shape": "cross-section",
       "discordant": false
     },
     {
-      "id": "con-059",
-      "shape": "cross-section",
-      "discordant": false
-    },
-    {
-      "id": "con-060",
+      "id": "con-090",
       "shape": "cross-section",
       "discordant": false
     }

@@ -385,3 +385,42 @@ def test_the_first_power_crossing_is_a_lower_bound_in_general() -> None:
             assert gap >= 0, f"first crossing overstated at theta={theta}, target={target}"
             gaps.append(gap)
     assert max(gaps) >= 3, "the sawtooth should be visible somewhere in this range"
+
+
+def test_the_cumulative_total_includes_the_block_that_produced_it() -> None:
+    """The bug: `cumulative` read artifacts from disk, and the current block's
+    artifact is written *after* it runs.
+
+    So the pooled total silently excluded the newest block — wrong by exactly
+    the data the run existed to add, which is the one direction nobody checks,
+    and it produced a plausible smaller number rather than an error. Pinned
+    against the committed artifacts so a regression shows up as a mismatch
+    rather than as a total that merely looks a bit low.
+    """
+    artifacts = sorted((REPO_ROOT / "evals").glob("interim-block-*.json"))
+    if len(artifacts) < 2:
+        pytest.skip("fewer than two interim artifacts")
+    blocks = [json.loads(path.read_text(encoding="utf-8")) for path in artifacts]
+    latest = blocks[-1]
+    pooled = latest["cumulative"]
+
+    assert pooled is not None, "a run with a prior block must pool"
+    assert len(pooled["blocks"]) == len(blocks)
+    assert pooled["n"] == sum(int(b["summary"]["n"]) for b in blocks)
+    assert pooled["n_discordant"] == sum(int(b["summary"]["n_discordant"]) for b in blocks)
+    assert pooled["per_block_n_discordant"][-1] == latest["summary"]["n_discordant"]
+
+
+def test_the_pooled_artifacts_share_one_corpus_state() -> None:
+    """Pooling across different corpus states would mix populations silently.
+
+    `r` is a property of the questions *and* the corpus. A block measured
+    against 358 chunks and one measured against 1041 are estimates of different
+    quantities, and averaging them would produce a number that describes
+    neither.
+    """
+    artifacts = sorted((REPO_ROOT / "evals").glob("interim-block-*.json"))
+    if len(artifacts) < 2:
+        pytest.skip("fewer than two interim artifacts")
+    corpora = {json.loads(p.read_text(encoding="utf-8"))["corpus_chunks"] for p in artifacts}
+    assert len(corpora) == 1, f"blocks measured against different corpora: {corpora}"

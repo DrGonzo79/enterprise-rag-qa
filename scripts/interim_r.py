@@ -402,7 +402,7 @@ def _rank_of(chunks: list[RetrievedChunk], prefix: str) -> int | None:
     return None
 
 
-def cumulative(up_to: int) -> dict[str, Any] | None:
+def cumulative(up_to: int, current: dict[str, Any], current_mrr: float) -> dict[str, Any] | None:
     """Pool the blocks measured so far, from their artifacts rather than by re-running.
 
     The artifacts carry per-case discordance and nothing else, so pooling them
@@ -414,30 +414,48 @@ def cumulative(up_to: int) -> dict[str, Any] | None:
     was protecting against is negotiation with the set, and that cost is paid
     per look regardless of what the arithmetic permits.
     """
-    blocks: list[dict[str, Any]] = []
-    for block in range(1, up_to + 1):
+    # The CURRENT block is passed in rather than read back, because its artifact
+    # is written after this runs. Reading only the files gave a "cumulative"
+    # that silently excluded the block being measured -- a total that was wrong
+    # by exactly the newest data, which is the one direction nobody checks.
+    summaries: list[tuple[str, int, int, float | None]] = []
+    for block in range(1, up_to):
         path = REPO_ROOT / "evals" / f"interim-block-{block}.json"
         if path.exists():
-            blocks.append(json.loads(path.read_text(encoding="utf-8")))
-    if len(blocks) < 2:
+            b = json.loads(path.read_text(encoding="utf-8"))
+            summaries.append(
+                (
+                    str(b["interim_id"]),
+                    int(b["summary"]["n"]),
+                    int(b["summary"]["n_discordant"]),
+                    b.get("difficulty", {}).get("mrr_at_8"),
+                )
+            )
+    summaries.append(
+        (
+            f"confirmatory-block-{up_to}",
+            int(current["n"]),
+            int(current["n_discordant"]),
+            current_mrr,
+        )
+    )
+    if len(summaries) < 2:
         return None
-    n = sum(int(b["summary"]["n"]) for b in blocks)
-    n_discordant = sum(int(b["summary"]["n_discordant"]) for b in blocks)
-    corpora = {int(b["corpus_chunks"]) for b in blocks}
+    n = sum(s[1] for s in summaries)
+    n_discordant = sum(s[2] for s in summaries)
     return {
-        "blocks": [b["interim_id"] for b in blocks],
-        "per_block_n_discordant": [int(b["summary"]["n_discordant"]) for b in blocks],
-        "per_block_mrr_at_8": [b.get("difficulty", {}).get("mrr_at_8") for b in blocks],
+        "blocks": [s[0] for s in summaries],
+        "per_block_n": [s[1] for s in summaries],
+        "per_block_n_discordant": [s[2] for s in summaries],
+        "per_block_mrr_at_8": [s[3] for s in summaries],
         "n": n,
         "n_discordant": n_discordant,
         "r": round(n_discordant / n, 4),
         "sizing": sizing(n_discordant, n),
         "stopping_rule": stopping_state(n, n_discordant),
-        # Pooling across different corpus states would silently mix populations.
-        "corpus_chunks_consistent": len(corpora) == 1,
         "deviation": (
             "Amendment 5 pre-committed ONE interim look, at 30. This is look "
-            f"{len(blocks)}, owner-asked. Recorded under AC-14. Blinding is "
+            f"{len(summaries)}, owner-asked. Recorded under AC-14. Blinding is "
             "unchanged and so is the Type I argument; what is spent is the "
             "negotiation risk the one-look rule was reserving."
         ),
@@ -485,7 +503,7 @@ async def run(block: int) -> int:
     print(f"  implied N at CI high (better){plan['N_at_r_ci_high']}")
     print("\n  b and c are not computed by this script and are not in the artifact.")
 
-    pooled = cumulative(block)
+    pooled = cumulative(block, summary, float(difficulty["mrr_at_8"]))
     if pooled:
         blocks_seen = len(pooled["blocks"])
         print(f"\n  cumulative over {blocks_seen} blocks (AC-14 deviation, see artifact):")

@@ -7,9 +7,7 @@ kind of thing that would silently regress:
    sites had their own `startswith` and one (`tests/baseline_guard.py`) had
    independently arrived at the right rule — which means the codebase lacked a
    shared primitive, not that it had five bugs. A sixth site now fails here.
-2. **The gold-label pre-flight runs before any embedding is billed.** Refusing
-   a bad label at scoring time would mean paying for the block first.
-3. **Every committed eval artifact records an exact query plan.** The HNSW index
+2. **Every committed eval artifact records an exact query plan.** The HNSW index
    is not in any plan today; if that changes, some fraction of every `recall@8`
    miss becomes an index artifact rather than a retrieval failure, and
    `recall@8` is the pre-registered primary metric.
@@ -58,10 +56,6 @@ ALLOWED_PREFIX_COMPARISONS = {
     # Ancestor test on real section paths: `X › Y` extends `X` at a separator by
     # construction, so this asks a question about the tree, not about a label.
     "scripts/pin_gold_chunks.py": {'p.startswith(gold + " › ")'},
-    # Deliberately the RAW comparison: this collects the over-match superset so
-    # that straddling can then be detected in it. Narrowing it here would make
-    # the straddle check unable to see what it exists to catch.
-    "scripts/interim_r.py": {"p.startswith(str(prefix))"},
     # A chunk's text begins with its own section-path header. Text prefix, not a
     # tree comparison, and the trailing newline makes it exact.
     "tests/test_ingest_chunker.py": {r'chunk.text.startswith(chunk.section_path + "\n")'},
@@ -142,24 +136,6 @@ def test_the_allowlist_has_no_stale_entries() -> None:
     for rel, allowed in ALLOWED_PREFIX_COMPARISONS.items():
         stale = allowed - live.get(rel, set())
         assert not stale, f"{rel} no longer contains {sorted(stale)}"
-
-
-def test_the_gold_label_preflight_runs_before_any_embedding_is_billed() -> None:
-    """Order matters and is asserted on the source, because it cannot be
-    asserted on behaviour without a corpus and an API key.
-
-    A label that names no section, or names one mid-word, is refused while
-    refusing is still free. Two such labels have appeared in ninety questions,
-    so this path is exercised at a rate of roughly one per block.
-    """
-    source = (REPO_ROOT / "scripts" / "interim_r.py").read_text(encoding="utf-8")
-    measure = source.index("async def measure(")
-    preflight = source.index("await unresolvable_prefixes(", measure)
-    embedder = source.index("OpenAIEmbeddingClient()", measure)
-    assert preflight < embedder, (
-        "the gold-label pre-flight must run before the embedder is constructed; "
-        "otherwise a bad label is caught after the block has been paid for"
-    )
 
 
 def test_every_interim_artifact_records_an_exact_query_plan() -> None:

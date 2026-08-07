@@ -1,13 +1,18 @@
 """Query concurrency bound, derived from the pool (SPEC-006 KD-10).
 
-SPEC-004 opens **two** sessions per `retrieve()` and gathers them. With ten
-connections per replica (SPEC-002 KD-8 — a bound set by Azure's max_connections,
-not a preference), ten simultaneous requests can each take their *first*
-connection, exhaust the pool, and then all block awaiting a second that nobody
-can release. Every request then fails at `pool_timeout` under a load the
-arithmetic says should be fine.
+**The deadlock this was built for no longer exists** (2026-08-05, SPEC-004
+KD-17). SPEC-004 opened *two* sessions per `retrieve()` and gathered them: with
+ten connections per replica, ten simultaneous requests could each take their
+first connection, exhaust the pool, and all block awaiting a second that nobody
+could release. **A request that holds exactly one connection cannot deadlock** —
+it always progresses to release.
 
-The pool cannot be enlarged, so concurrency is bounded above it instead.
+The bound is kept anyway, and the reason changed rather than disappeared: it is
+now a **queueing** bound, not a deadlock guard. Without it, requests beyond the
+pool's capacity wait at `pool_timeout` and fail with a 500 instead of being shed
+with a 503 at the door, and the reserve for single-checkout consumers stops
+meaning anything. Whether the *number* is still right is SPEC-006 KD-10's
+question, not this module's — see the amendment there.
 """
 
 from rag_qa.db.engine import POOL_MAX_OVERFLOW, POOL_SIZE
@@ -15,13 +20,16 @@ from rag_qa.db.engine import POOL_MAX_OVERFLOW, POOL_SIZE
 # The divisor is enumerated for the same reason RESERVED is, and for a sharper
 # one: RESERVED guards the numerator, but KD-10's deferred risk lives *here* —
 # "if anything ever adds a second concurrent connection consumer to a request,
-# the arithmetic silently changes and the deadlock returns." A hardcoded 2 is
-# exactly that silence. Naming each concurrent checkout makes adding one a
+# the arithmetic silently changes and the deadlock returns." A hardcoded number
+# is exactly that silence. Naming each concurrent checkout makes adding one a
 # visible edit, and AC-8 *measures* the real peak against a live pool, so the
 # constant cannot drift from the code it claims to describe.
+#
+# It went 2 -> 1 on 2026-08-05 by DELETING A LINE, which is the point of the
+# enumeration: nobody edited an arithmetic constant, and AC-8 re-measured the
+# peak rather than being told it.
 QUERY_CONNECTIONS: tuple[str, ...] = (
-    "vector branch (SPEC-004 KD-5)",
-    "full-text branch — embedder identity check rides the same session",
+    "dense search — the embedder identity check rides the same session",
 )
 CONNECTIONS_PER_QUERY = len(QUERY_CONNECTIONS)
 

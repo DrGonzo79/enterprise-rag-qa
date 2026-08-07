@@ -15,10 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from conftest import (
     DATABASE_URL,
-    DENSE_ONLY_TEXT,
-    LEXICAL_ONLY_TEXT,
     PROBE_QUERY,
-    QUERY_VECTOR,
     SeededChunk,
     SeededCorpus,
     StubQueryEmbedder,
@@ -61,7 +58,7 @@ async def test_returns_k_populated_chunks_in_non_increasing_score_order(
         assert chunk.doc_type in {"regulation", "filing", "standard"}
         assert chunk.text
         assert isinstance(chunk.chunk_id, uuid.UUID)
-        assert chunk.vector_rank is not None or chunk.fulltext_rank is not None
+        assert chunk.vector_rank is not None
 
 
 async def test_ordering_is_deterministic_across_calls(
@@ -82,29 +79,6 @@ async def test_k_is_honored(
 
 
 # --- AC-3: hybrid mechanics ---------------------------------------------------
-
-
-async def test_hybrid_surfaces_the_lexical_chunk_vector_only_misses(
-    session_factory: async_sessionmaker[AsyncSession], seeded_corpus: SeededCorpus
-) -> None:
-    """The claim hybrid retrieval exists for, isolated from embedding quality:
-    a chunk that is FTS-rank-1 but outside the dense pool must still surface."""
-    retriever, _ = _retriever(session_factory)
-    hybrid = await retriever.retrieve(PROBE_QUERY, k=8)
-    hybrid_texts = [chunk.text for chunk in hybrid]
-
-    assert LEXICAL_ONLY_TEXT in hybrid_texts  # rescued by the FTS branch
-    assert DENSE_ONLY_TEXT in hybrid_texts  # dense rank 1 survives fusion
-
-    async with session_factory() as session:
-        from rag_qa.retrieval.search import vector_search
-
-        vector_only = await vector_search(session, QUERY_VECTOR)
-    assert LEXICAL_ONLY_TEXT not in [row.text for row in vector_only[:8]]
-
-    lexical = next(c for c in hybrid if c.text == LEXICAL_ONLY_TEXT)
-    assert lexical.fulltext_rank == 1
-    assert lexical.vector_rank is None
 
 
 # --- AC-4: embedder identity --------------------------------------------------
@@ -180,40 +154,6 @@ async def test_empty_corpus_raises(
 # --- AC-7: concurrency (SPEC-002 Key decision 5) ------------------------------
 
 
-async def test_branches_run_concurrently_on_distinct_connections(
-    session_factory: async_sessionmaker[AsyncSession],
-    seeded_corpus: SeededCorpus,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from rag_qa.retrieval import service
-
-    observed: list[tuple[str, float, float, int]] = []
-
-    def instrument(name: str, original: Any) -> Any:
-        async def wrapper(session: AsyncSession, *args: Any, **kwargs: Any) -> Any:
-            started = time.perf_counter()
-            pid = (await session.execute(text("SELECT pg_backend_pid()"))).scalar_one()
-            await asyncio.sleep(0.3)
-            result = await original(session, *args, **kwargs)
-            observed.append((name, started, time.perf_counter(), pid))
-            return result
-
-        return wrapper
-
-    monkeypatch.setattr(service, "vector_search", instrument("vector", service.vector_search))
-    monkeypatch.setattr(service, "fulltext_search", instrument("fts", service.fulltext_search))
-
-    retriever, _ = _retriever(session_factory)
-    started = time.perf_counter()
-    await retriever.retrieve(PROBE_QUERY, k=8)
-    elapsed = time.perf_counter() - started
-
-    assert elapsed < 0.55, f"branches ran sequentially ({elapsed:.2f}s for two 0.3s sleeps)"
-    assert {name for name, *_ in observed} == {"vector", "fts"}
-    pids = {pid for *_, pid in observed}
-    assert len(pids) == 2, f"expected two distinct connections, saw {pids}"
-
-
 # --- AC-8 (CI tier): latency floor on a fake embedder -------------------------
 
 
@@ -256,7 +196,7 @@ async def test_query_log_record_carries_diversity_and_stage_latencies(
     from rag_qa.retrieval.metrics import distinct_section_rate
 
     assert record.distinct_section_rate == distinct_section_rate(results)  # type: ignore[attr-defined]
-    for field in ("embed_ms", "vector_ms", "fts_ms", "fuse_ms", "total_ms"):
+    for field in ("embed_ms", "vector_ms", "total_ms"):
         assert isinstance(getattr(record, field), float)
     assert record.result_count == 8  # type: ignore[attr-defined]
     assert record.k == 8  # type: ignore[attr-defined]
@@ -330,18 +270,6 @@ async def test_empty_and_whitespace_queries_raise_before_any_io(
             await retriever.retrieve(query)
 
     assert embedder.calls == []  # no embedding round-trip for an empty query
-
-
-async def test_no_lexical_match_degrades_to_vector_order(
-    session_factory: async_sessionmaker[AsyncSession], seeded_corpus: SeededCorpus
-) -> None:
-    retriever, _ = _retriever(session_factory)
-    results = await retriever.retrieve("zzzznonexistentterm", k=8)
-
-    assert len(results) == 8
-    assert all(chunk.fulltext_rank is None for chunk in results)
-    assert [chunk.vector_rank for chunk in results] == [1, 2, 3, 4, 5, 6, 7, 8]
-    assert results[0].text == DENSE_ONLY_TEXT
 
 
 async def test_fewer_candidates_than_k_returns_what_exists(

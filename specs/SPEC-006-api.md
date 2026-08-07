@@ -44,6 +44,19 @@ Three obligations shape the design:
 
 ## Interface
 
+
+#### Key decision 10, amendment 6 — **PROPOSED, NOT APPLIED**: the semaphore now guards a resource the request barely holds *(2026-08-05)*
+
+**Measured, not inferred.** With the full-text branch deleted (SPEC-004 KD-17), AC-8 against a live pool and the real 358-chunk corpus reports **1 connection checked out, peak 1**. `CONNECTIONS_PER_QUERY` went 2 → 1 **by deleting a line**, which is what the enumeration was for, and `MAX_CONCURRENT_QUERIES` re-derived from 4 to **8** without anyone editing an arithmetic constant.
+
+**The deadlock KD-10 exists to prevent is now unreachable.** It required a request to hold one connection while waiting for a second; a request that takes exactly one always progresses to release. So the bound's *reason* has changed rather than its arithmetic:
+
+- **It is no longer a deadlock guard. It is a load-shedding bound.** Without it, requests beyond the pool's capacity wait at `pool_timeout` and fail with a 500 rather than being shed with a 503 at the door, and `RESERVED_CONNECTIONS` stops meaning anything.
+- **But the permit is now held across a phase that holds no connection.** The semaphore is acquired before the embedding round-trip (KD-10 amendment 5) and released after the response. Embedding is p50 170 ms / p95 843 ms; retrieval is **~13 ms**. So a permit is held for ~200 ms while a connection is held for ~13 ms of it — the bound gates roughly **6 % of what it is bounding**. Under the old two-branch design the connection was held across both branches concurrently and the ratio was far tighter.
+- **8 permits against 8 non-reserved connections is therefore very conservative**: at any instant the expected number of query connections in use is closer to 0.5 than to 8.
+
+**What this does not settle, and why it stops at Proposed.** The right number depends on what the bound is *for* once it is not preventing deadlock — shedding early to keep tail latency honest is a different objective from protecting the pool, and it may want a *smaller* number rather than a larger one. That is a decision about the product's failure behaviour under load, not a mechanical consequence of the divisor changing, so it is written here and left for the owner.
+
 ### Modules
 
 ```

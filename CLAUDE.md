@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Retrieval-augmented Q&A over public compliance documents (NIST AI RMF, EU AI Act, public 10-K filings) with a scored evaluation harness and hybrid retrieval. Building in public; target ship September 15, 2026. Ingestion, hybrid retrieval, generation, and the HTTP API are implemented under SPEC-003 through SPEC-006; the eval harness (SPEC-007), frontend (SPEC-009), and deployment (SPEC-010) are not yet written.
+Retrieval-augmented Q&A over public compliance documents (NIST AI RMF, EU AI Act, public 10-K filings) with a scored evaluation harness and dense retrieval. Building in public; target ship September 15, 2026. Ingestion, retrieval, generation, and the HTTP API are implemented under SPEC-003 through SPEC-006. SPEC-007's first job — deciding hybrid against dense-only — is **done** (2026-08-05, vector-only wins, p = 0.000488) and the branch is deleted; the harness itself, the frontend (SPEC-009), and deployment (SPEC-010) are not yet written.
 
 ## Commands
 
@@ -73,33 +73,30 @@ Current spec state (2026-07-26): SPEC-001 (scaffold), SPEC-002 (data model), SPE
 ## Stack (locked — challenges require a spec amendment)
 
 - Python 3.12 · FastAPI · uv (lock committed, `--frozen` in CI)
-- Postgres 16 + pgvector (HNSW) + tsvector — one database
+- Postgres 16 + pgvector (exact cosine; no ANN index) — one database
 - Generation: Anthropic Claude behind a model-agnostic adapter; OpenAI as second provider
 - Embeddings: OpenAI `text-embedding-3-small` (1536-dim)
 - Frontend: React + Vite (minimal, cuttable)
 - Docker multi-stage · docker-compose local · GitHub Actions CI · Azure Container Apps + PostgreSQL Flexible Server via Bicep
 
-> **SCOPED UNDER RULE 7 — 2026-08-05. "vector search (HNSW)" names an index that no query in this repository has ever used.** The index is created, populated and asserted to exist (SPEC-002 AC-2), and it is not in any query plan: `vector_search` orders by `(distance, id)`, and an HNSW index can only order by the distance operator alone, so the tie-break makes it unusable and the planner scans and sorts instead. Proved by EXPLAIN — with the tie-break, `enable_seqscan = off` still yields `Limit ← Sort ← Seq Scan`; without it, the same setting yields `Limit ← Index Scan[ix_chunks_embedding_hnsw]`. **The honest form of the sentence today:** *one system provides exact vector search, full-text search, and the relational layer; the ANN index exists and is not yet on the query path.* The architecture claim — that one datastore covers all three — is unaffected and is the load-bearing part. The fix is a retrieval-behaviour change and is **Proposed, not applied** (SPEC-004 Key decision 7a).
+> **The 2026-08-05 note about the unreachable HNSW index is superseded:** the index is dropped (SPEC-004 KD-17, migration `0006`) and dense search is exact by design rather than by accident.
 
-**Why pgvector over a dedicated vector DB:** one system provides vector search (HNSW), full-text search (tsvector), and the relational layer for query logs and eval runs. At this scale a second datastore adds operational complexity without payoff — and on Azure it's one Flexible Server instead of two services.
 
-**Why hybrid retrieval, not vector-only:** regulatory text is dense with terms of art and exact citations ("Article 6(2)"). Embeddings blur exact terms; full-text search nails them. Reciprocal Rank Fusion combines both. Refusal is a tested capability — the eval set includes unanswerable questions, and declining is scored.
+**Why pgvector over a dedicated vector DB:** one system provides vector search, and the relational layer for query logs and eval runs. At this scale a second datastore adds operational complexity without payoff — and on Azure it's one Flexible Server instead of two services.
 
-> **SCOPED UNDER RULE 7 — 2026-08-02, unverified at the time it was relied on, and recorded before any fix.** "Full-text search nails them" is the load-bearing claim under this architecture, it has **no test and no stated bound**, and it is the reason for the second retrieval branch, the RRF fusion step, the `tsvector` column, and SPEC-004's two-connection design. **Measured**: `fulltext_search` returns **zero candidates** on 12 of the 26 smoke questions (46 %) and 13 of 14 pilot questions (93 %) against the 358-chunk corpus. `websearch_to_tsquery` ANDs every content term, so a question phrased as a sentence contributes words the corpus does not contain and the conjunction is unsatisfiable. **The example is this repository's own flagship citation query**: `"What does Article 6(2) say about classifying high-risk AI systems?"` → 0 hits, because no chunk contains the word `say`; `"Article 6(2) high-risk"` → 33 hits.
+**~~Why hybrid retrieval, not vector-only~~ — WITHDRAWN 2026-08-05, see the note below.** Refusal remains a tested capability — the eval set includes unanswerable questions, and declining is scored.
+
+> **MEASURED AND CONTRADICTED — 2026-08-05, commit `2e81ec0` (result) and this commit (deletion).** This note began on 2026-08-02 as *scoped and unverified*: "full-text search nails them" was the load-bearing claim under the second branch, the RRF fusion step, the `tsvector` column and SPEC-004's two-connection design, and it had **no test and no stated bound**. It has now been answered.
 >
-> **The honest scope of the sentence at that moment:** *full-text search retrieves exact terms when the query is reduced to those terms; it retrieves nothing when the query is a sentence, which is the form the API accepts and the frontend will send.*
+> **SPEC-007 KD-12's confirmatory comparison, 120 questions, pre-registered:** hybrid against dense-only, `recall@8` at k = 8. **b = 3, c = 20, p = 0.000488** two-sided exact. Vector-only wins. All twenty of the discordant cases carrying the result were human-verified with zero corrections.
 >
-> **This note was written before the fix and is amended rather than deleted by it.** The record should show that the claim was unverified while the architecture rested on it; a note replaced afterwards would read as a fixed bug rather than as an assumption nobody checked for three specs.
+> **The finding underneath the finding is the conjunction, not the fusion.** `websearch_to_tsquery` was satisfiable on **19 of 120** questions; on the other 101 the AND emptied and the OR fallback fired, including on every one of the 23 discordant pairs. On the 19 where the conjunction did fire, the branch reordered inside the top 8 and **never changed whether the gold was found**. Gated it contributes nothing; ungated it costs 20 and returns 3.
 >
-> **AMENDED 2026-08-02, after SPEC-004 AC-12 amendment 5 (the OR fallback). The envelope changed; the sentence still is not verified.** Coverage — questions on which the branch returns zero candidates:
+> **What is refuted is this implementation** — AND conjunction with OR fallback, RRF at k = 60, on this corpus and this question mix. **It is not a finding that lexical retrieval cannot help**, and pilot-2 is the record pointing the other way: on fourteen deliberately lexically-anchored questions, hybrid scored `recall@8` 1.000 against vector-only's 0.857 (b = 2, c = 0), too small to be conclusive and narrowed further by the fact that 7 of 18 citation-anchored questions also emptied their conjunction. A different design — per-term weighting, score-based rather than rank-based fusion, a query parser that handles out-of-vocabulary terms — is **untested, and untested is not refuted**.
 >
-> | Set | Before | After |
-> |---|---:|---:|
-> | smoke, citation + paraphrase (26) | 12 (46 %) | **0** |
-> | pilot-1, natural language (14) | 13 (93 %) | **0** |
-> | pilot-2, lexically anchored (14) | 0 | **0** |
+> **We cannot test it, and the reason is procedural rather than technical:** the confirmatory set is unblinded and permanently closed (SPEC-007 KD-12 amendment 8), so nothing designed after 2026-08-05 can be validated against it to the standard this result was produced under. **A second authoring cycle is the price of asking again.**
 >
-> **What is now true:** the branch fires on every question measured, and it differentiates — hybrid's top-8 matched vector-only's on 13 of 26 smoke questions before and 1 of 26 after. **What is still not established is the sentence itself.** "Full-text search nails them" is a claim that the lexical branch *improves retrieval*, and the first measurement after the fix points the other way at rank 1: hybrid `recall@1` on citation queries fell from 0.929 to 0.714 against an unchanged vector-only 0.857, with 8 of 13 top-1 misses traced to a fallback candidate outranking a good vector result. `recall@8` improved (pilot-1 hybrid 0.714 → 0.857). **So the branch now runs, and whether it helps is an open question with evidence on both sides** — SPEC-007 Key decision 12 owns it. Do not restate the rationale as settled until that lands.
+> The branch, the fallback, the fusion step, the `tsvector` column and the unreachable HNSW index were removed under SPEC-004 Key decision 17. **The architecture claim that survives is the one about the datastore, not the one about the branch:** one Postgres provides exact vector search and the relational layer for query logs and eval runs, which is still one Flexible Server instead of two services.
 
 ## Scope-cut ladder
 

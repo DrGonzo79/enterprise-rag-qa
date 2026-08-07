@@ -22,7 +22,7 @@ from collections import Counter
 from pathlib import Path
 
 import pytest
-from scripts.interim_r import COMMITTED_BLOCK_MIX
+from scripts.confirmatory_set import COMMITTED_BLOCK_MIX
 from scripts.pin_gold_chunks import is_exact_anchor
 
 REPO_ROOT = Path(__file__).resolve().parent.parent

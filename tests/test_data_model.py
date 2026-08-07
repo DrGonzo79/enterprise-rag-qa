@@ -80,18 +80,31 @@ async def test_migrations_roundtrip() -> None:
     assert await table_names() == set()
 
 
-async def test_indexes_exist(session: AsyncSession) -> None:
-    """AC-2: HNSW index on chunks.embedding and GIN index on chunks.tsv."""
+async def test_the_chunks_table_carries_no_search_index(session: AsyncSession) -> None:
+    """AC-2, rewritten 2026-08-05 (SPEC-004 KD-17) to assert the absence.
+
+    It asserted an HNSW index on `chunks.embedding` and a GIN index on
+    `chunks.tsv`. Both existed and **neither was ever reached**: the GIN index
+    served a branch the confirmatory comparison removed, and the HNSW index
+    could not order a statement with an `id` tie-break, so dense search was
+    always exact. Asserting their presence was a green check beside two
+    mechanisms that did nothing.
+
+    The assertion is inverted rather than deleted, because "no index here" is a
+    decision with a named revisit trigger (AC-8's latency budget) and a silent
+    reappearance should fail.
+    """
     rows = (
         await session.execute(
             text("SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 'chunks'")
         )
     ).all()
     defs = {name: definition for name, definition in rows}
-    assert "ix_chunks_embedding_hnsw" in defs
-    assert "hnsw" in defs["ix_chunks_embedding_hnsw"].lower()
-    assert "ix_chunks_tsv_gin" in defs
-    assert "gin" in defs["ix_chunks_tsv_gin"].lower()
+    assert "uq_chunks_document_id_ordinal" in defs
+    assert "btree" in defs["uq_chunks_document_id_ordinal"].lower()
+    assert "ix_chunks_embedding_hnsw" not in defs
+    assert "ix_chunks_tsv_gin" not in defs
+    assert not any("hnsw" in d.lower() or "gin" in d.lower() for d in defs.values())
 
 
 async def test_content_hash_unique(session: AsyncSession) -> None:
@@ -124,27 +137,6 @@ async def test_embedding_dimension_enforced(session: AsyncSession) -> None:
     session.add(_chunk(doc.id, embedding=[0.1] * 3))
     with pytest.raises(DBAPIError):
         await session.flush()
-
-
-async def test_tsv_generated_and_searchable(session: AsyncSession) -> None:
-    """AC-6: tsv populates without application writes and matches to_tsquery."""
-    doc = _document()
-    session.add(doc)
-    await session.flush()
-    chunk = _chunk(doc.id, text="Reciprocal rank fusion combines retrieval results.")
-    session.add(chunk)
-    await session.flush()
-
-    row = (
-        await session.execute(
-            text(
-                "SELECT id FROM chunks "
-                "WHERE tsv @@ to_tsquery('english', 'reciprocal & fusion') AND id = :id"
-            ),
-            {"id": chunk.id},
-        )
-    ).first()
-    assert row is not None
 
 
 async def test_document_delete_cascades(session: AsyncSession) -> None:

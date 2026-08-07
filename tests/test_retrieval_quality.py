@@ -247,7 +247,6 @@ async def test_hybrid_beats_vector_only_and_records_the_baseline(
                 text=row.text,
                 score=0.0,
                 vector_rank=rank,
-                fulltext_rank=None,
             )
             for rank, row in enumerate(dense[:K], start=1)
         ]
@@ -517,11 +516,11 @@ async def test_latency_against_the_real_corpus(
     assert len(records) == len(cases)
     end_to_end = [r.total_ms for r in records]  # type: ignore[attr-defined]
     embed = [r.embed_ms for r in records]  # type: ignore[attr-defined]
-    # Branches run concurrently, so retrieval-side cost is the slower branch.
-    retrieval_side = [
-        max(r.vector_ms, r.fts_ms) + r.fuse_ms  # type: ignore[attr-defined]
-        for r in records
-    ]
+    # One branch since SPEC-004 KD-17, so retrieval-side cost is that branch.
+    # It used to be max(vector, fts) + fuse -- three terms whose sum this
+    # assertion bounded; it is now one, and the budget it is measured against
+    # is unchanged.
+    retrieval_side = [r.vector_ms for r in records]  # type: ignore[attr-defined]
 
     def p95(values: list[float]) -> float:
         return statistics.quantiles(values, n=20)[-1]

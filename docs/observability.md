@@ -41,7 +41,7 @@ without `Retriever.retrieve` ever gaining a parameter — that is what the
 {"ts": "2026-07-26T17:04:02.980Z", "level": "INFO", "logger": "rag_qa.retrieval.service",
  "msg": "retrieve", "request_id": "9f2c1ab4e0d3477a", "query_sha": "a1b2c3d4e5f6",
  "k": 8, "result_count": 8, "distinct_section_rate": 0.75, "embed_ms": 84.2,
- "vector_ms": 7.41, "fts_ms": 5.02, "fuse_ms": 0.31, "total_ms": 97.6}
+ "vector_ms": 7.41, "total_ms": 97.6}
 ```
 
 **The query itself is never logged** — `query_sha` is the first twelve hex

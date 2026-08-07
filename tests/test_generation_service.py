@@ -48,7 +48,6 @@ def _chunk(index: int) -> RetrievedChunk:
         text=f"Article {index} body text about conformity assessment.",
         score=1.0 / index,
         vector_rank=index,
-        fulltext_rank=None,
     )
 
 

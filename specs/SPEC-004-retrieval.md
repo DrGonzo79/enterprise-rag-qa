@@ -160,6 +160,26 @@ None. Query embedding reuses `openai` (SPEC-003); everything else is SQLAlchemy 
 4. **Identity verified on every `retrieve()` call, not at startup.** **Flagged — arguing against the obvious choice:** a startup check is the obvious, cheaper design. But the ingestion CLI can rewrite the corpus while the API process is running (whole-document replace, SPEC-003 decision 6) — a startup check validates a corpus that may no longer exist. The per-call check is one `SELECT DISTINCT` on an indexed-scan-friendly small table, and it runs inside the `gather` alongside the searches (Branch B, before FTS), so it adds **zero wall-clock latency** in the common case. Mismatch is an exception, never a warning: a warning in a log nobody tails *is* the silent-degradation failure mode.
 5. **Two sessions per call, identity check sharing the FTS session.** `gather` needs ≥ 2 connections (one `AsyncSession` = one connection = sequential). Three parallel sessions would buy ~1 ms on the cheapest query while tripling per-request connection pressure against SPEC-002 decision 8's hard pool bound of 10 per replica; at 2 connections per in-flight retrieve, 5 concurrent retrievals saturate a replica's pool — acceptable for a demo service, and the answering spec inherits this math explicitly.
 6. **`websearch_to_tsquery`, not `to_tsquery`/`plainto_tsquery`.** It never raises on arbitrary user input (`to_tsquery` throws on unbalanced syntax — a user typing `6(2` must not 500), and it preserves quoted-phrase support that `plainto_tsquery` lacks — useful for exact citations.
+17. **The full-text branch is deleted** *(2026-08-05, owner decision, after SPEC-007 KD-12's confirmatory comparison)*.
+
+    **What the comparison found, and it is not "hybrid lost".** On 120 questions: b = 3, c = 20, p = 0.000488 two-sided exact, vector-only wins. But the headline is the **conjunction**, not the fusion:
+
+    - **`websearch_to_tsquery` was satisfiable on 19 of 120 questions.** On the other 101 the AND emptied and the OR fallback fired — including on **all 20** of the cases vector-only won and all 3 it lost.
+    - **On the 19 where the conjunction did fire, the branch reordered inside the top 8 and never changed whether the gold was found.** Gated, it contributes nothing on any question. Ungated, it costs 20 and returns 3.
+    - So the branch had two states: silent, or harmful. **It never had a third.**
+
+    **The displacement mechanism is length, not a few bad chunks.** Across the 20, 17 distinct chunks fill the rank-1 slots and 46 fill the top-3 — no small set of attractors. What the displacing chunks share is size: median 4191 characters against a corpus median of 3189, the **87th percentile**. A longer chunk contains more of the query's lexemes, so an OR-of-lexemes query ranked by `ts_rank_cd` finds it.
+
+    **Removed:** `fulltext_search` and the OR fallback, `MAX_LEXEME_CHUNK_FRACTION` and `PRUNING_CANDIDATE_FRACTION`, `rrf_fuse` and the whole `fusion` module, `CandidateRow.via_fallback`, `RetrievedChunk.fulltext_rank`, the generated `tsv` column and `ix_chunks_tsv_gin`, and the second entry in `QUERY_CONNECTIONS`.
+
+    **The HNSW index goes too**, which reverses nothing in KD-7a: that decision kept the index because it and the tie-break were one decision, and this is the commit where the other half of that pair would have been reconsidered. It was never reachable, dense search is exact, and AC-8 measures 16 ms against a 150 ms budget. **The revisit trigger is unchanged and is AC-8's budget, not corpus size.** Migration `0006` drops all three and its `downgrade` restores them.
+
+    **What is preserved and why.** `score` is still `1/(60 + rank)` rather than raw cosine similarity: SPEC-006's response contract and SPEC-009's ranking both read it, and neither should change meaning as a side effect of deleting a branch. With one arm it is a monotone function of rank, which is what it already was for any chunk only one arm returned.
+
+    **The embedder identity check moved** from the full-text session to the dense one, and now runs *before* the search rather than concurrently with it — so a mismatched corpus is refused without paying for a search first.
+
+    ---
+
 7a. **REJECTED 2026-08-05 (owner-asked decision, taken before unblinding). The tie-break stays; dense search stays exact.** ~~PROPOSED — remove the `id` tie-break from the dense `ORDER BY`.~~
 
     **Decided before `b` and `c` were known, because it stops being decidable afterwards.** Removing the tie-break changes vector results for *both* arms and can change the comparison's outcome, so a decision taken after unblinding could not be cleaned of that knowledge whatever its stated reason.

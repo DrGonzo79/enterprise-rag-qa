@@ -24,7 +24,6 @@ def _chunk(index: int) -> RetrievedChunk:
         text=f"Body of chunk {index}.",
         score=1.0 / index,
         vector_rank=index,
-        fulltext_rank=None,
     )
 
 

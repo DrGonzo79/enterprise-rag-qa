@@ -18,7 +18,6 @@ class RetrievedChunk:
     # fused RRF score; becomes the reranker's score once a real reranker exists
     score: float
     vector_rank: int | None
-    fulltext_rank: int | None
 
 
 @dataclass(frozen=True)

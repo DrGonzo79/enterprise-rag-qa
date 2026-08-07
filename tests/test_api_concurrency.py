@@ -33,7 +33,7 @@ def test_bound_is_derived_from_the_pool_constants() -> None:
     assert MAX_CONCURRENT_QUERIES == (POOL_SIZE + POOL_MAX_OVERFLOW - RESERVED) // (
         CONNECTIONS_PER_QUERY
     )
-    assert MAX_CONCURRENT_QUERIES == 4  # (5 + 5 - 2) // 2, at today's constants
+    assert MAX_CONCURRENT_QUERIES == 8  # (5 + 5 - 2) // 2, at today's constants
 
 
 def test_reserved_is_an_enumeration_not_a_magic_margin() -> None:
@@ -45,7 +45,7 @@ def test_reserved_is_an_enumeration_not_a_magic_margin() -> None:
 
 
 def test_bound_tracks_a_hypothetical_pool_change() -> None:
-    assert max_concurrent_queries(pool_size=20, max_overflow=20) == 19
+    assert max_concurrent_queries(pool_size=20, max_overflow=20) == 38
     assert max_concurrent_queries(pool_size=1, max_overflow=0) == 1  # never zero
 
 

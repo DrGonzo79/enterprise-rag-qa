@@ -8,17 +8,15 @@ from typing import Any
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     CHAR,
-    Computed,
     DateTime,
     ForeignKey,
-    Index,
     Integer,
     Numeric,
     Text,
     UniqueConstraint,
 )
 from sqlalchemy import text as sql_text
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 EMBEDDING_DIM = 1536
@@ -47,15 +45,13 @@ class Document(Base):
 class Chunk(Base):
     __tablename__ = "chunks"
     __table_args__ = (
+        # No index on `embedding`. The HNSW index that stood here was never
+        # reachable — `vector_stmt` orders by `(distance, id)` and an HNSW index
+        # can only order by the distance operator alone — and dense search is
+        # exact at this corpus size (16 ms p95 against a 150 ms budget). Dropped
+        # with the full-text branch under SPEC-004 KD-17; the trigger for
+        # reinstating it is AC-8's budget, not corpus size on its own.
         UniqueConstraint("document_id", "ordinal", name="uq_chunks_document_id_ordinal"),
-        Index(
-            "ix_chunks_embedding_hnsw",
-            "embedding",
-            postgresql_using="hnsw",
-            postgresql_with={"m": 16, "ef_construction": 64},
-            postgresql_ops={"embedding": "vector_cosine_ops"},
-        ),
-        Index("ix_chunks_tsv_gin", "tsv", postgresql_using="gin"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
@@ -69,11 +65,6 @@ class Chunk(Base):
     section_path: Mapped[str] = mapped_column(Text, nullable=False)
     embedding: Mapped[Any] = mapped_column(Vector(EMBEDDING_DIM), nullable=False)
     embedding_model: Mapped[str] = mapped_column(Text, nullable=False)
-    tsv: Mapped[Any] = mapped_column(
-        TSVECTOR,
-        Computed("to_tsvector('english', text)", persisted=True),
-        nullable=False,
-    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=sql_text("now()")
     )

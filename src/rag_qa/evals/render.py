@@ -7,6 +7,12 @@ So the rules are mechanical rather than tasteful —
 - every figure prints its `claim` **and** its `not_a_claim`, both in full;
 - every proportion prints its interval beside it, because 20/23 rendered alone
   reads as certainty;
+- **every interval names the parameter it is on.** A comparison renders two, on
+  two different parameters, and a reader who meets `Interval (95%)` twice will
+  attach whichever is nearer to whichever number they were reading;
+- **the difference between the arms is rendered as its own block**, with its own
+  interval, its named construction and its own warrant — it is the sentence the
+  reader carries away and it is neither arm's interval nor the split's;
 - `outcome` is printed as its own line, never left to be inferred from `arms`;
 - deviations are printed **in full, each with its reason**, never as a count;
 - `not_a_claim` is never truncated, wrapped to a summary, or moved to a footnote.
@@ -80,13 +86,32 @@ def render_markdown(report: Report) -> str:
             add(f"| p ({figure.test}, {figure.sidedness}) | {figure.p:.6g} |")
             add(f"| alpha | {figure.alpha} |")
             add("")
-            # Both on their own lines. The interval is the parameter the test is
-            # about; the outcome is never left to be read off `arms`.
-            add(f"**Interval (95%).** {_interval(figure.interval)}")
+            # Both on their own lines. The outcome is never left to be read off
+            # `arms`, and EVERY interval names the parameter it is on: two
+            # intervals on one figure with generic labels is an invitation to
+            # read whichever one is nearer.
+            add(
+                f"**Interval (95%) on P({first} wins | the pair is discordant).** "
+                f"{_interval(figure.interval)}"
+            )
             add("")
             add(f"**Outcome.** {figure.outcome}")
             add("")
             out.extend(_warrant(figure.claim, figure.not_a_claim))
+
+            # The difference is a THIRD parameter, so it gets a third block with
+            # everything the other two get: its value, its own interval, the
+            # construction named, and its own warrant. Folding it into the table
+            # above would put it under the split's interval, which is the defect.
+            difference = figure.difference
+            add(f"#### Difference: {first} minus {second}")
+            add("")
+            add(
+                f"**{figure.difference_value:+.4g}** {_interval(difference.interval)} "
+                f"· {difference.construction}"
+            )
+            add("")
+            out.extend(_warrant(difference.claim, difference.not_a_claim))
 
     add("## Methodology")
     add("")

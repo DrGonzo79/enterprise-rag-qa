@@ -90,6 +90,97 @@ def min_discordant_for_power(
     raise ValueError(f"power {target} not reached at theta={theta} below n={limit}")
 
 
+def _normal_quantile(p: float) -> float:
+    """Inverse standard normal CDF, by bisection on `math.erf`.
+
+    Bisection rather than a hard-coded 1.96 so `alpha` is a real parameter: a
+    constant here would be correct for the default and silently wrong for every
+    other alpha a caller passes.
+    """
+    low, high = -10.0, 10.0
+    for _ in range(200):
+        mid = (low + high) / 2
+        if 0.5 * (1 + math.erf(mid / math.sqrt(2))) < p:
+            low = mid
+        else:
+            high = mid
+    return (low + high) / 2
+
+
+def wilson(x: int, n: int, alpha: float = 0.05) -> tuple[float, float]:
+    """Score interval for a single binomial proportion.
+
+    Wilson rather than Clopper-Pearson here because `newcombe_paired_difference`
+    is built out of these and Newcombe's method is defined on the score interval;
+    substituting the exact interval would change the construction, not just
+    tighten it.
+    """
+    if n == 0:
+        return (0.0, 1.0)
+    z = _normal_quantile(1 - alpha / 2)
+    p = x / n
+    denominator = 1 + z * z / n
+    centre = p + z * z / (2 * n)
+    half_width = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n))
+    return ((centre - half_width) / denominator, (centre + half_width) / denominator)
+
+
+def newcombe_paired_difference(
+    both: int, first_only: int, second_only: int, neither: int, alpha: float = 0.05
+) -> tuple[float, float]:
+    """Interval for p1 - p2 on PAIRED binary outcomes (Newcombe 1998, method 10).
+
+    **This is the quantity a reader actually carries away** — "0.9167 against
+    0.775, so 14 points" — and it is a third parameter, distinct from both of the
+    intervals already in the report:
+
+    - it is **not** either arm's Wilson interval, which is about one arm alone;
+    - it is **not** the discordance split's interval, which is about
+      P(one arm wins | the pair is discordant) — a conditional probability on a
+      subset, not a difference on the whole set.
+
+    Reporting a difference under either of those is the specific way a figure
+    misleads while every number in it is true (SPEC-007 Key decision 1).
+
+    **Construction.** Square-and-add of the two arms' Wilson intervals, with the
+    paired correlation estimated from the table:
+
+        phi = (both*neither - first_only*second_only) / sqrt(row and column totals)
+
+    and phi enters with a factor of -2, so a positive correlation *narrows* the
+    interval. That narrowing is what pairing buys, and it is why the unpaired
+    interval on the same four counts is the wrong one rather than a conservative
+    one: it is wider, but it is answering a question nobody asked.
+    """
+    n = both + first_only + second_only + neither
+    if n == 0:
+        return (-1.0, 1.0)
+    p1 = (both + first_only) / n
+    p2 = (both + second_only) / n
+    lower1, upper1 = wilson(both + first_only, n, alpha)
+    lower2, upper2 = wilson(both + second_only, n, alpha)
+
+    # Zero denominator means a margin is degenerate (an arm was right on every
+    # question, or wrong on every one). The correlation is then undefined rather
+    # than zero, and 0 is the choice that does not narrow anything.
+    product = (
+        (both + first_only)
+        * (second_only + neither)
+        * (both + second_only)
+        * (first_only + neither)
+    )
+    phi = (both * neither - first_only * second_only) / math.sqrt(product) if product > 0 else 0.0
+
+    difference = p1 - p2
+    low = difference - math.sqrt(
+        (p1 - lower1) ** 2 - 2 * phi * (p1 - lower1) * (upper2 - p2) + (upper2 - p2) ** 2
+    )
+    high = difference + math.sqrt(
+        (upper1 - p1) ** 2 - 2 * phi * (upper1 - p1) * (p2 - lower2) + (p2 - lower2) ** 2
+    )
+    return (low, high)
+
+
 def clopper_pearson(x: int, n: int, alpha: float = 0.05) -> tuple[float, float]:
     """Exact (conservative) two-sided interval for a binomial rate.
 

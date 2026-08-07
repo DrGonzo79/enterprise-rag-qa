@@ -63,6 +63,40 @@ class ScalarFigure(Warranted):
         return self
 
 
+class PairedDifference(BaseModel):
+    """The difference between the arms, with its OWN interval and its own warrant.
+
+    **Why this is a required field rather than a nicety.** A comparison figure
+    renders three quantities a reader can read as "the effect", and they are
+    three different parameters:
+
+    | rendered | parameter |
+    |---|---|
+    | each arm's value | that arm's marginal rate |
+    | `interval` | P(the winning arm wins \\| the pair is discordant) |
+    | this | the paired difference between the arms |
+
+    The sentence a reader carries away is the third one — *0.9167 against 0.775,
+    so fourteen points* — and before this field existed that was the only one of
+    the three published **without an interval of its own**, inside the figure type
+    written to make exactly that impossible (Key decision 1). It sat next to the
+    split's interval and borrowed it by adjacency.
+
+    `construction` is required and free text because the right construction
+    depends on the metric: for paired binary outcomes it is a paired score
+    interval, and for anything else it is whatever the producer actually did.
+    Naming it is the point — an unnamed interval on a difference is the one a
+    reader assumes came from the two intervals above it.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    interval: tuple[float, float]
+    construction: str = Field(min_length=1)
+    claim: Warrant
+    not_a_claim: Warrant
+
+
 class ComparisonFigure(Warranted):
     """A paired comparison with the pre-registered test's result. AC-16.
 
@@ -84,14 +118,29 @@ class ComparisonFigure(Warranted):
     p: float = Field(ge=0, le=1)
     # The interval on the parameter the test is actually about: P(arm A wins |
     # the pair is discordant). Reporting b and c without it invites 20/23 to be
-    # read as 0.87 exactly.
+    # read as 0.87 exactly. It is NOT an interval on the difference between the
+    # arms — that is `difference`, and conflating them is the reason both are
+    # rendered with their parameter named.
     interval: tuple[float, float]
+    difference: PairedDifference
     floor: int = MIN_DISCORDANT_FOR_ANY_REJECTION
 
     @computed_field
     @property
     def n_discordant(self) -> int:
         return self.b + self.c
+
+    @computed_field
+    @property
+    def difference_value(self) -> float:
+        """Derived from `arms`, never declared, for the same reason `outcome` is.
+
+        A producer that states its own difference can state one its arms do not
+        support, and the difference is the number the headline sentence is made
+        of.
+        """
+        first, second = list(self.arms)
+        return self.arms[first] - self.arms[second]
 
     @computed_field
     @property
@@ -111,6 +160,33 @@ class ComparisonFigure(Warranted):
     def _pairs_fit_the_denominator(self) -> ComparisonFigure:
         if self.b + self.c > self.n:
             raise ValueError(f"discordant pairs {self.b + self.c} exceed n {self.n}")
+        return self
+
+    @model_validator(mode="after")
+    def _the_difference_is_its_own(self) -> ComparisonFigure:
+        """Two checks, and the second is the one this field was added for.
+
+        The first is ordinary: an interval that does not contain the difference
+        it is attached to is a transcription error.
+
+        The second rejects a `difference.interval` **equal to the split's**. That
+        is the literal form of the defect — a derived quantity carrying someone
+        else's interval — and it is the form a copy-paste takes. It catches only
+        the identical copy, which is stated here rather than left to be inferred:
+        a merely *wrong* paired interval passes this and is caught, if at all, by
+        `construction` being read.
+        """
+        low, high = self.difference.interval
+        if not low <= self.difference_value <= high:
+            raise ValueError(
+                f"difference {self.difference_value} lies outside its interval "
+                f"{self.difference.interval}"
+            )
+        if self.difference.interval == self.interval:
+            raise ValueError(
+                "difference.interval equals the discordance split's interval; these are "
+                "different parameters and one cannot stand in for the other"
+            )
         return self
 
 

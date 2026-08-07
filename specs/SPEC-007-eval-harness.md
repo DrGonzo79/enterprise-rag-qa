@@ -1543,6 +1543,81 @@ reader who has not opened the repository:
     a renderer that drops a field). The fixture is the real result, loaded from
     `evals/confirmatory-result.json`, so the test cannot drift from the finding.
 
+    ---
+
+    **Amendment 1 — the difference between the arms is a third parameter, and it
+    carries its own interval and its own warrant** *(2026-08-07, owner review)*.
+
+    **The gap, stated as the owner found it.** The comparison figure's `interval`
+    is the discordance split — correct for McNemar, which conditions on the
+    discordant pairs. But **the sentence a reader carries away is `0.9167 against
+    0.775`**, and that difference — 14.2 points on the same 120 questions — has an
+    interval that is **neither arm's Wilson interval nor the split's**. It was
+    being published without a warrant of its own, **inside the figure type built to
+    make that impossible**. The table above did not catch it because every row in
+    it is about a *dropped* quantity, and this one was not dropped: it was
+    rendered, adjacent to an interval belonging to something else.
+
+    **Three parameters live on one comparison figure and they are not
+    interchangeable:**
+
+    | quantity | parameter | on this result |
+    |---|---|---|
+    | each arm's value | that arm's marginal rate | 0.9167 · 0.775 |
+    | `interval` | P(the winning arm wins \| the pair is discordant) | [0.6641, 0.9722] |
+    | `difference` | the paired difference between the arms | +0.1417, [0.0678, 0.2198] |
+
+    **The construction is stated rather than assumed**, because the obvious two
+    candidates are both wrong: the arms' Wilson intervals are about one arm each,
+    and the exact split interval is a conditional probability on 23 questions
+    rather than a difference on 120. `newcombe_paired_difference` implements the
+    paired score interval (Newcombe 1998, method 10) — square-and-add of the two
+    Wilson intervals with the correlation estimated from the 2×2 table, φ = 0.343
+    here. **φ enters with a factor of −2, so pairing narrows**: the unpaired
+    interval on the same four counts is [0.0506, 0.2323], wider, and answering a
+    question nobody asked.
+
+    **Enforced structurally, in the two ways the rest of this module is:**
+    `difference_value` is **computed from `arms`** rather than declared (the same
+    reason `outcome` is — a producer that states its own difference can state one
+    its arms do not support), and a `difference.interval` **equal to the split's**
+    is rejected by name. That second guard catches only the literal copy, which is
+    written into the code rather than left to be inferred: a merely *wrong* paired
+    interval passes it, and is caught only by `construction` being read.
+
+    **Every interval now names its parameter in the rendered output.** Two
+    intervals on one figure with the label `Interval (95%)` on both is an
+    invitation to attach whichever is nearer to whatever the reader was looking at
+    — which is the mechanism that produced the defect in the first place.
+
+    **The sweep the owner asked for, run over the whole rendered output** — *is
+    anything else a derived quantity carrying someone else's interval?* Two more,
+    both **Proposed** and **not applied**, because they are amendments nobody
+    asked for (CLAUDE.md rule 4):
+
+    - **Proposed: the arm values carry no interval at all.** `arms` renders
+      `0.9167` and `0.775` as bare proportions, directly above an interval
+      belonging to the split — the same borrowing-by-adjacency, one row up. It
+      **violates this decision's own stated rule** ("every proportion prints its
+      interval beside it"), and the reason it does is that `ComparisonFigure` has
+      nowhere to put a per-arm interval. The fix is a type change —
+      `arms: dict[str, float]` becomes a value carrying its own interval — which
+      is why it is proposed rather than treated as a bug fix. **What breaks
+      without it:** the two most-read numbers in the report stay bare.
+    - **Proposed: `methodology.corpus.primary_metric_value` renders bare, and it
+      is the input to a derived boolean.** `desaturated` is a *thresholded claim*
+      — "this metric could have come out differently" — resting on a point
+      estimate with no interval stated. Here the claim survives its own bound
+      (Wilson upper on 110/120 is 0.9541 < 1.0), which is a **strengthening** and
+      is currently unstated. **What breaks without it:** a future run whose upper
+      bound touches 1.000 renders `de-saturated: true` with nothing to contradict
+      it.
+
+    **What is *not* a finding of the sweep, recorded so the next sweep does not
+    re-open it:** `n_discordant` is a derived count but an observed one, not an
+    estimate; `p` is not a point estimate; `outcome` is derived and carries the
+    test's result, which is the interval it should carry.
+
 ## Acceptance criteria
 
 - **AC-1 (no bare scalar is publishable)** — Every figure carries `n`, `decided`,
@@ -1597,7 +1672,7 @@ reader who has not opened the repository:
   producing figures.
 - **AC-10 (every quality claim in this spec is a reviewed one — inverted 2026-08-02)** — The first version was a regex over prose asserting that no unqualified claim exists. **A pattern-match over English produces false positives, gets suppressed, and a suppressed test is worse than none** — it reports a clean bill from a rule nobody runs. Inverted to the same regenerate-and-compare shape as `contracts/conditions.json`: `scripts/export_spec_claims.py` extracts every claim-shaped sentence from this document **together with its qualifier** into `contracts/spec-007-claims.json`, and the test regenerates and fails on any difference. Adding a claim sentence therefore fails the build, and **the fix is to regenerate, which puts the sentence and its qualifier into a reviewable diff** — the review happens on the artifact rather than in a matcher's confidence. A claim that reaches the file without a qualifier is visible in that diff; one that never reaches the file cannot exist, because the extractor is what the test compares against.
 - **AC-15 (the recording seam has one owner — Key decision 11)** *(added 2026-08-02)* — Every recording is validated against `contracts/eval-recordings.schema.json` **at capture**, and a run with any invalid record emits **no** recordings artifact rather than a partial one. Asserted by injecting a malformed record. The complementary assertion is on SPEC-009's side and is named here so neither spec adds it twice: a consumer that re-validates is out of contract, because two definitions of "valid" is the seam this closes.
-- **AC-16 (the comparison figure carries the pre-registered test's result)** *(added 2026-08-02)* — A comparison figure carries `arms`, `b`, `c`, `n_discordant`, `n`, `test`, `sidedness`, `alpha`, `p`, and `outcome`, and its `test`/`sidedness`/`alpha` **equal the `preregistration` block's** — a report whose comparison disagrees with its own pre-registration fails to render unless a deviation is recorded (AC-14). `outcome` is `inconclusive` whenever `p >= alpha` **or** `n_discordant` is below the pre-registered threshold, asserted directly with a 2–1 split of three discordant pairs — SPEC-004's original over-claim, which must come out `inconclusive` here. A comparison figure missing any field fails to render, like any other figure (AC-1).
+- **AC-16 (the comparison figure carries the pre-registered test's result)** *(added 2026-08-02)* — A comparison figure carries `arms`, `b`, `c`, `n_discordant`, `n`, `test`, `sidedness`, `alpha`, `p`, and `outcome`, and its `test`/`sidedness`/`alpha` **equal the `preregistration` block's** — a report whose comparison disagrees with its own pre-registration fails to render unless a deviation is recorded (AC-14). `outcome` is `inconclusive` whenever `p >= alpha` **or** `n_discordant` is below the pre-registered threshold, asserted directly with a 2–1 split of three discordant pairs — SPEC-004's original over-claim, which must come out `inconclusive` here. A comparison figure missing any field fails to render, like any other figure (AC-1). **Amended 2026-08-07 (Key decision 13 amendment 1):** it also carries `difference` — the paired difference between the arms, with its own interval, its named construction, and its own `claim`/`not_a_claim`. `difference_value` is derived from `arms`, and a `difference.interval` equal to the figure's discordance-split `interval` fails to render, asserted on a table whose difference falls *inside* the split's interval so that the containment check cannot fire first.
 - **AC-17 (a report is reproducible from itself)** *(added 2026-08-02)* — The report carries `prompt_version` and `generator_identity` at the top level, not only on recordings; `methodology.corpus.desaturated` is **derived** from `recall_at_8_retrieval_set` beside it rather than asserted, and a report whose `desaturated` disagrees with that measurement fails to render. A producer that declares itself de-saturated is grading its own prerequisite.
 - **AC-12 (one run, two artifacts, one corpus state)** — A single run emits both
   the report and the recordings, and every recording's `git_sha`,

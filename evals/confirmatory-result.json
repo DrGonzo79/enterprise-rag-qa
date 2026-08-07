@@ -1,0 +1,2026 @@
+{
+  "measured_at": "2026-08-07",
+  "git_sha": "c5e3d97707c14def5afd3698030a814353787dc6",
+  "corpus_chunks": 358,
+  "query_plan": {
+    "nodes": [
+      "Limit",
+      "Sort",
+      "Nested Loop",
+      "Index Scan[uq_chunks_document_id_ordinal]",
+      "Memoize",
+      "Index Scan[documents_pkey]"
+    ],
+    "nodes_under_planner_defaults": [
+      "Limit",
+      "Sort",
+      "Nested Loop",
+      "Seq Scan",
+      "Memoize",
+      "Index Scan[documents_pkey]"
+    ],
+    "exact": true,
+    "hnsw_index_used": false,
+    "hnsw_index_used_under_planner_defaults": false,
+    "plan_differs_from_planner_default": true,
+    "enable_seqscan": "off",
+    "ef_search": "40"
+  },
+  "preregistration": {
+    "primary_metric": "recall@8",
+    "k": 8,
+    "lever": "hybrid (RRF over vector + full-text) versus vector-only",
+    "pairing_unit": "one question; discordant = exactly one arm succeeds at k=8",
+    "test": "McNemar exact binomial, conditional on n = b + c",
+    "sidedness": "two-sided",
+    "alpha": 0.05,
+    "floor": 6,
+    "conclusive_when": "n_discordant >= 6 AND p < alpha",
+    "stopping_rule": "author until n_discordant >= 23, cap N = 200, evaluated at block boundaries",
+    "primary_analysis": "pruning OFF (MAX_LEXEME_CHUNK_FRACTION = None)",
+    "secondary_analysis": "pruning ON (0.25), never permitted to displace the primary"
+  },
+  "primary": {
+    "analysis": "primary — pruning OFF (committed default)",
+    "n": 120,
+    "b_hybrid_only": 3,
+    "c_vector_only": 20,
+    "both": 90,
+    "neither": 7,
+    "n_discordant": 23,
+    "recall_at_8_hybrid": 0.775,
+    "recall_at_8_vector_only": 0.9167,
+    "p_two_sided_exact": 0.000488,
+    "alpha": 0.05,
+    "outcome": "vector-only wins"
+  },
+  "secondary": {
+    "analysis": "secondary — pruning ON (0.25)",
+    "n": 120,
+    "b_hybrid_only": 3,
+    "c_vector_only": 21,
+    "both": 89,
+    "neither": 7,
+    "n_discordant": 24,
+    "recall_at_8_hybrid": 0.7667,
+    "recall_at_8_vector_only": 0.9167,
+    "p_two_sided_exact": 0.000277,
+    "alpha": 0.05,
+    "outcome": "vector-only wins"
+  },
+  "per_case_primary": [
+    {
+      "id": "con-001",
+      "block": 1,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-002",
+      "block": 1,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 4,
+      "vector_rank": 3
+    },
+    {
+      "id": "con-003",
+      "block": 1,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 5,
+      "vector_rank": 3
+    },
+    {
+      "id": "con-004",
+      "block": 1,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 6,
+      "vector_rank": null
+    },
+    {
+      "id": "con-005",
+      "block": 1,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 5,
+      "vector_rank": 2
+    },
+    {
+      "id": "con-006",
+      "block": 1,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": null,
+      "vector_rank": 2
+    },
+    {
+      "id": "con-007",
+      "block": 1,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 3,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-008",
+      "block": 1,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 7,
+      "vector_rank": 2
+    },
+    {
+      "id": "con-009",
+      "block": 1,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": null,
+      "vector_rank": 5
+    },
+    {
+      "id": "con-010",
+      "block": 1,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": null,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-011",
+      "block": 1,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": null,
+      "vector_rank": 6
+    },
+    {
+      "id": "con-012",
+      "block": 1,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 3,
+      "vector_rank": 3
+    },
+    {
+      "id": "con-013",
+      "block": 1,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 1,
+      "vector_rank": 2
+    },
+    {
+      "id": "con-014",
+      "block": 1,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 5,
+      "vector_rank": 2
+    },
+    {
+      "id": "con-015",
+      "block": 1,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-016",
+      "block": 1,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 2,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-017",
+      "block": 1,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 2,
+      "vector_rank": 2
+    },
+    {
+      "id": "con-018",
+      "block": 1,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-019",
+      "block": 1,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": null,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-020",
+      "block": 1,
+      "shape": "natural-language",
+      "document": "nist-ai-rmf",
+      "hybrid_rank": 2,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-021",
+      "block": 1,
+      "shape": "natural-language",
+      "document": "nist-ai-rmf",
+      "hybrid_rank": 2,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-022",
+      "block": 1,
+      "shape": "citation-anchored",
+      "document": "eu-ai-act",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-023",
+      "block": 1,
+      "shape": "citation-anchored",
+      "document": "eu-ai-act",
+      "hybrid_rank": 5,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-024",
+      "block": 1,
+      "shape": "citation-anchored",
+      "document": "eu-ai-act",
+      "hybrid_rank": null,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-025",
+      "block": 1,
+      "shape": "citation-anchored",
+      "document": "nvidia-10k",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-026",
+      "block": 1,
+      "shape": "citation-anchored",
+      "document": "nvidia-10k",
+      "hybrid_rank": 4,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-027",
+      "block": 1,
+      "shape": "cross-section",
+      "document": "eu-ai-act",
+      "hybrid_rank": null,
+      "vector_rank": null
+    },
+    {
+      "id": "con-028",
+      "block": 1,
+      "shape": "cross-section",
+      "document": "eu-ai-act",
+      "hybrid_rank": 8,
+      "vector_rank": 6
+    },
+    {
+      "id": "con-029",
+      "block": 1,
+      "shape": "cross-section",
+      "document": "nvidia-10k",
+      "hybrid_rank": 3,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-030",
+      "block": 1,
+      "shape": "cross-section",
+      "document": "nist-ai-rmf",
+      "hybrid_rank": null,
+      "vector_rank": null
+    },
+    {
+      "id": "con-031",
+      "block": 2,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 3,
+      "vector_rank": 5
+    },
+    {
+      "id": "con-032",
+      "block": 2,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-033",
+      "block": 2,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-034",
+      "block": 2,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 6,
+      "vector_rank": 2
+    },
+    {
+      "id": "con-035",
+      "block": 2,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 6,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-036",
+      "block": 2,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 2,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-037",
+      "block": 2,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 4,
+      "vector_rank": 4
+    },
+    {
+      "id": "con-038",
+      "block": 2,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 8,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-039",
+      "block": 2,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 4,
+      "vector_rank": 3
+    },
+    {
+      "id": "con-040",
+      "block": 2,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 3,
+      "vector_rank": 2
+    },
+    {
+      "id": "con-041",
+      "block": 2,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 1,
+      "vector_rank": 8
+    },
+    {
+      "id": "con-042",
+      "block": 2,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": null,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-043",
+      "block": 2,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 2,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-044",
+      "block": 2,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-045",
+      "block": 2,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 2,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-046",
+      "block": 2,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 3,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-047",
+      "block": 2,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-048",
+      "block": 2,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 5,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-049",
+      "block": 2,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 6,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-050",
+      "block": 2,
+      "shape": "natural-language",
+      "document": "nist-ai-rmf",
+      "hybrid_rank": 6,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-051",
+      "block": 2,
+      "shape": "natural-language",
+      "document": "nist-ai-rmf",
+      "hybrid_rank": null,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-052",
+      "block": 2,
+      "shape": "citation-anchored",
+      "document": "eu-ai-act",
+      "hybrid_rank": 3,
+      "vector_rank": 2
+    },
+    {
+      "id": "con-053",
+      "block": 2,
+      "shape": "citation-anchored",
+      "document": "eu-ai-act",
+      "hybrid_rank": 8,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-054",
+      "block": 2,
+      "shape": "citation-anchored",
+      "document": "eu-ai-act",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-055",
+      "block": 2,
+      "shape": "citation-anchored",
+      "document": "nvidia-10k",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-056",
+      "block": 2,
+      "shape": "cross-section",
+      "document": "eu-ai-act",
+      "hybrid_rank": null,
+      "vector_rank": null
+    },
+    {
+      "id": "con-057",
+      "block": 2,
+      "shape": "cross-section",
+      "document": "eu-ai-act",
+      "hybrid_rank": 6,
+      "vector_rank": 7
+    },
+    {
+      "id": "con-058",
+      "block": 2,
+      "shape": "cross-section",
+      "document": "nvidia-10k",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-059",
+      "block": 2,
+      "shape": "cross-section",
+      "document": "nvidia-10k",
+      "hybrid_rank": 7,
+      "vector_rank": 4
+    },
+    {
+      "id": "con-060",
+      "block": 2,
+      "shape": "cross-section",
+      "document": "nist-ai-rmf",
+      "hybrid_rank": 2,
+      "vector_rank": 2
+    },
+    {
+      "id": "con-061",
+      "block": 3,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 4,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-062",
+      "block": 3,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-063",
+      "block": 3,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": null,
+      "vector_rank": 4
+    },
+    {
+      "id": "con-064",
+      "block": 3,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": null,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-065",
+      "block": 3,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 6,
+      "vector_rank": 2
+    },
+    {
+      "id": "con-066",
+      "block": 3,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 5,
+      "vector_rank": 5
+    },
+    {
+      "id": "con-067",
+      "block": 3,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": null,
+      "vector_rank": 5
+    },
+    {
+      "id": "con-068",
+      "block": 3,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 1,
+      "vector_rank": 2
+    },
+    {
+      "id": "con-069",
+      "block": 3,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-070",
+      "block": 3,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": null,
+      "vector_rank": 2
+    },
+    {
+      "id": "con-071",
+      "block": 3,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": null,
+      "vector_rank": null
+    },
+    {
+      "id": "con-072",
+      "block": 3,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 2,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-073",
+      "block": 3,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-074",
+      "block": 3,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 2,
+      "vector_rank": 4
+    },
+    {
+      "id": "con-075",
+      "block": 3,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": null,
+      "vector_rank": 3
+    },
+    {
+      "id": "con-076",
+      "block": 3,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 2,
+      "vector_rank": 2
+    },
+    {
+      "id": "con-077",
+      "block": 3,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": null,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-078",
+      "block": 3,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 6,
+      "vector_rank": 2
+    },
+    {
+      "id": "con-079",
+      "block": 3,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-080",
+      "block": 3,
+      "shape": "natural-language",
+      "document": "nist-ai-rmf",
+      "hybrid_rank": null,
+      "vector_rank": 5
+    },
+    {
+      "id": "con-081",
+      "block": 3,
+      "shape": "natural-language",
+      "document": "nist-ai-rmf",
+      "hybrid_rank": 3,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-082",
+      "block": 3,
+      "shape": "citation-anchored",
+      "document": "eu-ai-act",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-083",
+      "block": 3,
+      "shape": "citation-anchored",
+      "document": "eu-ai-act",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-084",
+      "block": 3,
+      "shape": "citation-anchored",
+      "document": "eu-ai-act",
+      "hybrid_rank": 1,
+      "vector_rank": 7
+    },
+    {
+      "id": "con-085",
+      "block": 3,
+      "shape": "citation-anchored",
+      "document": "eu-ai-act",
+      "hybrid_rank": 2,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-086",
+      "block": 3,
+      "shape": "citation-anchored",
+      "document": "nvidia-10k",
+      "hybrid_rank": 4,
+      "vector_rank": 2
+    },
+    {
+      "id": "con-087",
+      "block": 3,
+      "shape": "cross-section",
+      "document": "eu-ai-act",
+      "hybrid_rank": 4,
+      "vector_rank": 4
+    },
+    {
+      "id": "con-088",
+      "block": 3,
+      "shape": "cross-section",
+      "document": "nvidia-10k",
+      "hybrid_rank": 2,
+      "vector_rank": 3
+    },
+    {
+      "id": "con-089",
+      "block": 3,
+      "shape": "cross-section",
+      "document": "nvidia-10k",
+      "hybrid_rank": 5,
+      "vector_rank": 3
+    },
+    {
+      "id": "con-090",
+      "block": 3,
+      "shape": "cross-section",
+      "document": "nist-ai-rmf",
+      "hybrid_rank": 8,
+      "vector_rank": 7
+    },
+    {
+      "id": "con-091",
+      "block": 4,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 2,
+      "vector_rank": 3
+    },
+    {
+      "id": "con-092",
+      "block": 4,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 7,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-093",
+      "block": 4,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": null,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-094",
+      "block": 4,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 5,
+      "vector_rank": null
+    },
+    {
+      "id": "con-095",
+      "block": 4,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-096",
+      "block": 4,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": null,
+      "vector_rank": 6
+    },
+    {
+      "id": "con-097",
+      "block": 4,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 3,
+      "vector_rank": 2
+    },
+    {
+      "id": "con-098",
+      "block": 4,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 3,
+      "vector_rank": 3
+    },
+    {
+      "id": "con-099",
+      "block": 4,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-100",
+      "block": 4,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": null,
+      "vector_rank": 2
+    },
+    {
+      "id": "con-101",
+      "block": 4,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": null,
+      "vector_rank": 2
+    },
+    {
+      "id": "con-102",
+      "block": 4,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": null,
+      "vector_rank": null
+    },
+    {
+      "id": "con-103",
+      "block": 4,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 1,
+      "vector_rank": 3
+    },
+    {
+      "id": "con-104",
+      "block": 4,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 5,
+      "vector_rank": 8
+    },
+    {
+      "id": "con-105",
+      "block": 4,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 5,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-106",
+      "block": 4,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 6,
+      "vector_rank": null
+    },
+    {
+      "id": "con-107",
+      "block": 4,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": null,
+      "vector_rank": null
+    },
+    {
+      "id": "con-108",
+      "block": 4,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": null,
+      "vector_rank": null
+    },
+    {
+      "id": "con-109",
+      "block": 4,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 3,
+      "vector_rank": 7
+    },
+    {
+      "id": "con-110",
+      "block": 4,
+      "shape": "natural-language",
+      "document": "nist-ai-rmf",
+      "hybrid_rank": 2,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-111",
+      "block": 4,
+      "shape": "natural-language",
+      "document": "nist-ai-rmf",
+      "hybrid_rank": 4,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-112",
+      "block": 4,
+      "shape": "citation-anchored",
+      "document": "eu-ai-act",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-113",
+      "block": 4,
+      "shape": "citation-anchored",
+      "document": "eu-ai-act",
+      "hybrid_rank": 1,
+      "vector_rank": 2
+    },
+    {
+      "id": "con-114",
+      "block": 4,
+      "shape": "citation-anchored",
+      "document": "eu-ai-act",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-115",
+      "block": 4,
+      "shape": "citation-anchored",
+      "document": "nvidia-10k",
+      "hybrid_rank": 2,
+      "vector_rank": 2
+    },
+    {
+      "id": "con-116",
+      "block": 4,
+      "shape": "cross-section",
+      "document": "eu-ai-act",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-117",
+      "block": 4,
+      "shape": "cross-section",
+      "document": "eu-ai-act",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-118",
+      "block": 4,
+      "shape": "cross-section",
+      "document": "nvidia-10k",
+      "hybrid_rank": 3,
+      "vector_rank": 5
+    },
+    {
+      "id": "con-119",
+      "block": 4,
+      "shape": "cross-section",
+      "document": "nvidia-10k",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-120",
+      "block": 4,
+      "shape": "cross-section",
+      "document": "nist-ai-rmf",
+      "hybrid_rank": null,
+      "vector_rank": 3
+    }
+  ],
+  "per_case_secondary": [
+    {
+      "id": "con-001",
+      "block": 1,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-002",
+      "block": 1,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": null,
+      "vector_rank": 3
+    },
+    {
+      "id": "con-003",
+      "block": 1,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 6,
+      "vector_rank": 3
+    },
+    {
+      "id": "con-004",
+      "block": 1,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 5,
+      "vector_rank": null
+    },
+    {
+      "id": "con-005",
+      "block": 1,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 7,
+      "vector_rank": 2
+    },
+    {
+      "id": "con-006",
+      "block": 1,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 2,
+      "vector_rank": 2
+    },
+    {
+      "id": "con-007",
+      "block": 1,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 3,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-008",
+      "block": 1,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": null,
+      "vector_rank": 2
+    },
+    {
+      "id": "con-009",
+      "block": 1,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": null,
+      "vector_rank": 5
+    },
+    {
+      "id": "con-010",
+      "block": 1,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": null,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-011",
+      "block": 1,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": null,
+      "vector_rank": 6
+    },
+    {
+      "id": "con-012",
+      "block": 1,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 3,
+      "vector_rank": 3
+    },
+    {
+      "id": "con-013",
+      "block": 1,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 1,
+      "vector_rank": 2
+    },
+    {
+      "id": "con-014",
+      "block": 1,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": null,
+      "vector_rank": 2
+    },
+    {
+      "id": "con-015",
+      "block": 1,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-016",
+      "block": 1,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 2,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-017",
+      "block": 1,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 2,
+      "vector_rank": 2
+    },
+    {
+      "id": "con-018",
+      "block": 1,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-019",
+      "block": 1,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": null,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-020",
+      "block": 1,
+      "shape": "natural-language",
+      "document": "nist-ai-rmf",
+      "hybrid_rank": 7,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-021",
+      "block": 1,
+      "shape": "natural-language",
+      "document": "nist-ai-rmf",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-022",
+      "block": 1,
+      "shape": "citation-anchored",
+      "document": "eu-ai-act",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-023",
+      "block": 1,
+      "shape": "citation-anchored",
+      "document": "eu-ai-act",
+      "hybrid_rank": 4,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-024",
+      "block": 1,
+      "shape": "citation-anchored",
+      "document": "eu-ai-act",
+      "hybrid_rank": 4,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-025",
+      "block": 1,
+      "shape": "citation-anchored",
+      "document": "nvidia-10k",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-026",
+      "block": 1,
+      "shape": "citation-anchored",
+      "document": "nvidia-10k",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-027",
+      "block": 1,
+      "shape": "cross-section",
+      "document": "eu-ai-act",
+      "hybrid_rank": null,
+      "vector_rank": null
+    },
+    {
+      "id": "con-028",
+      "block": 1,
+      "shape": "cross-section",
+      "document": "eu-ai-act",
+      "hybrid_rank": 8,
+      "vector_rank": 6
+    },
+    {
+      "id": "con-029",
+      "block": 1,
+      "shape": "cross-section",
+      "document": "nvidia-10k",
+      "hybrid_rank": 3,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-030",
+      "block": 1,
+      "shape": "cross-section",
+      "document": "nist-ai-rmf",
+      "hybrid_rank": null,
+      "vector_rank": null
+    },
+    {
+      "id": "con-031",
+      "block": 2,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 5,
+      "vector_rank": 5
+    },
+    {
+      "id": "con-032",
+      "block": 2,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-033",
+      "block": 2,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": null,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-034",
+      "block": 2,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 6,
+      "vector_rank": 2
+    },
+    {
+      "id": "con-035",
+      "block": 2,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-036",
+      "block": 2,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 2,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-037",
+      "block": 2,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 4,
+      "vector_rank": 4
+    },
+    {
+      "id": "con-038",
+      "block": 2,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-039",
+      "block": 2,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 4,
+      "vector_rank": 3
+    },
+    {
+      "id": "con-040",
+      "block": 2,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": null,
+      "vector_rank": 2
+    },
+    {
+      "id": "con-041",
+      "block": 2,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 2,
+      "vector_rank": 8
+    },
+    {
+      "id": "con-042",
+      "block": 2,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 4,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-043",
+      "block": 2,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 5,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-044",
+      "block": 2,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-045",
+      "block": 2,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": null,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-046",
+      "block": 2,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-047",
+      "block": 2,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-048",
+      "block": 2,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 5,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-049",
+      "block": 2,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-050",
+      "block": 2,
+      "shape": "natural-language",
+      "document": "nist-ai-rmf",
+      "hybrid_rank": null,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-051",
+      "block": 2,
+      "shape": "natural-language",
+      "document": "nist-ai-rmf",
+      "hybrid_rank": null,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-052",
+      "block": 2,
+      "shape": "citation-anchored",
+      "document": "eu-ai-act",
+      "hybrid_rank": 3,
+      "vector_rank": 2
+    },
+    {
+      "id": "con-053",
+      "block": 2,
+      "shape": "citation-anchored",
+      "document": "eu-ai-act",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-054",
+      "block": 2,
+      "shape": "citation-anchored",
+      "document": "eu-ai-act",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-055",
+      "block": 2,
+      "shape": "citation-anchored",
+      "document": "nvidia-10k",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-056",
+      "block": 2,
+      "shape": "cross-section",
+      "document": "eu-ai-act",
+      "hybrid_rank": null,
+      "vector_rank": null
+    },
+    {
+      "id": "con-057",
+      "block": 2,
+      "shape": "cross-section",
+      "document": "eu-ai-act",
+      "hybrid_rank": 7,
+      "vector_rank": 7
+    },
+    {
+      "id": "con-058",
+      "block": 2,
+      "shape": "cross-section",
+      "document": "nvidia-10k",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-059",
+      "block": 2,
+      "shape": "cross-section",
+      "document": "nvidia-10k",
+      "hybrid_rank": 7,
+      "vector_rank": 4
+    },
+    {
+      "id": "con-060",
+      "block": 2,
+      "shape": "cross-section",
+      "document": "nist-ai-rmf",
+      "hybrid_rank": null,
+      "vector_rank": 2
+    },
+    {
+      "id": "con-061",
+      "block": 3,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 6,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-062",
+      "block": 3,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-063",
+      "block": 3,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 7,
+      "vector_rank": 4
+    },
+    {
+      "id": "con-064",
+      "block": 3,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 8,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-065",
+      "block": 3,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 2,
+      "vector_rank": 2
+    },
+    {
+      "id": "con-066",
+      "block": 3,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 2,
+      "vector_rank": 5
+    },
+    {
+      "id": "con-067",
+      "block": 3,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 3,
+      "vector_rank": 5
+    },
+    {
+      "id": "con-068",
+      "block": 3,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 1,
+      "vector_rank": 2
+    },
+    {
+      "id": "con-069",
+      "block": 3,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 2,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-070",
+      "block": 3,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": null,
+      "vector_rank": 2
+    },
+    {
+      "id": "con-071",
+      "block": 3,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": null,
+      "vector_rank": null
+    },
+    {
+      "id": "con-072",
+      "block": 3,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-073",
+      "block": 3,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-074",
+      "block": 3,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 2,
+      "vector_rank": 4
+    },
+    {
+      "id": "con-075",
+      "block": 3,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 7,
+      "vector_rank": 3
+    },
+    {
+      "id": "con-076",
+      "block": 3,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 2,
+      "vector_rank": 2
+    },
+    {
+      "id": "con-077",
+      "block": 3,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": null,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-078",
+      "block": 3,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 2,
+      "vector_rank": 2
+    },
+    {
+      "id": "con-079",
+      "block": 3,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 3,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-080",
+      "block": 3,
+      "shape": "natural-language",
+      "document": "nist-ai-rmf",
+      "hybrid_rank": 5,
+      "vector_rank": 5
+    },
+    {
+      "id": "con-081",
+      "block": 3,
+      "shape": "natural-language",
+      "document": "nist-ai-rmf",
+      "hybrid_rank": null,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-082",
+      "block": 3,
+      "shape": "citation-anchored",
+      "document": "eu-ai-act",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-083",
+      "block": 3,
+      "shape": "citation-anchored",
+      "document": "eu-ai-act",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-084",
+      "block": 3,
+      "shape": "citation-anchored",
+      "document": "eu-ai-act",
+      "hybrid_rank": 1,
+      "vector_rank": 7
+    },
+    {
+      "id": "con-085",
+      "block": 3,
+      "shape": "citation-anchored",
+      "document": "eu-ai-act",
+      "hybrid_rank": 2,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-086",
+      "block": 3,
+      "shape": "citation-anchored",
+      "document": "nvidia-10k",
+      "hybrid_rank": 4,
+      "vector_rank": 2
+    },
+    {
+      "id": "con-087",
+      "block": 3,
+      "shape": "cross-section",
+      "document": "eu-ai-act",
+      "hybrid_rank": 7,
+      "vector_rank": 4
+    },
+    {
+      "id": "con-088",
+      "block": 3,
+      "shape": "cross-section",
+      "document": "nvidia-10k",
+      "hybrid_rank": 2,
+      "vector_rank": 3
+    },
+    {
+      "id": "con-089",
+      "block": 3,
+      "shape": "cross-section",
+      "document": "nvidia-10k",
+      "hybrid_rank": 3,
+      "vector_rank": 3
+    },
+    {
+      "id": "con-090",
+      "block": 3,
+      "shape": "cross-section",
+      "document": "nist-ai-rmf",
+      "hybrid_rank": null,
+      "vector_rank": 7
+    },
+    {
+      "id": "con-091",
+      "block": 4,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 2,
+      "vector_rank": 3
+    },
+    {
+      "id": "con-092",
+      "block": 4,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": null,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-093",
+      "block": 4,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-094",
+      "block": 4,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 5,
+      "vector_rank": null
+    },
+    {
+      "id": "con-095",
+      "block": 4,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-096",
+      "block": 4,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": null,
+      "vector_rank": 6
+    },
+    {
+      "id": "con-097",
+      "block": 4,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 1,
+      "vector_rank": 2
+    },
+    {
+      "id": "con-098",
+      "block": 4,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 1,
+      "vector_rank": 3
+    },
+    {
+      "id": "con-099",
+      "block": 4,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-100",
+      "block": 4,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": 7,
+      "vector_rank": 2
+    },
+    {
+      "id": "con-101",
+      "block": 4,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": null,
+      "vector_rank": 2
+    },
+    {
+      "id": "con-102",
+      "block": 4,
+      "shape": "natural-language",
+      "document": "eu-ai-act",
+      "hybrid_rank": null,
+      "vector_rank": null
+    },
+    {
+      "id": "con-103",
+      "block": 4,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 1,
+      "vector_rank": 3
+    },
+    {
+      "id": "con-104",
+      "block": 4,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 5,
+      "vector_rank": 8
+    },
+    {
+      "id": "con-105",
+      "block": 4,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 5,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-106",
+      "block": 4,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 6,
+      "vector_rank": null
+    },
+    {
+      "id": "con-107",
+      "block": 4,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": null,
+      "vector_rank": null
+    },
+    {
+      "id": "con-108",
+      "block": 4,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": null,
+      "vector_rank": null
+    },
+    {
+      "id": "con-109",
+      "block": 4,
+      "shape": "natural-language",
+      "document": "nvidia-10k",
+      "hybrid_rank": 1,
+      "vector_rank": 7
+    },
+    {
+      "id": "con-110",
+      "block": 4,
+      "shape": "natural-language",
+      "document": "nist-ai-rmf",
+      "hybrid_rank": null,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-111",
+      "block": 4,
+      "shape": "natural-language",
+      "document": "nist-ai-rmf",
+      "hybrid_rank": 3,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-112",
+      "block": 4,
+      "shape": "citation-anchored",
+      "document": "eu-ai-act",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-113",
+      "block": 4,
+      "shape": "citation-anchored",
+      "document": "eu-ai-act",
+      "hybrid_rank": 1,
+      "vector_rank": 2
+    },
+    {
+      "id": "con-114",
+      "block": 4,
+      "shape": "citation-anchored",
+      "document": "eu-ai-act",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-115",
+      "block": 4,
+      "shape": "citation-anchored",
+      "document": "nvidia-10k",
+      "hybrid_rank": 4,
+      "vector_rank": 2
+    },
+    {
+      "id": "con-116",
+      "block": 4,
+      "shape": "cross-section",
+      "document": "eu-ai-act",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-117",
+      "block": 4,
+      "shape": "cross-section",
+      "document": "eu-ai-act",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-118",
+      "block": 4,
+      "shape": "cross-section",
+      "document": "nvidia-10k",
+      "hybrid_rank": 4,
+      "vector_rank": 5
+    },
+    {
+      "id": "con-119",
+      "block": 4,
+      "shape": "cross-section",
+      "document": "nvidia-10k",
+      "hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    {
+      "id": "con-120",
+      "block": 4,
+      "shape": "cross-section",
+      "document": "nist-ai-rmf",
+      "hybrid_rank": 5,
+      "vector_rank": 3
+    }
+  ],
+  "deviations": [
+    {
+      "what": "Gold labels are not human-verified",
+      "detail": "SPEC-004 requires a human to verify each retrieval label. Every case carries human_verified: false — labels were verified against corpus text by the authoring agent, not by the repository owner. This is the largest deviation on this list and it bounds every figure below."
+    },
+    {
+      "what": "Fixed N replaced by inverse sampling mid-flight",
+      "detail": "KD-12 amendment 7. The fixed-N framing compared a realized count against a required one as though n_discordant were N x r. Corrected to: author until 23 pairs, cap 200. The trigger was a design error, not an interim number, and the correction holds whatever r turned out to be."
+    },
+    {
+      "what": "Four interim looks where one was pre-committed",
+      "detail": "KD-12 amendment 5 pre-committed a single interim at N = 30. Looks were taken at 30, 60, 90 and 120, each owner-asked. All were blinded — b and c were never computed — so b ~ Binomial(n, 1/2) conditional on the realized n is untouched. What was spent is the negotiation risk, not alpha."
+    },
+    {
+      "what": "Stopping evaluated at block boundaries, not per question",
+      "detail": "Refinement chosen by the implementer, not instructed: stopping mid-block would break the committed shape mix at the moment the set freezes. Cost E[N] = 165 against 153 for exact stopping. It happened to cost nothing — the rule fired at exactly 23 with no overshoot."
+    },
+    {
+      "what": "The 26-question smoke set was excluded",
+      "detail": "SPEC-004's cross-spec note called it the seed of the retrieval set. KD-12 amendment 5 excluded it: all 26 were authored with the expected section in hand, the property that saturated recall@8."
+    },
+    {
+      "what": "Eval runs pin enable_seqscan = off; the API does not",
+      "detail": "Today both settings yield an exact plan and identical results, verified by re-measuring three blocks under each, so the numbers characterise the configuration the demo runs in. This stops being true if SPEC-004 KD-7a is ever applied."
+    },
+    {
+      "what": "Single-arm difficulty drifts downward across blocks",
+      "detail": "Excluding block 2 the vector-only MRR@8 falls monotonically (0.6511, 0.5879, 0.5489); Spearman rho = -0.8 over four blocks, p = 0.33. The band did not fire, and amendment 6 stated in advance that 30 per block is close to blind to a slope. Reported as a limitation, not a deviation."
+    }
+  ],
+  "not_a_claim": "This is a retrieval-only comparison at k = 8, on a 358-chunk corpus of three documents, scored against section-prefix labels that are NOT human-verified. It does not measure answer quality, groundedness, or refusal. A significant result establishes that hybrid and vector-only differ in recall@8 on this question mix and this corpus; it does not establish that the difference generalises to another corpus, another k, another question mix, or to any user-visible quality. An inconclusive result does not establish equivalence — it establishes that this set, at this size, could not distinguish the arms."
+}

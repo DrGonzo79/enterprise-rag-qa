@@ -1,0 +1,211 @@
+"""The eval report: figures that cannot exist without their warrant (SPEC-007).
+
+**AC-1 is enforced by the type, not by the author.** A figure without a `claim`
+and a `not_a_claim` is not a figure that fails validation later — it is a value
+that cannot be constructed. That is the difference between a rule and a habit,
+and it is why this module exists before the golden set does (Key decision 13).
+
+**The second structural property is that `outcome` and `desaturated` are
+DERIVED.** A producer that declares itself conclusive is grading its own
+pre-registration, and a producer that declares itself de-saturated is grading
+its own prerequisite (Key decision 7, amendment 1). Both are computed here from
+the numbers beside them, so the only way to change them is to change the data.
+"""
+
+from __future__ import annotations
+
+from typing import Annotated, Literal
+
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
+
+# The floor below which no split can reach alpha (SPEC-007 KD-12 amendment 1).
+MIN_DISCORDANT_FOR_ANY_REJECTION = 6
+
+Warrant = Annotated[str, Field(min_length=1)]
+
+
+class Warranted(BaseModel):
+    """Every figure carries what it does and does not license. AC-1.
+
+    `min_length=1` on both is the whole mechanism: an empty string is the shape
+    a dropped warrant actually takes, and a figure that renders `claim: ""` is
+    indistinguishable from one that never had a claim.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    claim: Warrant
+    not_a_claim: Warrant
+    corpus_chunks: int = Field(gt=0)
+    git_sha: str = Field(min_length=1)
+
+
+class ScalarFigure(Warranted):
+    """A single measured proportion, with its denominator and its interval."""
+
+    kind: Literal["scalar"] = "scalar"
+    metric: str = Field(min_length=1)
+    value: float
+    n: int = Field(gt=0)
+    decided: int = Field(ge=0)
+    # Wilson or Clopper-Pearson, 95%. NOT optional: a proportion rendered
+    # without its interval reads as certainty, which is the specific way a
+    # figure misleads while every number in it is true.
+    interval: tuple[float, float]
+
+    @model_validator(mode="after")
+    def _decided_within_n(self) -> ScalarFigure:
+        if self.decided > self.n:
+            raise ValueError(f"decided {self.decided} exceeds n {self.n}")
+        low, high = self.interval
+        if not low <= self.value <= high:
+            raise ValueError(f"value {self.value} lies outside its interval {self.interval}")
+        return self
+
+
+class ComparisonFigure(Warranted):
+    """A paired comparison with the pre-registered test's result. AC-16.
+
+    `outcome` is a computed field rather than an input. SPEC-004 Key decision
+    12's whole correction was that a 2-1 split of three decided questions had
+    been reported as a win; letting a producer *state* the outcome would leave
+    that available.
+    """
+
+    kind: Literal["comparison"] = "comparison"
+    metric: str = Field(min_length=1)
+    arms: dict[str, float] = Field(min_length=2)
+    b: int = Field(ge=0)
+    c: int = Field(ge=0)
+    n: int = Field(gt=0)
+    test: str = Field(min_length=1)
+    sidedness: Literal["two-sided", "one-sided"]
+    alpha: float = Field(gt=0, lt=1)
+    p: float = Field(ge=0, le=1)
+    # The interval on the parameter the test is actually about: P(arm A wins |
+    # the pair is discordant). Reporting b and c without it invites 20/23 to be
+    # read as 0.87 exactly.
+    interval: tuple[float, float]
+    floor: int = MIN_DISCORDANT_FOR_ANY_REJECTION
+
+    @computed_field
+    @property
+    def n_discordant(self) -> int:
+        return self.b + self.c
+
+    @computed_field
+    @property
+    def outcome(self) -> str:
+        """`inconclusive` is a result, not a missing one.
+
+        Derived from the floor and alpha together, because either one failing
+        alone is enough: a significant p on four discordant pairs is a number
+        the pre-registration already refused to accept.
+        """
+        if self.n_discordant < self.floor or self.p >= self.alpha:
+            return "inconclusive"
+        winners = sorted(self.arms, key=lambda name: self.arms[name], reverse=True)
+        return winners[0]
+
+    @model_validator(mode="after")
+    def _pairs_fit_the_denominator(self) -> ComparisonFigure:
+        if self.b + self.c > self.n:
+            raise ValueError(f"discordant pairs {self.b + self.c} exceed n {self.n}")
+        return self
+
+
+Figure = ScalarFigure | ComparisonFigure
+
+
+class Deviation(BaseModel):
+    """A departure from the pre-registration, with its reason. AC-14."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    field: str = Field(min_length=1)
+    preregistered: str = Field(min_length=1)
+    actual: str = Field(min_length=1)
+    reason: str = Field(min_length=1)
+
+
+class Corpus(BaseModel):
+    """`desaturated` is computed, never declared (Key decision 7 amendment 1).
+
+    The gate is the **property** — the reported metric must be unsaturated on
+    the set it is reported against — not the lever that reached it. A harder
+    question set satisfies it exactly as a larger corpus would.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    chunks: int = Field(gt=0)
+    documents: list[str] = Field(min_length=1)
+    primary_metric_value: float = Field(ge=0, le=1)
+
+    @computed_field
+    @property
+    def desaturated(self) -> bool:
+        return self.primary_metric_value < 1.0
+
+
+class Preregistration(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    preregistered_at: str = Field(min_length=1)
+    primary_metric: str = Field(min_length=1)
+    k: int = Field(gt=0)
+    test: str = Field(min_length=1)
+    sidedness: Literal["two-sided", "one-sided"]
+    alpha: float = Field(gt=0, lt=1)
+    conclusive_when: str = Field(min_length=1)
+
+
+class Methodology(BaseModel):
+    """The report carries its own methodology; SPEC-009 renders it to a reader
+    who has not opened the repository (Key decision 2)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    summary: str = Field(min_length=1)
+    authoring: str = Field(min_length=1)
+    # Key decision 3's bound, RENDERED rather than filed. An empty list is
+    # rejected: a study with no limitations has not looked for any.
+    limitations: list[str] = Field(min_length=1)
+    corpus: Corpus
+    preregistration: Preregistration
+    deviations: list[Deviation]
+
+
+class Report(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    schema_version: Literal["1"] = "1"
+    methodology: Methodology
+    figures: list[Figure] = Field(min_length=1)
+    prompt_version: str = Field(min_length=1)
+    generator_identity: str = Field(min_length=1)
+    git_sha: str = Field(min_length=1)
+    created_at: str = Field(min_length=1)
+    cost_usd: str = "0"
+
+    @model_validator(mode="after")
+    def _figures_agree_with_the_preregistration(self) -> Report:
+        """A report whose comparison contradicts its own pre-registration does
+        not render (AC-14). Recording a deviation is what makes it render.
+        """
+        prereg = self.methodology.preregistration
+        declared = {d.field for d in self.methodology.deviations}
+        for figure in self.figures:
+            if not isinstance(figure, ComparisonFigure):
+                continue
+            for name, mine, theirs in (
+                ("test", figure.test, prereg.test),
+                ("sidedness", figure.sidedness, prereg.sidedness),
+                ("alpha", figure.alpha, prereg.alpha),
+            ):
+                if mine != theirs and name not in declared:
+                    raise ValueError(
+                        f"comparison {name}={mine!r} differs from the pre-registered "
+                        f"{theirs!r} and no deviation records it"
+                    )
+        return self

@@ -1506,6 +1506,43 @@ reader who has not opened the repository:
     a date, and not by quietly reporting MRR@8 instead because that is the one
     that moved.
 
+13. **The renderer is built before the golden set, and the retrieval result is its
+    acceptance test** *(added 2026-08-05, owner decision)*.
+
+    **Order first.** AC-1's "no figure without a warrant" is *structural* — it is a
+    property of the type, not of the author's care. Authoring 50 golden questions
+    against a harness that cannot yet refuse to render an unwarranted figure means
+    producing the expensive artifact before the thing that keeps it honest, and the
+    expensive artifact is the one nobody wants to redo.
+
+    **The first real figure this harness will ever render already exists**, and it is
+    the hardest one it is likely to get: the retrieval comparison of 2026-08-05.
+    b = 3, c = 20, n = 120, p = 0.000488, outcome `vector_only`, seven recorded
+    deviations, and a `not_a_claim` that took four review rounds to get right —
+    including a counter-record (pilot-2) that points the other way and a statement
+    that the alternative *cannot be tested* because the set is closed.
+
+    > **The acceptance test: if the renderer carries that finding with its warrant,
+    > its interval, its deviations and its `not_a_claim` intact, it works. If it
+    > flattens any part of it, it does not.**
+
+    **"Flattens" is given teeth rather than left to judgement**, because a renderer
+    that drops a caveat is doing exactly what a bad summary does and neither will
+    announce it:
+
+    | Failure | What it looks like |
+    |---|---|
+    | Warrant dropped | a figure rendering with `claim` and no `not_a_claim`, or either empty |
+    | Interval dropped | a proportion rendered without its interval, so 20/23 reads as certainty |
+    | Deviations dropped | a `deviations` array that renders as a count, or not at all |
+    | `not_a_claim` truncated | rendered to a summary line rather than in full |
+    | Outcome inferred | `arms` rendered without `outcome`, letting the reader infer the winner |
+
+    **Each is asserted against the rendered output, not the model** (rule 3's sixth
+    and seventh instances: a report test that inspects the report object cannot see
+    a renderer that drops a field). The fixture is the real result, loaded from
+    `evals/confirmatory-result.json`, so the test cannot drift from the finding.
+
 ## Acceptance criteria
 
 - **AC-1 (no bare scalar is publishable)** — Every figure carries `n`, `decided`,

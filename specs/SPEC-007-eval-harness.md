@@ -1,6 +1,8 @@
 # SPEC-007 — Evaluation harness
 
-**Status:** Draft — awaiting review by the repository owner
+**Status:** **Approved — 2026-08-02** (item-by-item owner review; amendments to Key decision 6, Key decision 11 and AC-10 applied in that review, and AC-15/16/17 added by it). Key decision 12 subsequently amended eight times, 2026-08-02 → 2026-08-05, each owner-asked. **Status line moved 2026-08-05.**
+
+> **The eleven-commit gap, recorded because the delay is the owner's and the defect is the record's.** The ratification happened on 2026-08-02; this line said *"Draft — awaiting review by the repository owner"* until 2026-08-05. In between, KD-12 amendments 1–8, three added acceptance criteria, a 120-question confirmatory set, a conclusive comparison and a branch deletion in SPEC-004 were all implemented against a spec whose state field said nothing in it had been reviewed. **Rule 4 correctly forbids the author from moving the line and, until now, required nothing of anyone else — so a ratification could live only in a conversation while the artifact said the opposite.** That hole is closed in CLAUDE.md rule 4's completion clause and enforced by `tests/test_spec_hygiene.py`.
 
 **Date:** 2026-08-02
 **Depends on:** SPEC-002 (`eval_runs` / `eval_results`), SPEC-003 (corpus, de-saturation gate), SPEC-004 (retrieval, tuning metric), SPEC-005 (generation)
@@ -409,6 +411,23 @@ reader who has not opened the repository:
    exists to prevent, arriving through the corpus instead of the arithmetic.
    Enforced with a named failure (AC-9), not documented — a binding constraint
    living only in prose is one someone follows until they are in a hurry.
+
+   ---
+
+   **Amendment 1 — the gate is a property, not a lever** *(2026-08-05, owner decision)*.
+
+   **The error being corrected is the one KD-12's original `informative_when` made**: a goal was written down as the single mechanism someone had in mind for reaching it. De-saturation was the property; **corpus growth was one lever**, and the decision above named the lever. A harder question set reached the property at **358 unchanged chunks** — `recall@8` 0.9167 rather than 1.000, and a conclusive comparison at p = 0.000488 — while the corpus ladder stayed unapproved and nothing was ever fetched.
+
+   > **Restated: the metric a figure reports must be unsaturated on the set it is reported against, demonstrated by the measurement itself, whatever produced it.** Corpus expansion, harder questions, a finer `k`, a different metric — the gate does not care which. What it requires is a figure whose value could have come out differently and a demonstration that it discriminates.
+
+   **AC-9 is unchanged in force and changes in what it reads**: the assertion moves from "the corpus passed SPEC-003 AC-10" to "the reported metric is unsaturated on this run's own set", which is the property AC-10 was standing in for.
+
+   **Scoped to retrieval, and the scope is the point of amending narrowly.** What has been demonstrated is that **retrieval** metrics discriminate on this corpus. **Groundedness, refusal and correctness are untested against it**, and there are two specific reasons to expect the corpus matters more to them than it did to retrieval:
+
+   - **A three-document corpus makes unanswerable questions unrealistically easy to construct.** "What does the Act say about maritime cabotage?" is unanswerable here for a trivial reason — the topic is absent — rather than for the reason refusal is hard in production, which is a question the corpus *nearly* answers.
+   - **It leaves the generator few plausible-but-wrong chunks to be wrong with.** Groundedness scoring separates an answer supported by its citations from one that drifts; a corpus with little near-miss material cannot produce many drifting answers, so a high groundedness score would be a fact about the corpus.
+
+   **This amendment does not discharge that gate — it opens it.** The golden set's design has to answer it: either demonstrate that its metrics discriminate on the corpus it runs against, or state what corpus they need. **If the answer is "a bigger corpus", that is a corpus argument made on generation grounds**, which is the product argument that was refused when it tried to arrive through a retrieval metric (KD-12 amendment 4, and the ladder's rejection). Arriving on its own evidence, it is legitimate.
 
 8. **No CI regression gate in v1, because a floor cannot be set honestly yet.**
    SPEC-004 AC-6 declined an absolute floor on the grounds that "a provisional

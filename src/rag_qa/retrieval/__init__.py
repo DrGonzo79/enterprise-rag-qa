@@ -1,4 +1,4 @@
-"""Dense retrieval (SPEC-004, one branch since KD-17): citation
+"""Dense retrieval (SPEC-004, one branch since KD-15): citation
 metadata, embedder-identity verification."""
 
 from rag_qa.retrieval.metrics import distinct_section_rate

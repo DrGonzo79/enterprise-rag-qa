@@ -1,7 +1,7 @@
 """The exact test's sizing arithmetic (`scripts/mcnemar.py`).
 
 Kept after the comparison it sized was decided and its instruments removed
-(SPEC-004 KD-17), because the sawtooth rule is general: **the first crossing is
+(SPEC-004 KD-15), because the sawtooth rule is general: **the first crossing is
 a lower bound on the sustained power requirement, never an upper one.** Reading
 it as the requirement was a live error in this repository — 12 and 20 were
 published for power 0.5 and 0.8 before the dip at n = 14 and n = 22 was noticed

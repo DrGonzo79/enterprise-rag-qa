@@ -1,4 +1,4 @@
-"""SPEC-004 KD-17: drop the full-text branch's storage and the unreachable HNSW index.
+"""SPEC-004 KD-15: drop the full-text branch's storage and the unreachable HNSW index.
 
 The confirmatory comparison (SPEC-007 KD-12) measured hybrid against dense-only
 on 120 questions: b = 3, c = 20, p = 0.000488, vector-only wins. The full-text

@@ -2,7 +2,7 @@
 
 The instruments that produced the comparison — `run_pilot`, `interim_r`,
 `confirmatory`, `screen_fallback_gate` — were removed with the branch they
-measured (SPEC-004 KD-17); every artifact in `evals/` records the `git_sha` at
+measured (SPEC-004 KD-15); every artifact in `evals/` records the `git_sha` at
 which its instrument ran, so each is recoverable from history.
 
 **What survives here is the pre-registration itself**, because the set is

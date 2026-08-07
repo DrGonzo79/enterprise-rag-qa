@@ -466,7 +466,7 @@ async def test_dense_retrieval_records_the_baseline(corpus_retriever, write_base
     print(f"mrr@{K}: {json.dumps(baseline['mrr_at_k'])}")
     print(f"diversity: {json.dumps(baseline['distinct_section_rate'])}")
 
-    # AC-6 IS RETIRED (2026-08-05, SPEC-004 KD-17). It asserted that hybrid
+    # AC-6 IS RETIRED (2026-08-05, SPEC-004 KD-15). It asserted that hybrid
     # beats vector-only at k=1 on citation queries. There is one arm now, so the
     # two columns below are identical by construction -- and the run proves it:
     # citation recall@1 reads 0.857 in both. Re-arming it would install a test
@@ -517,7 +517,7 @@ async def test_latency_against_the_real_corpus(
     assert len(records) == len(cases)
     end_to_end = [r.total_ms for r in records]  # type: ignore[attr-defined]
     embed = [r.embed_ms for r in records]  # type: ignore[attr-defined]
-    # One branch since SPEC-004 KD-17, so retrieval-side cost is that branch.
+    # One branch since SPEC-004 KD-15, so retrieval-side cost is that branch.
     # It used to be max(vector, fts) + fuse -- three terms whose sum this
     # assertion bounded; it is now one, and the budget it is measured against
     # is unchanged.

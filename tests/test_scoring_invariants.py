@@ -56,6 +56,10 @@ ALLOWED_PREFIX_COMPARISONS = {
     # Ancestor test on real section paths: `X › Y` extends `X` at a separator by
     # construction, so this asks a question about the tree, not about a label.
     "scripts/pin_gold_chunks.py": {'p.startswith(gold + " › ")'},
+    # A Status line's leading word. Not a path or a tree — "Draft — awaiting
+    # review" versus "Approved — 2026-08-02" — and the prefix IS the whole
+    # question being asked.
+    "tests/test_spec_hygiene.py": {'status_of(path).lower().startswith("draft")'},
     # A chunk's text begins with its own section-path header. Text prefix, not a
     # tree comparison, and the trailing newline makes it exact.
     "tests/test_ingest_chunker.py": {r'chunk.text.startswith(chunk.section_path + "\n")'},

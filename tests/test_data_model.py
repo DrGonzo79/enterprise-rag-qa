@@ -81,7 +81,7 @@ async def test_migrations_roundtrip() -> None:
 
 
 async def test_the_chunks_table_carries_no_search_index(session: AsyncSession) -> None:
-    """AC-2, rewritten 2026-08-05 (SPEC-004 KD-17) to assert the absence.
+    """AC-2, rewritten 2026-08-05 (SPEC-004 KD-15) to assert the absence.
 
     It asserted an HNSW index on `chunks.embedding` and a GIN index on
     `chunks.tsv`. Both existed and **neither was ever reached**: the GIN index

@@ -84,7 +84,7 @@ class Retriever:
             # them and a different question.
             self.on_embed_latency(embed_ms / 1000.0)
 
-        # ONE session, and one connection (SPEC-004 KD-17). Two branches used to
+        # ONE session, and one connection (SPEC-004 KD-15). Two branches used to
         # run concurrently here, which is why `CONNECTIONS_PER_QUERY` was 2 and
         # why KD-10 bounded concurrency below the pool at all. The embedder
         # identity check rode the full-text session; with that branch gone it

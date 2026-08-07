@@ -4,7 +4,7 @@
 fused with RRF — and SPEC-007's confirmatory comparison measured the pair
 against the dense arm alone: b = 3, c = 20, p = 0.000488, vector-only wins.
 The full-text branch, the OR fallback, the pruning toggle and the fusion step
-were removed under SPEC-004 Key decision 17.
+were removed under SPEC-004 Key decision 15.
 """
 
 import uuid
@@ -115,7 +115,7 @@ async def vector_search(
     """Dense search, cosine distance. **Exact: every candidate scanned and ordered.**
 
     The `SET LOCAL hnsw.ef_search` that used to open this function is gone with
-    the HNSW index it configured (SPEC-004 KD-17). It had been setting a GUC on
+    the HNSW index it configured (SPEC-004 KD-15). It had been setting a GUC on
     a plan that never read it: `vector_stmt` orders by `(distance, id)`, and an
     HNSW index can only order by the distance operator alone, so no query here
     ever reached the index.

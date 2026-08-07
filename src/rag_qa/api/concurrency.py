@@ -1,7 +1,7 @@
 """Query concurrency bound, derived from the pool (SPEC-006 KD-10).
 
 **The deadlock this was built for no longer exists** (2026-08-05, SPEC-004
-KD-17). SPEC-004 opened *two* sessions per `retrieve()` and gathered them: with
+KD-15). SPEC-004 opened *two* sessions per `retrieve()` and gathered them: with
 ten connections per replica, ten simultaneous requests could each take their
 first connection, exhaust the pool, and all block awaiting a second that nobody
 could release. **A request that holds exactly one connection cannot deadlock** —

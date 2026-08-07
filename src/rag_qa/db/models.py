@@ -49,7 +49,7 @@ class Chunk(Base):
         # reachable — `vector_stmt` orders by `(distance, id)` and an HNSW index
         # can only order by the distance operator alone — and dense search is
         # exact at this corpus size (16 ms p95 against a 150 ms budget). Dropped
-        # with the full-text branch under SPEC-004 KD-17; the trigger for
+        # with the full-text branch under SPEC-004 KD-15; the trigger for
         # reinstating it is AC-8's budget, not corpus size on its own.
         UniqueConstraint("document_id", "ordinal", name="uq_chunks_document_id_ordinal"),
     )

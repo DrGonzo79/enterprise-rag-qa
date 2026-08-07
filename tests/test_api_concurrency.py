@@ -227,7 +227,7 @@ def test_the_shipped_bound_is_held_below_the_derived_one() -> None:
     """The derivation says 8; the service uses 4, and the gap is deliberate.
 
     **Correct arithmetic with an absent reason is not a number to ship.** The
-    divisor went 2 -> 1 when the second branch was deleted (SPEC-004 KD-17),
+    divisor went 2 -> 1 when the second branch was deleted (SPEC-004 KD-15),
     which is exactly what the enumeration was built to make visible — and the
     same deletion removed the deadlock the bound existed to prevent. What the
     bound is *for* is now an open question (SPEC-006 KD-10 amendment 6,

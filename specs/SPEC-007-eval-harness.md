@@ -1319,6 +1319,30 @@ reader who has not opened the repository:
 
     **So "top it up for power later" is not available**, and it is stated here so that nobody proposes it as though it were a matter of effort. If 23 pairs prove insufficient, the honest report is an underpowered one — which amendment 4 accepted in advance — not a larger set assembled afterwards.
 
+    #### The `not_a_claim`, rewritten after the result — and why that is legitimate here
+
+    **The version below was written *after* the numbers existed and replaces nothing.** The pre-registered text (kept verbatim in the next subsection, and it is the version the run reported) states what the result does not establish *in general*. It does not say **what was measured**, and the result made the difference load-bearing in a way it had not been anywhere else. Rewriting a `not_a_claim` post hoc to *narrow* a claim is safe in the direction that matters; rewriting one to broaden a claim would not be, and this does not.
+
+    > **What was measured: RRF fusion with the OR fallback, on this corpus, on this mix.** Hybrid here means Reciprocal Rank Fusion (k = 60) over a dense arm and a full-text arm whose conjunction falls back to an OR of the query's lexemes when it returns nothing (SPEC-004 AC-12 amendment 5). The result is a fact about **that fusion**, on **358 chunks of three documents**, against a **70 / 15 / 15** mix of natural-language, citation-anchored and cross-section questions.
+    >
+    > **It is not a finding about full-text retrieval, and the record contains a measurement pointing the other way.** On pilot-2 — fourteen questions authored to be *lexically anchored*, using corpus vocabulary — hybrid scored `recall@8` **1.000** against vector-only's **0.857**, with **b = 2, c = 0**. That set was too small to be conclusive and is not being offered as a counter-result. **It is being stated because it is the same lever measured on a different question shape and it came out the other way**, and a `not_a_claim` that omitted it would be describing a narrower record than the one that exists.
+    >
+    > **The two are consistent, and the consistency is the point.** Where a question carries the corpus's own vocabulary, the lexical arm contributes signal. Where it does not — which is 70 % of the confirmatory set by construction, and what `/query` accepts and SPEC-009 will send — the fallback fires, and what it contributes is candidates that displace good dense results in fusion. **The confirmatory set measures the second case because that is the case the product is in.** It says nothing about the first except that it was not what was tested.
+    >
+    > **Retrieval only.** k = 8, section-prefix labels, no generation, no judge. It does not measure answer quality, groundedness, or refusal — and a retrieval difference at k = 8 need not survive a generator that reads all eight chunks.
+    >
+    > **The labels are not human-verified**, and because McNemar conditions on the discordant set, that bound falls almost entirely on the 20 `c` cases rather than being spread across 120 questions.
+
+    #### The consequence that constrains what can be done about this
+
+    **The confirmatory set is unblinded and permanently closed (amendment 8), so a fusion fix cannot be validated to this standard on this set.**
+
+    The obvious repair is the one `via_fallback` was built to make answerable: SPEC-004 amendment 6 recorded that RRF at k = 60 scores a full-text rank-1 at **1/61** and a dense rank-1 at **1/61** — *identical* — so a fallback candidate that the conjunction never would have produced enters fusion with the same weight as the dense arm's best hit. The provenance field exists precisely so that "should a fallback candidate be worth 1/61?" could be asked with data.
+
+    **It can still be asked. It can no longer be answered to the standard this result was produced under.** Every question in the set has now been seen alongside its outcome; the authoring rule that made the set representative required ignorance of that outcome, and nothing restores it. **A re-measurement of the same 120 questions after a fusion change is a fair before/after on a fixed set, and it is not a pre-registered confirmatory test** — the change would be designed against the very cases it is then scored on.
+
+    **This is not an argument that a fusion fix would fail.** It is the observation that **we cannot find out to this standard**, which is a different and harder thing, and it belongs in the record before anyone weighs deleting the branch against repairing it. Whatever is decided, the evidence available for *repair* is strictly weaker than the evidence available for *deletion*, and that asymmetry is a property of the timeline rather than of the two options' merits.
+
     #### The pre-registered `not_a_claim`, committed before the result exists
 
     > This is a **retrieval-only** comparison at k = 8, on a 358-chunk corpus of three documents, scored against section-prefix labels that are **not human-verified**. It does not measure answer quality, groundedness, or refusal.

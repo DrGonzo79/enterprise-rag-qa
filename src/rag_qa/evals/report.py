@@ -63,6 +63,34 @@ class ScalarFigure(Warranted):
         return self
 
 
+class ArmValue(BaseModel):
+    """One arm's own value, with its own interval (Key decision 13 amendment 2).
+
+    **This type exists because `arms: dict[str, float]` rendered two bare
+    proportions directly above an interval belonging to the discordance split**,
+    and borrowing-by-adjacency is the same defect `PairedDifference` was added to
+    fix, one row up. It also violated Key decision 13's own stated rule — *every
+    proportion prints its interval beside it* — on the page that states it.
+
+    `interval` is **required**, and for a metric that is not a proportion it is
+    whatever construction the producer actually used, named in
+    `ComparisonFigure.arm_interval_construction`. Requiring it is the point: a
+    producer with no interval to give has not finished measuring.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    value: float
+    interval: tuple[float, float]
+
+    @model_validator(mode="after")
+    def _value_within_interval(self) -> ArmValue:
+        low, high = self.interval
+        if not low <= self.value <= high:
+            raise ValueError(f"arm value {self.value} lies outside its interval {self.interval}")
+        return self
+
+
 class PairedDifference(BaseModel):
     """The difference between the arms, with its OWN interval and its own warrant.
 
@@ -108,7 +136,11 @@ class ComparisonFigure(Warranted):
 
     kind: Literal["comparison"] = "comparison"
     metric: str = Field(min_length=1)
-    arms: dict[str, float] = Field(min_length=2)
+    arms: dict[str, ArmValue] = Field(min_length=2)
+    # How each arm's interval was built. Separate from the difference's, because
+    # they are different constructions on different parameters and one string
+    # covering both would be the conflation this figure keeps having to prevent.
+    arm_interval_construction: str = Field(min_length=1)
     b: int = Field(ge=0)
     c: int = Field(ge=0)
     n: int = Field(gt=0)
@@ -140,7 +172,7 @@ class ComparisonFigure(Warranted):
         of.
         """
         first, second = list(self.arms)
-        return self.arms[first] - self.arms[second]
+        return self.arms[first].value - self.arms[second].value
 
     @computed_field
     @property
@@ -153,7 +185,7 @@ class ComparisonFigure(Warranted):
         """
         if self.n_discordant < self.floor or self.p >= self.alpha:
             return "inconclusive"
-        winners = sorted(self.arms, key=lambda name: self.arms[name], reverse=True)
+        winners = sorted(self.arms, key=lambda name: self.arms[name].value, reverse=True)
         return winners[0]
 
     @model_validator(mode="after")
@@ -217,11 +249,38 @@ class Corpus(BaseModel):
     chunks: int = Field(gt=0)
     documents: list[str] = Field(min_length=1)
     primary_metric_value: float = Field(ge=0, le=1)
+    # Key decision 13 amendment 2. `desaturated` is a THRESHOLDED CLAIM resting
+    # on a point estimate, and it was rendered bare -- so the claim was being
+    # made at the estimate and nowhere else. Required, because the interesting
+    # case is the one where the estimate clears 1.0 and the bound does not.
+    primary_metric_interval: tuple[float, float]
+
+    @model_validator(mode="after")
+    def _value_within_interval(self) -> Corpus:
+        low, high = self.primary_metric_interval
+        if not low <= self.primary_metric_value <= high:
+            raise ValueError(
+                f"primary metric {self.primary_metric_value} lies outside its interval "
+                f"{self.primary_metric_interval}"
+            )
+        return self
 
     @computed_field
     @property
     def desaturated(self) -> bool:
         return self.primary_metric_value < 1.0
+
+    @computed_field
+    @property
+    def desaturated_at_the_bound(self) -> bool:
+        """Whether the gate survives the interval's upper end, not just the point.
+
+        Separate from `desaturated` rather than replacing it, because they are
+        different claims and collapsing them would hide which one is being made:
+        the gate is stated on the measurement, and this says whether the
+        measurement's own uncertainty could reach saturation.
+        """
+        return self.primary_metric_interval[1] < 1.0
 
 
 class Preregistration(BaseModel):

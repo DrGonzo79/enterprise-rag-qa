@@ -26,15 +26,32 @@ by question *form* and not by item, so there is no per-item correlation to
 estimate and using the paired construction would be SPEC-007 KD-13 amendment 1's
 defect with the sign reversed.
 
-### Outcome: **indeterminate**
+### Outcome: **void**
 
-Against §6's committed thresholds: outcome 1 needs A ≥ 8 **and** B ≥ 8 — A is 1.
-Outcome 2 needs B ≥ 8 and A ≤ 5 — B is 6. Outcome 3 needs B ≤ 5 — B is 6.
+Not indeterminate. **Indeterminate is a statement about the answer** — the
+instrument worked and the result fell between thresholds. **Void is a statement
+about the instrument.**
 
-**B = 6 lands in the fourth cell**, which was named in advance precisely so this
-result could not be filed under whichever of the three it most resembles. It is
-one question away from outcome 3 in one direction and two from outcome 2 in the
-other. It is not rounded here.
+The primary metric is *the fraction whose verdict is `INSUFFICIENT_EVIDENCE`*,
+and **13 of the 20 unanswerable records carry `verdict: answered` on a body that
+declines** (§2). So the metric was not measuring refusal; it was measuring where
+the model put a token. Filing that as indeterminate would record *"the evidence
+did not separate the outcomes"*, which is false and flattering — **the evidence
+was never collected.**
+
+Nothing in the table above is partial evidence for any of the three outcomes.
+For completeness rather than for inference: B = 6 would have been the fourth
+cell had the instrument worked. It did not, so the fourth cell does not apply
+either. The numbers are reported because a broken measurement that is not shown
+cannot be checked, **not because they point anywhere.**
+
+**A fifth cell — void — was added to the pre-registration by owner review on
+2026-08-07, after this run landed in it.** It is recorded there as an addition
+to the protocol, not as something the protocol already contained.
+
+**The correct response to a void run is to fix the instrument and re-run.** That
+is SPEC-005 Key decision 7 amendment 1 and run 2; see
+`evals/refusal-pilot-run2-findings.md`.
 
 ---
 
@@ -92,10 +109,17 @@ human-oversight competence. **Rule 9's check passes: the pipeline is not
 refusal-biased**, so a high decline rate on A and B is readable as
 discrimination rather than as a model that declines a lot.
 
-**By these numbers the answer is outcome 1** — the corpus is adequate for
+**By these numbers the answer would be outcome 1** — the corpus is adequate for
 refusal, and the concern was about question construction, as it was for
 retrieval. **That reading rests on a metric invented after the data was seen,
-and it is reported as such.** The pre-registered outcome is indeterminate.
+and it is reported as such and never merged with the primary.** The
+pre-registered outcome is **void**; this does not repair it, and a post-hoc
+metric that agrees with what you hoped is the one most in need of the label.
+
+**It is not a result. It is a reason to spend forty cents.** Run 2 asks the same
+30 questions under a fixed verdict field, against the same pre-registration,
+and reports the primary in committed form — which converts this reading into a
+pre-registered one or contradicts it.
 
 ---
 

@@ -429,6 +429,16 @@ reader who has not opened the repository:
 
    **This amendment does not discharge that gate — it opens it.** The golden set's design has to answer it: either demonstrate that its metrics discriminate on the corpus it runs against, or state what corpus they need. **If the answer is "a bigger corpus", that is a corpus argument made on generation grounds**, which is the product argument that was refused when it tried to arrive through a retrieval metric (KD-12 amendment 4, and the ladder's rejection). Arriving on its own evidence, it is legitimate.
 
+   ---
+
+   **Gate status, 2026-08-07: half-answered, and the answered half is the half that was cheap.**
+
+   `evals/prereg-refusal-nearmiss.md` ran the cheap falsifier against the **refusal** conjunct and found the premise unsupported: ten near-miss unanswerables were authored against the **unchanged 358-chunk corpus**, retrieval put the right Article, Item or RMF function at rank 1 for all ten, and the generator declined all ten. The corpus was not the binding constraint on constructing hard unanswerables. Run 1's primary metric was **void** (see below); run 2 is the pre-registered version.
+
+   > **The other conjunct is untested, and it is untested for a reason that should not be allowed to read as reassurance.** The premise has two halves — *unanswerable questions are unrealistically easy to construct*, and *the corpus leaves the generator few plausible-but-wrong chunks to be wrong with*. The second is about **groundedness**, and **a result in which the generator was never wrong cannot speak to it.** Zero confabulations across twenty questions is equally consistent with "the corpus is fine" and with "these questions could not have produced drift", and nothing in the pilot separates them.
+   >
+   > **The half that got answered is the half a refusal pilot could answer for $0.53.** The groundedness half needs a different falsifier — one where a wrong answer is *available* to be given — and the fact that the cheap experiment happened to address the cheap half is a property of the experiment, not evidence about the expensive one. **This gate stays open on groundedness.**
+
 8. **No CI regression gate in v1, because a floor cannot be set honestly yet.**
    SPEC-004 AC-6 declined an absolute floor on the grounds that "a provisional
    number amended to match the first run would be a measurement wearing a
@@ -1595,23 +1605,24 @@ reader who has not opened the repository:
     both **Proposed** and **not applied**, because they are amendments nobody
     asked for (CLAUDE.md rule 4):
 
-    - **Proposed: the arm values carry no interval at all.** `arms` renders
-      `0.9167` and `0.775` as bare proportions, directly above an interval
-      belonging to the split — the same borrowing-by-adjacency, one row up. It
-      **violates this decision's own stated rule** ("every proportion prints its
-      interval beside it"), and the reason it does is that `ComparisonFigure` has
-      nowhere to put a per-arm interval. The fix is a type change —
-      `arms: dict[str, float]` becomes a value carrying its own interval — which
-      is why it is proposed rather than treated as a bug fix. **What breaks
-      without it:** the two most-read numbers in the report stay bare.
-    - **Proposed: `methodology.corpus.primary_metric_value` renders bare, and it
-      is the input to a derived boolean.** `desaturated` is a *thresholded claim*
-      — "this metric could have come out differently" — resting on a point
-      estimate with no interval stated. Here the claim survives its own bound
-      (Wilson upper on 110/120 is 0.9541 < 1.0), which is a **strengthening** and
-      is currently unstated. **What breaks without it:** a future run whose upper
-      bound touches 1.000 renders `de-saturated: true` with nothing to contradict
-      it.
+    - **The arm values carry no interval at all.** `arms` renders `0.9167` and
+      `0.775` as bare proportions, directly above an interval belonging to the
+      split — the same borrowing-by-adjacency, one row up. It **violates this
+      decision's own stated rule** ("every proportion prints its interval beside
+      it"), and the reason it does is that `ComparisonFigure` has nowhere to put
+      a per-arm interval.
+    - **`methodology.corpus.primary_metric_value` renders bare, and it is the
+      input to a derived boolean.** `desaturated` is a *thresholded claim* —
+      "this metric could have come out differently" — resting on a point estimate
+      with no interval stated. Here the claim survives its own bound (Wilson upper
+      on 110/120 is 0.9541 < 1.0), which is a **strengthening** and was unstated.
+
+    ---
+
+    **Amendment 2 — both sweep items applied** *(2026-08-07, owner review: "Applied both, including the type change")*. They were recorded above as Proposed under rule 4; the owner's response — *"you're right that nobody had asked, and I'm asking"* — is the review, so this records what shipped.
+
+    - **`arms: dict[str, float]` becomes `dict[str, ArmValue]`**, each carrying its own required `interval`, with `arm_interval_construction` naming how they were built — separate from the difference's `construction`, because one string covering both would be the conflation this figure keeps having to prevent. On the retrieval result: vector-only 0.9167 [0.8534, 0.9541], hybrid 0.775 [0.6924, 0.8405]. **Three parameters, three intervals, none of which coincide**, asserted.
+    - **`Corpus` gains a required `primary_metric_interval` and a second derived boolean, `desaturated_at_the_bound`.** Kept **separate from `desaturated` rather than replacing it**, because they are different claims and collapsing them would hide which one is being made: the gate is stated on the measurement; this says whether the measurement's own uncertainty could reach saturation. Both are `true` here. The case the second exists for — a point estimate that clears the gate while the interval's upper end touches 1.000 — is asserted directly, since it is not the case this corpus is in.
 
     **What is *not* a finding of the sweep, recorded so the next sweep does not
     re-open it:** `n_discordant` is a derived count but an observed one, not an

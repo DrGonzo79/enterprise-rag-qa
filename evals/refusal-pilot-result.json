@@ -991,8 +991,8 @@
       ],
       "construction": "unpaired square-and-add of the two Wilson intervals, as pre-registered in section 5: the arms are matched by question form, not by item, so there is no per-item correlation to estimate"
     },
-    "outcome_as_preregistered": "indeterminate",
-    "outcome_reasoning": "outcome 1 needs A>=8 and B>=8 (A=1); outcome 2 needs B>=8 and A<=5 (B=6); outcome 3 needs B<=5 (B=6). B=6 falls in the fourth cell the pre-registration named, and section 6 forbids rounding it to the nearest of the three.",
+    "outcome_as_preregistered": "void",
+    "outcome_reasoning": "VOID, not indeterminate. The primary metric is 'fraction whose verdict is INSUFFICIENT_EVIDENCE', and 13 of the 20 unanswerable records carry verdict: answered on a body that declines -- so the metric was not measuring refusal, it was measuring where the model put a token. Indeterminate would assert that the instrument worked and the answer fell between thresholds (A>=8/B>=8 for outcome 1, B>=8 and A<=5 for outcome 2, B<=5 for outcome 3); the instrument did not work, so no cell of the table applies and the arms are not partial evidence for any of them. The correct response is to fix the field and re-run, which is what SPEC-005 KD-7 amendment 1 and run 2 do.",
     "post_hoc_content_adjudication": {
       "near_miss": {
         "k": 10,
@@ -1022,9 +1022,10 @@
         ]
       }
     },
-    "post_hoc_note": "NOT pre-registered. Forced by section 6's second observation point, which required every ANSWERED in arm A to be read against its cited chunks. It was that check, not the refusal rate, that found the primary metric was measuring the wrong thing.",
+    "post_hoc_note": "NOT pre-registered, and NOT merged with the primary. The primary is void; this is a separate reading of the same records, made after the data was seen. It is what found that the primary was measuring the wrong thing -- via section 6's second observation point, which required every ANSWERED in arm A to be read against its cited chunks -- and it is not a substitute for a pre-registered result. Run 2 exists to convert it into one.",
     "verdict_body_disagreements": 13,
     "disqualified_under_section_3_2": [],
-    "confabulations": 0
+    "confabulations": 0,
+    "outcome_classification_note": "The fifth cell (void) was added to the pre-registration by owner review on 2026-08-07, after this run landed in it. It is recorded as an addition to the protocol rather than as something the protocol already contained."
   }
 }

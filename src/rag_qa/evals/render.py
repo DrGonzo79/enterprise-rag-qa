@@ -74,17 +74,22 @@ def render_markdown(report: Report) -> str:
         else:
             add(f"### {figure.metric} — {' vs '.join(figure.arms)}")
             add("")
-            add("| | value |")
-            add("|---|---:|")
-            for arm, value in figure.arms.items():
-                add(f"| {arm} | {value:.4g} |")
+            # Each arm carries its OWN interval. Two bare proportions above the
+            # split's interval was this decision violating its own rule on its
+            # own page (amendment 2).
+            add("| | value | 95% interval |")
+            add("|---|---:|---|")
+            for arm, measured in figure.arms.items():
+                add(f"| {arm} | {measured.value:.4g} | {_interval(measured.interval)} |")
             first, second = list(figure.arms)
-            add(f"| b ({first} only) | {figure.b} |")
-            add(f"| c ({second} only) | {figure.c} |")
-            add(f"| n discordant | {figure.n_discordant} |")
-            add(f"| n | {figure.n} |")
-            add(f"| p ({figure.test}, {figure.sidedness}) | {figure.p:.6g} |")
-            add(f"| alpha | {figure.alpha} |")
+            add(f"| b ({first} only) | {figure.b} | |")
+            add(f"| c ({second} only) | {figure.c} | |")
+            add(f"| n discordant | {figure.n_discordant} | |")
+            add(f"| n | {figure.n} | |")
+            add(f"| p ({figure.test}, {figure.sidedness}) | {figure.p:.6g} | |")
+            add(f"| alpha | {figure.alpha} | |")
+            add("")
+            add(f"Arm intervals: {figure.arm_interval_construction}")
             add("")
             # Both on their own lines. The outcome is never left to be read off
             # `arms`, and EVERY interval names the parameter it is on: two
@@ -123,8 +128,11 @@ def render_markdown(report: Report) -> str:
     add(
         f"**Corpus.** {corpus.chunks} chunks across "
         f"{len(corpus.documents)} documents: {', '.join(corpus.documents)}. "
-        f"Primary metric {corpus.primary_metric_value:.4g} — "
-        f"**de-saturated: {str(corpus.desaturated).lower()}** (derived, not declared)."
+        f"Primary metric {corpus.primary_metric_value:.4g} "
+        f"{_interval(corpus.primary_metric_interval)} — "
+        f"**de-saturated: {str(corpus.desaturated).lower()}** (derived, not declared), "
+        f"and **at the interval's upper bound: "
+        f"{str(corpus.desaturated_at_the_bound).lower()}**."
     )
     add("")
 

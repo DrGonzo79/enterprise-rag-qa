@@ -200,6 +200,27 @@ does not get rounded to the nearest named outcome. Naming three outcomes in
 advance is worth nothing if a fourth result gets filed under whichever of the
 three it most resembles.
 
+> **Fifth cell, added 2026-08-07 by owner review, after the first run landed in
+> it: VOID.** *Indeterminate* is a statement about the **answer** — the
+> instrument worked and the result fell between thresholds. **Void is a
+> statement about the instrument.** If the primary metric turns out not to have
+> been measuring the quantity it names, no cell of the outcome table applies,
+> including the fourth: there is no reading of A and B to place anywhere.
+>
+> **The distinction is not pedantic and the first run is why it exists.** The
+> primary was *refusal rate = fraction whose verdict is
+> `INSUFFICIENT_EVIDENCE`*, and 13 of 20 unanswerable questions carried
+> `verdict: answered` on a body that declines. Filing that as *indeterminate*
+> would record "the evidence did not separate the outcomes" — which is false
+> and flattering. **The evidence was never collected**: what was measured was
+> the placement of a token.
+>
+> **A void run does not report an outcome, and its numbers are not partial
+> evidence for one.** The correct response is to fix the instrument and re-run,
+> not to reason from the void run's arms. Reporting requirements are unchanged:
+> the primary is still reported in committed form, labelled void, because a
+> broken measurement that is not shown cannot be checked.
+
 ### Arm C is why outcome 1 is readable at all — rule 9
 
 Rule 9 says a pre-specified failure mode bound to the primary metric can miss the

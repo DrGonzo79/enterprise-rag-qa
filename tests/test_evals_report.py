@@ -62,6 +62,7 @@ from scripts.mcnemar import clopper_pearson, newcombe_paired_difference, wilson
 
 from rag_qa.evals.render import render_markdown
 from rag_qa.evals.report import (
+    ArmValue,
     ComparisonFigure,
     Corpus,
     Deviation,
@@ -111,6 +112,7 @@ def the_real_report() -> Report:
     primary: dict[str, Any] = data["primary"]
     b, c = int(primary["b_hybrid_only"]), int(primary["c_vector_only"])
     both, neither = int(primary["both"]), int(primary["neither"])
+    n = int(primary["n"])
     low, high = clopper_pearson(c, b + c)
     # Arm order below is vector_only first, so the paired table is
     # (both, vector-only-only, hybrid-only, neither) and the difference is
@@ -138,9 +140,19 @@ def the_real_report() -> Report:
         difference=difference,
         metric="recall@8",
         arms={
-            "vector_only": float(primary["recall_at_8_vector_only"]),
-            "hybrid": float(primary["recall_at_8_hybrid"]),
+            "vector_only": ArmValue(
+                value=float(primary["recall_at_8_vector_only"]),
+                interval=tuple(round(x, 4) for x in wilson(both + c, n)),  # type: ignore[arg-type]
+            ),
+            "hybrid": ArmValue(
+                value=float(primary["recall_at_8_hybrid"]),
+                interval=tuple(round(x, 4) for x in wilson(both + b, n)),  # type: ignore[arg-type]
+            ),
         },
+        arm_interval_construction=(
+            "Wilson score interval on each arm's own recall@8 over all "
+            f"{n} questions. Neither is an interval on the difference between them."
+        ),
         b=c,  # arm order: the winning arm first, so `b` is its exclusive count
         c=b,
         n=int(primary["n"]),
@@ -184,6 +196,7 @@ def the_real_report() -> Report:
                 chunks=int(data["corpus_chunks"]),
                 documents=["EU AI Act", "NIST AI RMF 1.0", "NVIDIA 10-K FY2026"],
                 primary_metric_value=float(primary["recall_at_8_vector_only"]),
+                primary_metric_interval=tuple(round(x, 4) for x in wilson(both + c, n)),  # type: ignore[arg-type]
             ),
             preregistration=Preregistration(
                 preregistered_at="2026-08-02",
@@ -380,7 +393,11 @@ def test_a_difference_interval_copied_from_the_split_cannot_be_constructed() -> 
     with pytest.raises(ValidationError, match="different parameters"):
         ComparisonFigure(
             metric="recall@8",
-            arms={"a": 0.9, "b": 0.1},  # difference 0.8, inside `split`
+            arms={
+                "a": ArmValue(value=0.9, interval=(0.8, 0.95)),
+                "b": ArmValue(value=0.1, interval=(0.05, 0.2)),
+            },  # difference 0.8, inside `split`
+            arm_interval_construction="wilson",
             b=20,
             c=3,
             n=120,
@@ -409,9 +426,59 @@ def test_the_difference_is_derived_from_the_arms_not_declared() -> None:
                 **figure.model_dump(
                     exclude={"arms", "n_discordant", "outcome", "difference_value"}
                 ),
-                "arms": {"vector_only": 0.775, "hybrid": 0.9167},
+                "arms": {
+                    "vector_only": ArmValue(value=0.775, interval=(0.69, 0.84)),
+                    "hybrid": ArmValue(value=0.9167, interval=(0.85, 0.96)),
+                },
             }
         )
+
+
+# --- Key decision 13 amendment 2: the sweep's other two -----------------------
+
+
+def test_each_arm_renders_its_own_interval_and_cannot_omit_one() -> None:
+    """The two most-read numbers in the report were bare, directly above an
+    interval belonging to the split. Same borrowing-by-adjacency, one row up."""
+    report = the_real_report()
+    rendered = render_markdown(report)
+    figure = report.figures[0]
+    assert isinstance(figure, ComparisonFigure)
+    for name, measured in figure.arms.items():
+        assert f"| {name} | {measured.value:.4g} | {_rendered(measured.interval)} |" in rendered
+    # The three intervals are three different parameters and none may coincide.
+    assert figure.arms["vector_only"].interval != figure.interval
+    assert figure.arms["vector_only"].interval != figure.difference.interval
+    assert figure.arm_interval_construction in rendered
+    with pytest.raises(ValidationError):
+        ArmValue(value=0.9167, interval=(0.1, 0.2))  # value outside its own interval
+
+
+def test_the_desaturation_claim_is_rendered_against_its_bound_not_only_its_point() -> None:
+    """`desaturated` is a THRESHOLDED CLAIM on a point estimate.
+
+    Here it survives its own bound -- Wilson upper on 110/120 is 0.9541 < 1.0 --
+    which is a strengthening, and it was unstated. The two booleans stay separate
+    because they are different claims: one is about the measurement, the other is
+    about whether the measurement's uncertainty could reach saturation.
+    """
+    corpus = the_real_report().methodology.corpus
+    rendered = render_markdown(the_real_report())
+    assert corpus.desaturated is True
+    assert corpus.desaturated_at_the_bound is True
+    assert _rendered(corpus.primary_metric_interval) in rendered
+    assert "at the interval's upper bound: true" in rendered
+    # A corpus whose point estimate clears the gate while its bound does not is
+    # the case the second boolean exists for -- and it must not read as `true`.
+    fragile = corpus.model_copy(
+        update={"primary_metric_value": 0.99, "primary_metric_interval": (0.94, 1.0)}
+    )
+    assert fragile.desaturated is True
+    assert fragile.desaturated_at_the_bound is False
+
+
+def _rendered(bounds: tuple[float, float]) -> str:
+    return f"[{bounds[0]:.4g}, {bounds[1]:.4g}]"
 
 
 # --- AC-1 / AC-14 / AC-16: the structure, not this finding ---------------------
@@ -455,7 +522,11 @@ def test_inconclusive_is_a_result_and_cannot_be_overridden() -> None:
     """
     base = {
         "metric": "recall@8",
-        "arms": {"hybrid": 0.9, "vector_only": 0.8},
+        "arms": {
+            "hybrid": ArmValue(value=0.9, interval=(0.8, 0.95)),
+            "vector_only": ArmValue(value=0.8, interval=(0.7, 0.88)),
+        },
+        "arm_interval_construction": "wilson",
         "n": 130,
         "test": "mcnemar-exact",
         "sidedness": "two-sided",

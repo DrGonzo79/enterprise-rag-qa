@@ -109,6 +109,11 @@ class QueryLog(Base):
     # logged answer to the prompt that produced it.
     answer_text: Mapped[str] = mapped_column(Text, nullable=False)
     verdict: Mapped[str] = mapped_column(Text, nullable=False)
+    # SPEC-005 migration 0007. The header token, beside the authoritative one.
+    # Nullable: rows written under prompt v1 have no header/body distinction to
+    # record, and copying `verdict` into it would manufacture agreement nobody
+    # measured. `prompt_version` separates the eras.
+    provisional_verdict: Mapped[str | None] = mapped_column(Text, nullable=True)
     prompt_version: Mapped[str] = mapped_column(Text, nullable=False)
     # SPEC-002 migration 0005. Which ceiling this row presses -- see SpendSource.
     source: Mapped[str] = mapped_column(

@@ -106,7 +106,7 @@ async def test_first_chunk_containing_newline_and_body_together() -> None:
     app = build_app(client=FakeLLMClient(stream_slices=[f"ANSWERED\n{BODY}"]))
     _, frames = await stream(app)
     events = data_payloads(frames)
-    assert events[0] == {"type": "verdict", "verdict": "answered"}
+    assert events[0] == {"type": "verdict", "verdict": "answered", "provisional": True}
     assert "".join(e["text"] for e in events if e["type"] == "text") == BODY
 
 
@@ -122,7 +122,7 @@ async def test_stream_ending_mid_verdict_yields_error_and_zero_text_frames() -> 
     app = build_app(client=FakeLLMClient(stream_slices=["ANSWE"]))
     _, frames = await stream(app)
     events = data_payloads(frames)
-    assert events[0] == {"type": "verdict", "verdict": "error"}
+    assert events[0] == {"type": "verdict", "verdict": "error", "provisional": True}
     assert [event for event in events if event["type"] == "text"] == []
     assert events[-1]["type"] == "complete"
 

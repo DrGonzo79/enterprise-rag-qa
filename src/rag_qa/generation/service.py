@@ -128,6 +128,8 @@ class Generator:
                 chunks=chunks,
                 text=NO_EVIDENCE_TEXT,
                 verdict=Verdict.INSUFFICIENT_EVIDENCE,
+                provisional=Verdict.INSUFFICIENT_EVIDENCE,
+                reconciled=False,
                 citations=(),
                 dropped=(),
                 prompt_tokens=0,
@@ -138,15 +140,17 @@ class Generator:
 
         user = render_context(question, chunks)
         result = await self._client.complete(SYSTEM_PROMPT, user, self._max_tokens)
-        verdict, text, citations, dropped = parse_answer(result.text, chunks)
+        parsed = parse_answer(result.text, chunks)
 
         return await self._finalize(
             question=question,
             chunks=chunks,
-            text=text,
-            verdict=_verdict_for(verdict, result.stop),
-            citations=citations,
-            dropped=dropped,
+            text=parsed.text,
+            verdict=_verdict_for(parsed.verdict, result.stop),
+            provisional=parsed.provisional_verdict,
+            reconciled=parsed.verdict_reconciled,
+            citations=parsed.citations,
+            dropped=parsed.dropped_markers,
             prompt_tokens=result.prompt_tokens,
             completion_tokens=result.completion_tokens,
             started=started,
@@ -170,6 +174,8 @@ class Generator:
                 chunks=chunks,
                 text=NO_EVIDENCE_TEXT,
                 verdict=Verdict.INSUFFICIENT_EVIDENCE,
+                provisional=Verdict.INSUFFICIENT_EVIDENCE,
+                reconciled=False,
                 citations=(),
                 dropped=(),
                 prompt_tokens=0,
@@ -201,6 +207,12 @@ class Generator:
                 yield parsed_event
 
         verdict = _verdict_for(parser.verdict, stop)
+        # The corrective frame. Emitted only when the trailing token actually
+        # overrode the header, so a client that rendered on the provisional
+        # frame is told to correct rather than left silently wrong -- and a
+        # client that was already right is not sent a redundant frame.
+        if parser.verdict_reconciled:
+            yield VerdictEvent(verdict, provisional=False)
         if not saw_usage and verdict is Verdict.ANSWERED:
             # Stream ended without a usage event — a disconnect, not a clean
             # finish. Never report this as a completed answer with zero cost.
@@ -211,6 +223,8 @@ class Generator:
             chunks=chunks,
             text=parser.text,
             verdict=verdict,
+            provisional=parser.provisional_verdict,
+            reconciled=parser.verdict_reconciled,
             citations=parser.citations,
             dropped=parser.dropped_markers,
             prompt_tokens=prompt_tokens,
@@ -229,6 +243,8 @@ class Generator:
         chunks: Sequence[RetrievedChunk],
         text: str,
         verdict: Verdict,
+        provisional: Verdict,
+        reconciled: bool,
         citations: tuple[object, ...],
         dropped: tuple[int, ...],
         prompt_tokens: int,
@@ -247,6 +263,8 @@ class Generator:
         answer = Answer(
             text=text,
             verdict=verdict,
+            provisional_verdict=provisional,
+            verdict_reconciled=reconciled,
             citations=citations,  # type: ignore[arg-type]
             generator_identity=self._client.identity,
             prompt_version=PROMPT_VERSION,
@@ -291,6 +309,11 @@ class Generator:
                     retrieved_chunk_ids=chunk_ids(chunks),
                     answer_text=answer.text,
                     verdict=str(answer.verdict),
+                    # Stored beside the authoritative verdict, not instead of it:
+                    # the disagreement RATE is the only thing that says whether
+                    # the trailing token is doing any work, and v1's failure was
+                    # invisible because this column did not exist (KD-7 amd 1).
+                    provisional_verdict=str(answer.provisional_verdict),
                     prompt_version=answer.prompt_version,
                     source=self._source.value,
                     # Set explicitly rather than left to the server default: this

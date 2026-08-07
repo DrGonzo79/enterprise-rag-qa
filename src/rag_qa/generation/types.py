@@ -30,8 +30,15 @@ class Citation:
 
 @dataclass(frozen=True)
 class Answer:
-    text: str  # verdict line stripped; [n] markers retained in place
+    text: str  # verdict lines stripped, leading and trailing; [n] markers kept
+    # The AUTHORITATIVE verdict: the trailing token where the model emitted one,
+    # else the header (SPEC-005 KD-7 amendment 1).
     verdict: Verdict
+    # The header token. Kept beside `verdict` rather than replaced by it, so the
+    # disagreement rate between the two is queryable -- the v1 failure was
+    # invisible precisely because only one of these existed.
+    provisional_verdict: Verdict
+    verdict_reconciled: bool
     citations: tuple[Citation, ...]  # deduplicated, first-appearance order
     generator_identity: str  # from the client, never a constant (KD-1)
     prompt_version: str
@@ -47,9 +54,18 @@ class Answer:
 
 @dataclass(frozen=True)
 class VerdictEvent:
-    """Always first: lets a client render a refusal without waiting for prose."""
+    """Emitted first, and possibly again.
+
+    The first one is **provisional** -- it is the model's header token, which is
+    the whole reason a streaming client can render a refusal before the prose
+    arrives, and which SPEC-005 KD-7 amendment 1 measured as wrong on 13 of 20
+    unanswerable questions. A second `VerdictEvent` with `provisional=False`
+    follows **only when the trailing token overrides it**, so a client that
+    rendered on the first frame is told to correct rather than left wrong.
+    """
 
     verdict: Verdict
+    provisional: bool = True
 
 
 @dataclass(frozen=True)

@@ -14,6 +14,7 @@ Two streaming hazards it exists to handle:
 
 import uuid
 from collections.abc import Sequence
+from dataclasses import dataclass
 from enum import Enum, auto
 
 from rag_qa.generation.prompt import ANSWERED_TOKEN, INSUFFICIENT_TOKEN
@@ -53,6 +54,12 @@ class AnswerParser:
         self._verdict_buffer = ""
         self._marker: str | None = None
         self._pending = ""  # text not yet flushed as a TextDelta
+        # A standalone verdict token on its own line inside the body (KD-7
+        # amendment 1). Held rather than emitted, because it is a control token
+        # and not prose; if the line turns out NOT to be a bare token it is
+        # released into the text unchanged.
+        self._line: str | None = ""
+        self._final_verdict: Verdict | None = None
         self._text_parts: list[str] = []
         self._citations: list[Citation] = []
         self._seen_markers: set[int] = set()
@@ -62,7 +69,34 @@ class AnswerParser:
 
     @property
     def verdict(self) -> Verdict:
+        """The AUTHORITATIVE verdict: the trailing token, or the header if none.
+
+        The header is the model's first token, emitted before it has written a
+        word of reasoning; the trailing token is the same judgement made after
+        the evidence is on the page. Under v1, which had only the header, **13 of
+        20 answers whose body declined were headed `ANSWERED`** (KD-7 amendment
+        1). Where both exist and differ, the trailing one is what the model
+        concluded and the header is what it guessed.
+        """
+        if self._final_verdict is not None:
+            return self._final_verdict
         return self._verdict if self._verdict is not None else Verdict.ERROR
+
+    @property
+    def provisional_verdict(self) -> Verdict:
+        """The header token, kept rather than discarded.
+
+        Retained so the divergence is **queryable rather than invisible**: the
+        whole failure this amendment fixes was undetectable because only one
+        number existed. A rate of disagreement is the thing that tells anyone
+        whether the trailing token is doing any work.
+        """
+        return self._verdict if self._verdict is not None else Verdict.ERROR
+
+    @property
+    def verdict_reconciled(self) -> bool:
+        """True when a trailing token was present AND overrode the header."""
+        return self._final_verdict is not None and self._final_verdict is not self._verdict
 
     @property
     def text(self) -> str:
@@ -97,6 +131,16 @@ class AnswerParser:
             self._verdict = Verdict.ERROR
             self._verdict_buffer = ""
             return [VerdictEvent(Verdict.ERROR)]
+        # A final line with no trailing newline is still a final line: the
+        # authoritative verdict must not depend on whether the provider ended
+        # the stream with "\n".
+        if self._line is not None:
+            verdict = _VERDICT_TOKENS.get(self._line.strip())
+            if verdict is not None:
+                self._final_verdict = verdict
+                self._line = None
+            else:
+                events.extend(self._release())
         if self._marker is not None:
             # A trailing "[" or "[12" was never a marker; it is literal text.
             self._pending += "[" + self._marker
@@ -130,6 +174,59 @@ class AnswerParser:
         return events
 
     def _feed_body(self, char: str) -> list[AnswerEvent]:
+        """Body characters, with one interception: a line that is exactly a
+        verdict token.
+
+        `self._line` is the current line's text while it is still a viable
+        prefix of a verdict token, and `None` once it is not — so the common
+        case (ordinary prose) stops tracking after one character and costs a
+        comparison. Only a token **alone on a line** is intercepted: v1's
+        answers repeatedly wrote `INSUFFICIENT_EVIDENCE — the excerpts are…`,
+        which is prose that begins with the token and must render as prose.
+        """
+        if self._line is None:
+            events = self._feed_body_char(char)
+            if char == "\n":
+                self._line = ""  # a new line begins; start watching again
+            return events
+
+        if char == "\n":
+            verdict = _VERDICT_TOKENS.get(self._line.strip())
+            if verdict is not None:
+                # Swallow the token line AND its newline. The LAST one wins: a
+                # model that corrects itself mid-answer ends on the verdict it
+                # actually holds, which is the behaviour v1 produced in prose and
+                # could not record.
+                self._final_verdict = verdict
+                self._line = ""
+                return []
+            events = self._release()
+            events.extend(self._feed_body_char(char))
+            self._line = ""
+            return events
+
+        if self._could_begin_a_verdict(self._line + char):
+            self._line += char
+            return []
+
+        events = self._release()
+        events.extend(self._feed_body_char(char))
+        return events
+
+    def _release(self) -> list[AnswerEvent]:
+        """Emit held line text as ordinary prose. The line was not a bare token."""
+        held, self._line = self._line or "", None
+        events: list[AnswerEvent] = []
+        for held_char in held:
+            events.extend(self._feed_body_char(held_char))
+        return events
+
+    @staticmethod
+    def _could_begin_a_verdict(text: str) -> bool:
+        stripped = text.lstrip()
+        return not stripped or any(token.startswith(stripped) for token in _VERDICT_TOKENS)
+
+    def _feed_body_char(self, char: str) -> list[AnswerEvent]:
         if self._marker is None:
             if char == "[":
                 self._marker = ""
@@ -186,14 +283,36 @@ class AnswerParser:
         return [TextDelta(text)]
 
 
-def parse_answer(
-    raw: str, chunks: Sequence[RetrievedChunk]
-) -> tuple[Verdict, str, tuple[Citation, ...], tuple[int, ...]]:
+@dataclass(frozen=True)
+class ParsedAnswer:
+    """What one raw completion decomposes into. AC-7.
+
+    `verdict` and `provisional_verdict` are separate fields rather than one,
+    because collapsing them would delete the only evidence that the header is
+    unreliable — which is the state v1 was in.
+    """
+
+    verdict: Verdict
+    provisional_verdict: Verdict
+    verdict_reconciled: bool
+    text: str
+    citations: tuple[Citation, ...]
+    dropped_markers: tuple[int, ...]
+
+
+def parse_answer(raw: str, chunks: Sequence[RetrievedChunk]) -> ParsedAnswer:
     """Non-streaming convenience over the same state machine."""
     parser = AnswerParser(chunks)
     parser.feed(raw)
     parser.finish()
-    return parser.verdict, parser.text, parser.citations, parser.dropped_markers
+    return ParsedAnswer(
+        verdict=parser.verdict,
+        provisional_verdict=parser.provisional_verdict,
+        verdict_reconciled=parser.verdict_reconciled,
+        text=parser.text,
+        citations=parser.citations,
+        dropped_markers=parser.dropped_markers,
+    )
 
 
 def chunk_ids(chunks: Sequence[RetrievedChunk]) -> list[uuid.UUID]:

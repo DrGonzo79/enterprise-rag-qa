@@ -530,15 +530,35 @@ def test_anthropic_client_identity_is_derived_from_its_model() -> None:
 
 # Bump PROMPT_VERSION whenever SYSTEM_PROMPT changes, then update this digest.
 # Without this pin, prompt drift is invisible in the logs it is supposed to explain.
+# **Literal digests, and that is the whole point of this table.** Until
+# 2026-08-07 the v1 entry read `hashlib.sha256(SYSTEM_PROMPT...)` -- it computed
+# the value it then compared against, so **it could not fail**: editing
+# SYSTEM_PROMPT without touching PROMPT_VERSION recomputed the digest and passed.
+# It caught only the case where PROMPT_VERSION changed and nobody added a row,
+# which is not the failure AC-12 names. Proved by mutation while bumping to v2:
+# the v2 prompt with PROMPT_VERSION = "v1" was green. Rule 3's eleventh instance,
+# and an ordinary one -- a test that could not fail, found by doing the thing it
+# exists to guard.
 EXPECTED_PROMPT_DIGEST = {
-    "v1": hashlib.sha256(SYSTEM_PROMPT.encode("utf-8")).hexdigest(),
+    "v1": "ccc262e697eda55f4530148267d1788803f1bd57477476e4bf34772202604266",
+    "v2": "36e9cc23a444a504b54ba83de673faad3f246ea5222a6a9211c107bac5404699",
 }
 
 
 def test_prompt_version_pins_the_prompt() -> None:
+    """AC-12: editing SYSTEM_PROMPT without bumping PROMPT_VERSION fails here.
+
+    Both directions are asserted, because a digest table can rot either way: an
+    edited prompt under an old version, and a version with no recorded digest.
+    """
     assert PROMPT_VERSION
     digest = hashlib.sha256(SYSTEM_PROMPT.encode("utf-8")).hexdigest()
-    assert EXPECTED_PROMPT_DIGEST[PROMPT_VERSION] == digest
+    assert PROMPT_VERSION in EXPECTED_PROMPT_DIGEST, (
+        f"PROMPT_VERSION {PROMPT_VERSION!r} has no recorded digest; add {digest!r}"
+    )
+    assert EXPECTED_PROMPT_DIGEST[PROMPT_VERSION] == digest, (
+        f"SYSTEM_PROMPT changed under {PROMPT_VERSION!r}: bump the version and record {digest!r}"
+    )
 
 
 def test_prompt_states_the_binding_rules() -> None:

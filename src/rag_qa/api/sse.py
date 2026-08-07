@@ -70,7 +70,15 @@ def error_frame(code: str, message: str) -> str:
 
 def event_payload(event: AnswerEvent) -> dict[str, Any]:
     if isinstance(event, VerdictEvent):
-        return {"type": "verdict", "verdict": str(event.verdict)}
+        # `provisional` is additive on an existing frame type rather than a new
+        # type, so a client that ignores it keeps v1 behaviour exactly: it
+        # renders the first verdict frame and then, if a correction arrives,
+        # renders that one -- last-write-wins, which is the right default.
+        return {
+            "type": "verdict",
+            "verdict": str(event.verdict),
+            "provisional": event.provisional,
+        }
     if isinstance(event, TextDelta):
         return {"type": "text", "text": event.text}
     if isinstance(event, CitationEvent):
@@ -85,6 +93,8 @@ def event_payload(event: AnswerEvent) -> dict[str, Any]:
     return {
         "type": "complete",
         "verdict": str(event.answer.verdict),
+        "provisional_verdict": str(event.answer.provisional_verdict),
+        "verdict_reconciled": event.answer.verdict_reconciled,
         "dropped_markers": list(event.answer.dropped_markers),
         "usage": UsageOut.build(event.answer).model_dump(),
     }

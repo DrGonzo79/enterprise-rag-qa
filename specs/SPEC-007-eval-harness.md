@@ -433,7 +433,9 @@ reader who has not opened the repository:
 
    **Gate status, 2026-08-07: half-answered, and the answered half is the half that was cheap.**
 
-   `evals/prereg-refusal-nearmiss.md` ran the cheap falsifier against the **refusal** conjunct and found the premise unsupported: ten near-miss unanswerables were authored against the **unchanged 358-chunk corpus**, retrieval put the right Article, Item or RMF function at rank 1 for all ten, and the generator declined all ten. The corpus was not the binding constraint on constructing hard unanswerables. Run 1's primary metric was **void** (see below); run 2 is the pre-registered version.
+   `evals/prereg-refusal-nearmiss.md` ran the cheap falsifier against the **refusal** conjunct and found the premise unsupported. Ten near-miss unanswerables were authored against the **unchanged 358-chunk corpus**, retrieval put the right Article, Item or RMF function at rank 1 for all ten, and the specific answer was genuinely absent.
+
+   **Run 1 was void** — its primary metric was the verdict token, and 13 of 20 unanswerable answers carried `verdict: answered` on a body that declines, so the metric was not measuring refusal. **Run 2, under the field fixed by SPEC-005 KD-7 amendment 1, is the pre-registered result: A = 9/10, B = 10/10, C = 0/10 refused — outcome 1, "refuses both".** The corpus was not the binding constraint on constructing hard unanswerables, and was not the binding constraint on declining them.
 
    > **The other conjunct is untested, and it is untested for a reason that should not be allowed to read as reassurance.** The premise has two halves — *unanswerable questions are unrealistically easy to construct*, and *the corpus leaves the generator few plausible-but-wrong chunks to be wrong with*. The second is about **groundedness**, and **a result in which the generator was never wrong cannot speak to it.** Zero confabulations across twenty questions is equally consistent with "the corpus is fine" and with "these questions could not have produced drift", and nothing in the pilot separates them.
    >

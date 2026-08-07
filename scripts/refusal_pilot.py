@@ -16,6 +16,7 @@ mode that lets an author read a verdict and then reword.
 import argparse
 import asyncio
 import json
+import os
 import re
 import subprocess
 from datetime import UTC, datetime
@@ -37,7 +38,7 @@ from scripts.query_plan import EVAL_SERVER_SETTINGS, observed_vector_plan
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 QUESTIONS = REPO_ROOT / "evals" / "refusal_pilot.jsonl"
-RESULT = REPO_ROOT / "evals" / "refusal-pilot-result.json"
+RESULT = REPO_ROOT / "evals" / f"refusal-pilot-result{os.environ.get('PILOT_RUN', '')}.json"
 K = 8
 
 # §4: the run stops rather than silently exceeding what was pre-registered.
@@ -189,6 +190,11 @@ async def _run(database_url: str) -> None:
                     "prompt_tokens": answer.prompt_tokens,
                     "completion_tokens": answer.completion_tokens,
                     "cost_usd": str(answer.cost_usd),
+                    # KD-7 amendment 1: both verdicts, so the disagreement rate
+                    # between the header and the model's considered verdict is a
+                    # number rather than something nobody could have seen.
+                    "provisional_verdict": answer.provisional_verdict.value,
+                    "verdict_reconciled": answer.verdict_reconciled,
                 }
             )
             print(f"{case['id']:>6} {case['arm']} {answer.verdict.value:<22} ${total}")
@@ -245,7 +251,6 @@ def _write(
 
 def main() -> None:
     load_env()
-    import os
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("mode", choices=["verify", "recover", "run"])

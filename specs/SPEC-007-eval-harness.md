@@ -1293,6 +1293,42 @@ reader who has not opened the repository:
 
     ---
 
+    ### Amendment 8 — the three decisions taken before unblinding *(2026-08-05, owner decision)*
+
+    **All three are recorded before any of `b`, `c` or `p` exists.** Each is a decision that becomes uncleanable the moment the split is known — not because anyone would cheat, but because after unblinding there is no way to demonstrate that the answer did not inform the choice.
+
+    #### 1. SPEC-004 KD-7a is **rejected**: the tie-break stays, dense search stays exact
+
+    Argued in SPEC-004 on retrieval correctness alone — exact search is the recall ceiling, an ANN index can only be ≤ it, and AC-8 measures 16 ms against a 150 ms budget, so there is no latency pressure to trade recall against. **The argument reaches the same conclusion under every possible value of `b` and `c`**, which is the test that separates it from motivated reasoning. Measured: the tie-break has never fired — zero duplicate embeddings, zero duplicate texts, zero distance collisions on 358 chunks.
+
+    The HNSW index is recorded as dead weight and kept, because it and the tie-break are **one decision rather than two**: removing it now would commit us to re-adding it in the commit that removes the tie-break. Revisit trigger named: when retrieval-side p95 approaches AC-8's 150 ms budget, both are reconsidered together with the recall cost of approximation *measured* rather than assumed.
+
+    #### 2. Pruning: pre-specified before any number exists
+
+    SPEC-004 amendment 7 deferred frequency pruning "to the confirmatory set" without saying how it would be read there. Fixed now:
+
+    - **Primary analysis: pruning OFF.** This matches `MAX_LEXEME_CHUNK_FRACTION = None`, the committed default that the pre-registration and all four blocks were measured against.
+    - **Secondary analysis: pruning ON** (`0.25`), reported alongside.
+    - **The secondary may never displace the primary.** Not if it is more significant, not if it flips the sign, not if it is more flattering to either arm. If the two disagree, both are reported and the disagreement is the finding.
+
+    **Why this ordering and not the reverse:** the primary is the configuration the system actually ships in and the one every prior measurement used. Choosing between them after seeing two `p`-values is the same substitution KD-12 has been built to prevent, one level down.
+
+    #### 3. **N = 23 discordant pairs is final. The set is closed permanently, not paused.**
+
+    The stopping rule fired at N = 120. **Blocks 5–7 will not be authored**, and this is a consequence rather than a preference: **after unblinding, no question can be written to the standard the first 120 were written to.** The authoring rule requires questions written without knowledge of the outcome; once `b` and `c` are known, every subsequent question is written by someone who knows which arm is ahead and by how much. There is no procedure that restores that ignorance.
+
+    **So "top it up for power later" is not available**, and it is stated here so that nobody proposes it as though it were a matter of effort. If 23 pairs prove insufficient, the honest report is an underpowered one — which amendment 4 accepted in advance — not a larger set assembled afterwards.
+
+    #### The pre-registered `not_a_claim`, committed before the result exists
+
+    > This is a **retrieval-only** comparison at k = 8, on a 358-chunk corpus of three documents, scored against section-prefix labels that are **not human-verified**. It does not measure answer quality, groundedness, or refusal.
+    >
+    > **A significant result** establishes that hybrid and vector-only differ in `recall@8` on this question mix and this corpus. It does not establish that the difference generalises to another corpus, another `k`, another question mix, or to any user-visible quality.
+    >
+    > **An inconclusive result does not establish equivalence.** It establishes that this set, at this size, could not distinguish the arms.
+
+    ---
+
     #### Pilot-2 results — measured 2026-08-02, artifact `evals/pilot-2.json`
 
     14 questions, unchanged 358-chunk corpus, identical measurement path to pilot-1 (the same script, parameterised — a second copy would have been a second chance to differ from it).

@@ -160,7 +160,31 @@ None. Query embedding reuses `openai` (SPEC-003); everything else is SQLAlchemy 
 4. **Identity verified on every `retrieve()` call, not at startup.** **Flagged — arguing against the obvious choice:** a startup check is the obvious, cheaper design. But the ingestion CLI can rewrite the corpus while the API process is running (whole-document replace, SPEC-003 decision 6) — a startup check validates a corpus that may no longer exist. The per-call check is one `SELECT DISTINCT` on an indexed-scan-friendly small table, and it runs inside the `gather` alongside the searches (Branch B, before FTS), so it adds **zero wall-clock latency** in the common case. Mismatch is an exception, never a warning: a warning in a log nobody tails *is* the silent-degradation failure mode.
 5. **Two sessions per call, identity check sharing the FTS session.** `gather` needs ≥ 2 connections (one `AsyncSession` = one connection = sequential). Three parallel sessions would buy ~1 ms on the cheapest query while tripling per-request connection pressure against SPEC-002 decision 8's hard pool bound of 10 per replica; at 2 connections per in-flight retrieve, 5 concurrent retrievals saturate a replica's pool — acceptable for a demo service, and the answering spec inherits this math explicitly.
 6. **`websearch_to_tsquery`, not `to_tsquery`/`plainto_tsquery`.** It never raises on arbitrary user input (`to_tsquery` throws on unbalanced syntax — a user typing `6(2` must not 500), and it preserves quoted-phrase support that `plainto_tsquery` lacks — useful for exact citations.
-7a. **PROPOSED, NOT APPLIED — remove the `id` tie-break from the dense `ORDER BY`** *(2026-08-05, raised unprompted; CLAUDE.md rule 4 stops it at Proposed)*.
+7a. **REJECTED 2026-08-05 (owner-asked decision, taken before unblinding). The tie-break stays; dense search stays exact.** ~~PROPOSED — remove the `id` tie-break from the dense `ORDER BY`.~~
+
+    **Decided before `b` and `c` were known, because it stops being decidable afterwards.** Removing the tie-break changes vector results for *both* arms and can change the comparison's outcome, so a decision taken after unblinding could not be cleaned of that knowledge whatever its stated reason.
+
+    **The argument, on retrieval correctness, with no reference to the comparison:**
+
+    - **Exact search is the recall ceiling; an ANN index can only be ≤ it.** Today every candidate is scanned and ordered, so the dense arm returns the true top-k by cosine distance. Making the index reachable trades recall for latency **by construction** — that is what approximate nearest neighbour means.
+    - **There is no latency pressure to trade against.** SPEC-004 AC-8 measures retrieval-side p95 at 16 ms against an asserted budget of 150 ms — roughly 10× headroom. Adopting an approximate index to buy latency nobody is short of is a trade with a cost and no benefit.
+    - **The counterfactual that separates this from motivated reasoning:** the argument above cites recall and the latency budget and nothing else. It reaches the same conclusion under every possible value of `b` and `c`, including the ones where the tie-break's removal would have helped the arm I might prefer.
+
+    **What the tie-break is worth, measured rather than asserted:** on the 358-chunk corpus there are **zero duplicate embeddings, zero duplicate chunk texts, and zero distance-value collisions** against a real query vector. **The tie-break has never fired.** It is insurance against a case that *can* occur — repeated boilerplate producing two chunks with identical text and therefore identical embeddings — and currently does not. Its present worth is a guarantee of total order, not an observed effect.
+
+    **The HNSW index is dead weight, and that is recorded rather than repaired:**
+    - No query reaches it (the EXPLAIN table below).
+    - **Key decision 7's justification for `ef_search = 50`** — "the default (40) would silently cap the dense list" — is **inoperative**; the GUC is set on a plan that never reads it.
+    - **AC-11 asserts `SHOW hnsw.ef_search` reads 50 and says nothing about any index consulting it.** It passes for a reason unrelated to the behaviour its name implies (CLAUDE.md rule 3's family).
+    - **SPEC-002 AC-2 asserts the index exists**, and it does. That check is green beside a mechanism nothing can reach.
+
+    **The index is kept, and the reason is that it and the tie-break are one decision rather than two.** The index matters only if the tie-break goes; removing it now would commit us to re-adding it in the same commit that removes the tie-break, for the same reason. **Correctness is silent on removal** — an unreachable index changes no result — so the case for removing it is record-honesty, and the record has been corrected in place here, in SPEC-002, and in CLAUDE.md's stack rationale.
+
+    **Revisit trigger, named so this is a decision and not a preference:** when retrieval-side p95 approaches the 150 ms budget of AC-8 — i.e. when exact scan stops being affordable — the tie-break and the index are reconsidered **together**, with the recall cost of approximation *measured* on the confirmatory set rather than assumed. Until then, exact search at 16 ms is strictly better on the axis this system is scored on.
+
+    ---
+
+    **The finding this decision rests on.**
 
     **The finding: no query in this repository has ever used the HNSW index.** `vector_search` orders by `(distance, Chunk.id)`; the statement this spec specifies at Key decision 7 and in the Interface is `ORDER BY c.embedding <=> :qvec LIMIT 50`, with **no tie-break**. An HNSW index can satisfy an ordering by the distance operator alone, so **a second sort key makes it unusable for ordering** and the planner falls back to scanning and sorting. Proved by EXPLAIN on the live corpus:
 

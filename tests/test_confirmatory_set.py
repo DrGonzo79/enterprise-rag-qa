@@ -23,6 +23,7 @@ from pathlib import Path
 
 import pytest
 from scripts.interim_r import COMMITTED_BLOCK_MIX
+from scripts.pin_gold_chunks import is_exact_anchor
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CONFIRMATORY = REPO_ROOT / "evals" / "retrieval_confirmatory.jsonl"
@@ -132,3 +133,54 @@ def test_natural_language_questions_carry_no_citation() -> None:
         lowered = str(case["question"]).lower()
         found = [m for m in markers if m in lowered]
         assert not found, f"{case['id']} is labelled natural-language but cites {found}"
+
+
+def test_every_gold_is_pinned_to_chunk_identity() -> None:
+    """Golds name chunks, not path prefixes (2026-08-05).
+
+    **The defect this closes.** `matches_section` enforces component breaks and
+    catches ambiguity but not *exactness*, so a truncation that happens to
+    resolve uniquely passes. Systematically checked, **101 of the 120 golds were
+    truncations** — the EU section titles all carry a `— Title` suffix the golds
+    were written without — and three resolved to more than one section already.
+    Unambiguous today, Annex-shaped tomorrow.
+
+    Freezing chunk ids makes a re-chunk fail loudly instead of silently
+    re-pointing a truncation at a different section.
+    """
+    for case in cases():
+        ids = case.get("gold_chunk_ids")
+        assert isinstance(ids, list) and ids, f"{case['id']} has no frozen gold chunk ids"
+        assert len(ids) == len(set(ids)), case["id"]
+        paths = case.get("expected_section_paths")
+        assert isinstance(paths, list) and paths, f"{case['id']} has no exact section paths"
+        prefix = str(case["expected_section_prefix"])
+        for path in paths:
+            assert str(path)[: len(prefix)] == prefix, case["id"]
+        if "also_contains" in case:
+            assert case.get("also_chunk_ids"), f"{case['id']} span half has no chunk ids"
+
+
+def test_the_exactness_rule_rejects_a_truncation() -> None:
+    """`is_exact_anchor` is what `matches_section` could not decide.
+
+    **Not asserted as a property of the recorded paths, because that property is
+    false and the corpus is why.** The chunker emits `Article 112 — Evaluation
+    and review` *and* `Article 112 — Evaluation and review – Article 113 — …` as
+    two real sections, so one real section path is a truncation-shaped prefix of
+    another. Any test demanding mutual non-prefixing would be asserting
+    something untrue about the corpus rather than about the labels.
+
+    What is checkable is the rule: a gold must name a section exactly, or an
+    ancestor ending at a `›` break.
+    """
+    paths = {
+        "EU AI Act › CHAPTER XII › Article 99 — Penalties",
+        "NVIDIA 10-K FY2026 › Item 1. Business › Human Capital Management",
+        "NIST AI RMF 1.0 › AI RMF Core › Govern",
+    }
+    assert is_exact_anchor("EU AI Act › CHAPTER XII › Article 99 — Penalties", paths)
+    assert is_exact_anchor("NIST AI RMF 1.0 › AI RMF Core", paths)  # ancestor at a break
+    # The five the owner found by eye, and the ninety-six they did not.
+    assert not is_exact_anchor("EU AI Act › CHAPTER XII › Article 99", paths)
+    assert not is_exact_anchor("NVIDIA 10-K FY2026 › Item 1. Business › Human Capital", paths)

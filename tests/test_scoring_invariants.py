@@ -55,6 +55,16 @@ ALLOWED_PREFIX_COMPARISONS = {
     # The test OF the rule, which necessarily compares the rule against the raw
     # operation it narrows.
     "tests/test_section_match.py": {"path.startswith(prefix)"},
+    # Ancestor test on real section paths: `X › Y` extends `X` at a separator by
+    # construction, so this asks a question about the tree, not about a label.
+    "scripts/pin_gold_chunks.py": {'p.startswith(gold + " › ")'},
+    # Deliberately the RAW comparison: this collects the over-match superset so
+    # that straddling can then be detected in it. Narrowing it here would make
+    # the straddle check unable to see what it exists to catch.
+    "scripts/interim_r.py": {"p.startswith(str(prefix))"},
+    # A chunk's text begins with its own section-path header. Text prefix, not a
+    # tree comparison, and the trailing newline makes it exact.
+    "tests/test_ingest_chunker.py": {r'chunk.text.startswith(chunk.section_path + "\n")'},
 }
 
 
@@ -84,9 +94,14 @@ def _prefix_comparisons() -> dict[str, set[str]]:
             segment = ast.get_source_segment(source, node) or ""
             subject = ast.get_source_segment(source, func.value) or ""
             arg = ast.get_source_segment(source, node.args[0]) if node.args else ""
-            looks_pathish = any(
-                token in subject for token in ("section_path", "heading_path", "path")
-            ) or (arg or "").strip() in {"prefix", "root", "immutable_prefix"}
+            # Subject OR argument. Widened 2026-08-05 after a real site escaped
+            # on a single-letter receiver (`p.startswith(gold + " › ")`) — the
+            # heuristic keyed on the subject alone, and the subject was `p`.
+            looks_pathish = (
+                any(token in subject for token in ("section_path", "heading_path", "path"))
+                or (arg or "").strip() in {"prefix", "root", "immutable_prefix"}
+                or any(token in (arg or "") for token in ("gold", "prefix", "section_path"))
+            )
             if looks_pathish:
                 found.setdefault(rel, set()).add(" ".join(segment.split()))
     return found
@@ -96,10 +111,13 @@ def test_section_paths_are_compared_only_through_the_shared_rule() -> None:
     """The sixth site fails here rather than in a future sweep.
 
     **Scope, stated so the guarantee is not read wider than it is:** this catches
-    a `startswith` whose subject mentions a path or whose argument is named
-    `prefix`/`root`. That is the shape all five sites had. It does not catch
-    every conceivable prefix comparison — a `SQL LIKE`, a slice, or a regex would
-    pass — so it is a tripwire on the known shape, not a proof of absence.
+    a `startswith` whose subject mentions a path, or whose argument is named or
+    mentions `prefix`/`root`/`gold`/`section_path`. That is the shape all five
+    sites had. **The subject-only form of this heuristic already missed one real
+    site** — `p.startswith(gold + " › ")`, where the receiver is a single letter
+    — which is why it now reads the argument too, and why the scope is stated
+    rather than implied: a `SQL LIKE`, a slice, or a regex still passes. It is a
+    tripwire on the known shape, not a proof of absence.
     """
     unexpected = {
         rel: sorted(calls - ALLOWED_PREFIX_COMPARISONS.get(rel, set()))

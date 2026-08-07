@@ -1,0 +1,711 @@
+{
+  "artifact_type": "screening",
+  "renderable_as_figure": false,
+  "why_not_a_figure": "The confirmatory set is unblinded and permanently closed (KD-12 amendment 8). This gate was designed with knowledge of the cases it is scored on, so the numbers below are a screen for whether a fusion fix is worth pursuing, not evidence about whether it works. No p-value is computed and none may be.",
+  "measured_at": "2026-08-07",
+  "git_sha": "91085a185ad80057c6879023af2ee8535224ccb9",
+  "gate": "fallback-sourced candidates (via_fallback) dropped before RRF fusion",
+  "n": 120,
+  "vector_only_wins_in_baseline": 20,
+  "recovered_by_gate": [
+    "con-006",
+    "con-009",
+    "con-010",
+    "con-011",
+    "con-019",
+    "con-024",
+    "con-042",
+    "con-051",
+    "con-063",
+    "con-064",
+    "con-067",
+    "con-070",
+    "con-075",
+    "con-077",
+    "con-080",
+    "con-093",
+    "con-096",
+    "con-100",
+    "con-101",
+    "con-120"
+  ],
+  "recovered_count": 20,
+  "hybrid_wins_given_up": [
+    "con-004",
+    "con-094",
+    "con-106"
+  ],
+  "questions_newly_broken": [
+    "con-004",
+    "con-094",
+    "con-106"
+  ],
+  "hybrid_recall_at_8_ungated": 0.775,
+  "hybrid_recall_at_8_gated": 0.9167,
+  "attractors": {
+    "questions": 20,
+    "distinct_chunks_at_rank_1": 17,
+    "distinct_chunks_in_top_3": 46,
+    "distinct_chunks_in_top_8": 100,
+    "most_frequent_at_rank_1": [
+      {
+        "chunk": "75e55815-58d0-4d4d-94e0-3e69699d5133",
+        "times": 3,
+        "length": 4400
+      },
+      {
+        "chunk": "3a900145-4ab2-416c-a536-d5434e32e66e",
+        "times": 2,
+        "length": 4199
+      },
+      {
+        "chunk": "949ba583-f9de-4fda-bf61-df7a391f2cad",
+        "times": 1,
+        "length": 4067
+      },
+      {
+        "chunk": "a7b56aab-2873-4ac8-91a4-ac626c33d2c8",
+        "times": 1,
+        "length": 3195
+      },
+      {
+        "chunk": "95a4a657-d188-4bfa-afd9-958d4254c55b",
+        "times": 1,
+        "length": 3705
+      }
+    ],
+    "most_frequent_in_top_3": [
+      {
+        "chunk": "75e55815-58d0-4d4d-94e0-3e69699d5133",
+        "times": 5,
+        "length": 4400
+      },
+      {
+        "chunk": "725ba523-3a6e-4f94-968e-144132734672",
+        "times": 3,
+        "length": 2878
+      },
+      {
+        "chunk": "3a900145-4ab2-416c-a536-d5434e32e66e",
+        "times": 3,
+        "length": 4199
+      },
+      {
+        "chunk": "5e918ba3-373a-472d-99f6-7afb5928925e",
+        "times": 3,
+        "length": 4016
+      },
+      {
+        "chunk": "c3e313a4-5b41-42c6-a34b-b6ddb92e95fa",
+        "times": 2,
+        "length": 4008
+      }
+    ],
+    "corpus_median_length": 3189.0,
+    "rank_1_occupant_median_length": 4191,
+    "rank_1_occupant_length_ratio": 1.31,
+    "rank_1_occupant_length_percentile": 87
+  },
+  "per_case": {
+    "con-001": {
+      "ungated_hybrid_rank": 1,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-002": {
+      "ungated_hybrid_rank": 4,
+      "gated_hybrid_rank": 3,
+      "vector_rank": 3
+    },
+    "con-003": {
+      "ungated_hybrid_rank": 5,
+      "gated_hybrid_rank": 3,
+      "vector_rank": 3
+    },
+    "con-004": {
+      "ungated_hybrid_rank": 6,
+      "gated_hybrid_rank": null,
+      "vector_rank": null
+    },
+    "con-005": {
+      "ungated_hybrid_rank": 5,
+      "gated_hybrid_rank": 2,
+      "vector_rank": 2
+    },
+    "con-006": {
+      "ungated_hybrid_rank": null,
+      "gated_hybrid_rank": 2,
+      "vector_rank": 2
+    },
+    "con-007": {
+      "ungated_hybrid_rank": 3,
+      "gated_hybrid_rank": 3,
+      "vector_rank": 1
+    },
+    "con-008": {
+      "ungated_hybrid_rank": 7,
+      "gated_hybrid_rank": 2,
+      "vector_rank": 2
+    },
+    "con-009": {
+      "ungated_hybrid_rank": null,
+      "gated_hybrid_rank": 5,
+      "vector_rank": 5
+    },
+    "con-010": {
+      "ungated_hybrid_rank": null,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-011": {
+      "ungated_hybrid_rank": null,
+      "gated_hybrid_rank": 6,
+      "vector_rank": 6
+    },
+    "con-012": {
+      "ungated_hybrid_rank": 3,
+      "gated_hybrid_rank": 3,
+      "vector_rank": 3
+    },
+    "con-013": {
+      "ungated_hybrid_rank": 1,
+      "gated_hybrid_rank": 2,
+      "vector_rank": 2
+    },
+    "con-014": {
+      "ungated_hybrid_rank": 5,
+      "gated_hybrid_rank": 2,
+      "vector_rank": 2
+    },
+    "con-015": {
+      "ungated_hybrid_rank": 1,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-016": {
+      "ungated_hybrid_rank": 2,
+      "gated_hybrid_rank": 2,
+      "vector_rank": 1
+    },
+    "con-017": {
+      "ungated_hybrid_rank": 2,
+      "gated_hybrid_rank": 2,
+      "vector_rank": 2
+    },
+    "con-018": {
+      "ungated_hybrid_rank": 1,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-019": {
+      "ungated_hybrid_rank": null,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-020": {
+      "ungated_hybrid_rank": 2,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-021": {
+      "ungated_hybrid_rank": 2,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-022": {
+      "ungated_hybrid_rank": 1,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-023": {
+      "ungated_hybrid_rank": 5,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-024": {
+      "ungated_hybrid_rank": null,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-025": {
+      "ungated_hybrid_rank": 1,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-026": {
+      "ungated_hybrid_rank": 4,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-027": {
+      "ungated_hybrid_rank": null,
+      "gated_hybrid_rank": null,
+      "vector_rank": null
+    },
+    "con-028": {
+      "ungated_hybrid_rank": 8,
+      "gated_hybrid_rank": 6,
+      "vector_rank": 6
+    },
+    "con-029": {
+      "ungated_hybrid_rank": 3,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-030": {
+      "ungated_hybrid_rank": null,
+      "gated_hybrid_rank": null,
+      "vector_rank": null
+    },
+    "con-031": {
+      "ungated_hybrid_rank": 3,
+      "gated_hybrid_rank": 6,
+      "vector_rank": 6
+    },
+    "con-032": {
+      "ungated_hybrid_rank": 1,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-033": {
+      "ungated_hybrid_rank": 1,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-034": {
+      "ungated_hybrid_rank": 6,
+      "gated_hybrid_rank": 6,
+      "vector_rank": 2
+    },
+    "con-035": {
+      "ungated_hybrid_rank": 6,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-036": {
+      "ungated_hybrid_rank": 2,
+      "gated_hybrid_rank": 2,
+      "vector_rank": 1
+    },
+    "con-037": {
+      "ungated_hybrid_rank": 4,
+      "gated_hybrid_rank": 4,
+      "vector_rank": 4
+    },
+    "con-038": {
+      "ungated_hybrid_rank": 8,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-039": {
+      "ungated_hybrid_rank": 4,
+      "gated_hybrid_rank": 4,
+      "vector_rank": 3
+    },
+    "con-040": {
+      "ungated_hybrid_rank": 3,
+      "gated_hybrid_rank": 2,
+      "vector_rank": 2
+    },
+    "con-041": {
+      "ungated_hybrid_rank": 1,
+      "gated_hybrid_rank": 8,
+      "vector_rank": 8
+    },
+    "con-042": {
+      "ungated_hybrid_rank": null,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-043": {
+      "ungated_hybrid_rank": 2,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-044": {
+      "ungated_hybrid_rank": 1,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-045": {
+      "ungated_hybrid_rank": 2,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-046": {
+      "ungated_hybrid_rank": 3,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-047": {
+      "ungated_hybrid_rank": 1,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-048": {
+      "ungated_hybrid_rank": 5,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-049": {
+      "ungated_hybrid_rank": 6,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-050": {
+      "ungated_hybrid_rank": 6,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-051": {
+      "ungated_hybrid_rank": null,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-052": {
+      "ungated_hybrid_rank": 3,
+      "gated_hybrid_rank": 3,
+      "vector_rank": 2
+    },
+    "con-053": {
+      "ungated_hybrid_rank": 8,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-054": {
+      "ungated_hybrid_rank": 1,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-055": {
+      "ungated_hybrid_rank": 1,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-056": {
+      "ungated_hybrid_rank": null,
+      "gated_hybrid_rank": null,
+      "vector_rank": null
+    },
+    "con-057": {
+      "ungated_hybrid_rank": 6,
+      "gated_hybrid_rank": 8,
+      "vector_rank": 7
+    },
+    "con-058": {
+      "ungated_hybrid_rank": 1,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-059": {
+      "ungated_hybrid_rank": 7,
+      "gated_hybrid_rank": 4,
+      "vector_rank": 4
+    },
+    "con-060": {
+      "ungated_hybrid_rank": 2,
+      "gated_hybrid_rank": 2,
+      "vector_rank": 2
+    },
+    "con-061": {
+      "ungated_hybrid_rank": 4,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-062": {
+      "ungated_hybrid_rank": 1,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-063": {
+      "ungated_hybrid_rank": null,
+      "gated_hybrid_rank": 4,
+      "vector_rank": 4
+    },
+    "con-064": {
+      "ungated_hybrid_rank": null,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-065": {
+      "ungated_hybrid_rank": 6,
+      "gated_hybrid_rank": 2,
+      "vector_rank": 2
+    },
+    "con-066": {
+      "ungated_hybrid_rank": 5,
+      "gated_hybrid_rank": 5,
+      "vector_rank": 5
+    },
+    "con-067": {
+      "ungated_hybrid_rank": null,
+      "gated_hybrid_rank": 5,
+      "vector_rank": 5
+    },
+    "con-068": {
+      "ungated_hybrid_rank": 1,
+      "gated_hybrid_rank": 2,
+      "vector_rank": 2
+    },
+    "con-069": {
+      "ungated_hybrid_rank": 1,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-070": {
+      "ungated_hybrid_rank": null,
+      "gated_hybrid_rank": 2,
+      "vector_rank": 2
+    },
+    "con-071": {
+      "ungated_hybrid_rank": null,
+      "gated_hybrid_rank": null,
+      "vector_rank": null
+    },
+    "con-072": {
+      "ungated_hybrid_rank": 2,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-073": {
+      "ungated_hybrid_rank": 1,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-074": {
+      "ungated_hybrid_rank": 2,
+      "gated_hybrid_rank": 4,
+      "vector_rank": 4
+    },
+    "con-075": {
+      "ungated_hybrid_rank": null,
+      "gated_hybrid_rank": 3,
+      "vector_rank": 3
+    },
+    "con-076": {
+      "ungated_hybrid_rank": 2,
+      "gated_hybrid_rank": 2,
+      "vector_rank": 2
+    },
+    "con-077": {
+      "ungated_hybrid_rank": null,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-078": {
+      "ungated_hybrid_rank": 6,
+      "gated_hybrid_rank": 2,
+      "vector_rank": 2
+    },
+    "con-079": {
+      "ungated_hybrid_rank": 1,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-080": {
+      "ungated_hybrid_rank": null,
+      "gated_hybrid_rank": 5,
+      "vector_rank": 5
+    },
+    "con-081": {
+      "ungated_hybrid_rank": 3,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-082": {
+      "ungated_hybrid_rank": 1,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-083": {
+      "ungated_hybrid_rank": 1,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-084": {
+      "ungated_hybrid_rank": 1,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 7
+    },
+    "con-085": {
+      "ungated_hybrid_rank": 2,
+      "gated_hybrid_rank": 2,
+      "vector_rank": 1
+    },
+    "con-086": {
+      "ungated_hybrid_rank": 4,
+      "gated_hybrid_rank": 4,
+      "vector_rank": 2
+    },
+    "con-087": {
+      "ungated_hybrid_rank": 4,
+      "gated_hybrid_rank": 4,
+      "vector_rank": 4
+    },
+    "con-088": {
+      "ungated_hybrid_rank": 2,
+      "gated_hybrid_rank": 3,
+      "vector_rank": 3
+    },
+    "con-089": {
+      "ungated_hybrid_rank": 5,
+      "gated_hybrid_rank": 3,
+      "vector_rank": 3
+    },
+    "con-090": {
+      "ungated_hybrid_rank": 8,
+      "gated_hybrid_rank": 7,
+      "vector_rank": 7
+    },
+    "con-091": {
+      "ungated_hybrid_rank": 2,
+      "gated_hybrid_rank": 3,
+      "vector_rank": 3
+    },
+    "con-092": {
+      "ungated_hybrid_rank": 7,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-093": {
+      "ungated_hybrid_rank": null,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-094": {
+      "ungated_hybrid_rank": 5,
+      "gated_hybrid_rank": null,
+      "vector_rank": null
+    },
+    "con-095": {
+      "ungated_hybrid_rank": 1,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-096": {
+      "ungated_hybrid_rank": null,
+      "gated_hybrid_rank": 6,
+      "vector_rank": 6
+    },
+    "con-097": {
+      "ungated_hybrid_rank": 3,
+      "gated_hybrid_rank": 2,
+      "vector_rank": 2
+    },
+    "con-098": {
+      "ungated_hybrid_rank": 3,
+      "gated_hybrid_rank": 3,
+      "vector_rank": 3
+    },
+    "con-099": {
+      "ungated_hybrid_rank": 1,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-100": {
+      "ungated_hybrid_rank": null,
+      "gated_hybrid_rank": 2,
+      "vector_rank": 2
+    },
+    "con-101": {
+      "ungated_hybrid_rank": null,
+      "gated_hybrid_rank": 2,
+      "vector_rank": 2
+    },
+    "con-102": {
+      "ungated_hybrid_rank": null,
+      "gated_hybrid_rank": null,
+      "vector_rank": null
+    },
+    "con-103": {
+      "ungated_hybrid_rank": 1,
+      "gated_hybrid_rank": 3,
+      "vector_rank": 3
+    },
+    "con-104": {
+      "ungated_hybrid_rank": 5,
+      "gated_hybrid_rank": 8,
+      "vector_rank": 8
+    },
+    "con-105": {
+      "ungated_hybrid_rank": 5,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-106": {
+      "ungated_hybrid_rank": 6,
+      "gated_hybrid_rank": null,
+      "vector_rank": null
+    },
+    "con-107": {
+      "ungated_hybrid_rank": null,
+      "gated_hybrid_rank": null,
+      "vector_rank": null
+    },
+    "con-108": {
+      "ungated_hybrid_rank": null,
+      "gated_hybrid_rank": null,
+      "vector_rank": null
+    },
+    "con-109": {
+      "ungated_hybrid_rank": 3,
+      "gated_hybrid_rank": 7,
+      "vector_rank": 7
+    },
+    "con-110": {
+      "ungated_hybrid_rank": 2,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-111": {
+      "ungated_hybrid_rank": 4,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-112": {
+      "ungated_hybrid_rank": 1,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-113": {
+      "ungated_hybrid_rank": 1,
+      "gated_hybrid_rank": 2,
+      "vector_rank": 2
+    },
+    "con-114": {
+      "ungated_hybrid_rank": 1,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-115": {
+      "ungated_hybrid_rank": 2,
+      "gated_hybrid_rank": 2,
+      "vector_rank": 2
+    },
+    "con-116": {
+      "ungated_hybrid_rank": 1,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-117": {
+      "ungated_hybrid_rank": 1,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-118": {
+      "ungated_hybrid_rank": 3,
+      "gated_hybrid_rank": 5,
+      "vector_rank": 5
+    },
+    "con-119": {
+      "ungated_hybrid_rank": 1,
+      "gated_hybrid_rank": 1,
+      "vector_rank": 1
+    },
+    "con-120": {
+      "ungated_hybrid_rank": null,
+      "gated_hybrid_rank": 3,
+      "vector_rank": 3
+    }
+  }
+}

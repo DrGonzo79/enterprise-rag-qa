@@ -61,4 +61,18 @@ def max_concurrent_queries(
     return max(1, (pool_size + max_overflow - RESERVED) // CONNECTIONS_PER_QUERY)
 
 
-MAX_CONCURRENT_QUERIES = max_concurrent_queries()
+DERIVED_MAX_CONCURRENT_QUERIES = max_concurrent_queries()
+
+# **HELD AT 4 pending KD-10's successor** (2026-08-05, owner decision). The
+# derivation is correct and now yields 8; what vanished in the same commit that
+# produced it is the *reason* the number protects anything. Deleting the second
+# branch removed the deadlock this bound was built for, so the bound is a
+# load-shedding bound whose objective has not been chosen: the permit is
+# currently held across connection contention, provider concurrency, and
+# user-visible latency, and is justified by none of the three.
+#
+# Shipping 8 would be shipping correct arithmetic with an absent reason. Holding
+# at 4 changes nothing about behaviour today (both admit far more concurrency
+# than a 358-chunk demo sees) and keeps the decision open.
+HOLD_PENDING_KD10_SUCCESSOR = 4
+MAX_CONCURRENT_QUERIES = min(DERIVED_MAX_CONCURRENT_QUERIES, HOLD_PENDING_KD10_SUCCESSOR)

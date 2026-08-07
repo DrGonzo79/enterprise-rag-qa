@@ -55,6 +55,21 @@ Three obligations shape the design:
 - **But the permit is now held across a phase that holds no connection.** The semaphore is acquired before the embedding round-trip (KD-10 amendment 5) and released after the response. Embedding is p50 170 ms / p95 843 ms; retrieval is **~13 ms**. So a permit is held for ~200 ms while a connection is held for ~13 ms of it — the bound gates roughly **6 % of what it is bounding**. Under the old two-branch design the connection was held across both branches concurrently and the ratio was far tighter.
 - **8 permits against 8 non-reserved connections is therefore very conservative**: at any instant the expected number of query connections in use is closer to 0.5 than to 8.
 
+**The slack claim, checked and REFUTED — and refuted in the direction that favours the change.** The suspicion was that 8 permits against 8 non-reserved connections leaves the budget refresh nothing, where 4 left room. The pool math says otherwise:
+
+| Divisor | `MAX_CONCURRENT_QUERIES` | Peak query connections | Slack after `RESERVED` |
+|---:|---:|---:|---:|
+| 2 (before) | 4 | 4 × 2 = **8** | **0** |
+| 1 (now) | 8 | 8 × 1 = **8** | **0** |
+
+**The formula `(pool + overflow − RESERVED) // CONNECTIONS_PER_QUERY` is constructed so that peak query demand exactly consumes the non-reserved capacity, at any divisor.** The budget refresh has had zero guaranteed slack since the first amendment in this project; the divisor change neither created nor removed it.
+
+**What *did* change is how hard the worst case is to reach.** Consuming all 8 non-reserved connections used to require **4** queries simultaneously inside their ~13 ms retrieval window; it now requires **8**. At the same arrival rate, 8 coinciding is strictly less likely than 4. So the change makes budget-refresh starvation *less* likely, not more.
+
+**The underlying concern is real and unaddressed at both divisors**, which is the part worth carrying into the successor: nothing guarantees the budget refresh a connection, and it is outside `RESERVED_CONNECTIONS` deliberately (single-checkout, once per TTL per replica, cannot deadlock). **The successor KD should say how many connections stay unclaimable by the serving path and why** — the honest answer today is "two, and the budget refresh is not one of them."
+
+**Held at 4 in the meantime** *(2026-08-05, owner decision)*. The derivation is correct and yields 8; what vanished in the same commit is the reason the number protects anything. `DERIVED_MAX_CONCURRENT_QUERIES` records the derivation, `MAX_CONCURRENT_QUERIES` ships the hold, and both are asserted separately so the hold cannot silently mask a change in the arithmetic.
+
 **What this does not settle, and why it stops at Proposed.** The right number depends on what the bound is *for* once it is not preventing deadlock — shedding early to keep tail latency honest is a different objective from protecting the pool, and it may want a *smaller* number rather than a larger one. That is a decision about the product's failure behaviour under load, not a mechanical consequence of the divisor changing, so it is written here and left for the owner.
 
 ### Modules

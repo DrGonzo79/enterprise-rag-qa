@@ -195,25 +195,25 @@ async def corpus_retriever():  # type: ignore[no-untyped-def]
     await engine.dispose()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "SPEC-004 AC-6, red by a known and owner-accepted defect in this repository, "
-        "not by an external change. The OR fallback (AC-12 amendment 5) made the "
-        "full-text branch fire on every query, and RRF is blind to branch "
-        "confidence: a fallback candidate at full-text rank 1 scores 1/61, which "
-        "outranks every vector candidate except rank 1. Measured 2026-08-02, hybrid "
-        "recall@1 on citation queries fell 0.929 -> 0.714 against an unchanged "
-        "vector-only 0.857, with 8 of 13 top-1 misses traced to that mechanism. "
-        "STRICT so this goes red again the moment it starts passing and nobody "
-        "re-arms the assertion. TRIGGER TO REMOVE: SPEC-007 Key decision 12 settles "
-        "fusion with data, or frequency pruning (AC-12 amendment 6) closes the gap "
-        "on its own -- at which point delete this marker rather than widening it."
-    ),
-)
-async def test_hybrid_beats_vector_only_and_records_the_baseline(
-    corpus_retriever, write_baseline: bool
-) -> None:  # type: ignore[no-untyped-def]
+async def test_dense_retrieval_records_the_baseline(corpus_retriever, write_baseline: bool) -> None:  # type: ignore[no-untyped-def]
+    """SPEC-004 AC-6 is **retired**, not re-armed (2026-08-05).
+
+    Its trigger fired: SPEC-007 KD-12 settled fusion with data, and the answer
+    was to delete the branch. AC-6 compared hybrid against vector-only, and
+    those two arms are now **identical by construction** — there is one arm.
+    Re-arming the assertion would install a test that cannot fail.
+
+    That makes it CLAUDE.md rule 3's **ninth instance**, and the distinction
+    worth recording is that every previous one was introduced by *how a test was
+    written* — a degenerate fixture, an intermediate object, a single-term
+    query. This one would have been introduced by an **architecture change**
+    underneath a test whose text never moved. The assertion was correct when
+    written, correct when it went red, and would have become vacuous without
+    anybody editing it.
+
+    What survives is the baseline capture, which is what the 120-question set is
+    now for: a regression surface for dense retrieval, `recall@8` = 0.9167.
+    """
     retriever, factory = corpus_retriever
     cases = load_cases()
     assert len(cases) >= 24
@@ -466,22 +466,23 @@ async def test_hybrid_beats_vector_only_and_records_the_baseline(
     print(f"mrr@{K}: {json.dumps(baseline['mrr_at_k'])}")
     print(f"diversity: {json.dumps(baseline['distinct_section_rate'])}")
 
-    # AC-6, asserted where the measurement discriminates (Key decision 10 +
-    # Key decision 12): at k=1 hybrid must beat vector-only on citation-style
-    # queries — the claim hybrid retrieval rests on.
-    assert citation_hybrid_1 > citation_vector_1, (
-        f"hybrid recall@1 on citation-style queries ({citation_hybrid_1:.3f}) did not beat "
-        f"vector-only ({citation_vector_1:.3f}) — the claim hybrid retrieval rests on"
+    # AC-6 IS RETIRED (2026-08-05, SPEC-004 KD-17). It asserted that hybrid
+    # beats vector-only at k=1 on citation queries. There is one arm now, so the
+    # two columns below are identical by construction -- and the run proves it:
+    # citation recall@1 reads 0.857 in both. Re-arming it would install a test
+    # that cannot fail.
+    assert citation_hybrid_1 == citation_vector_1, (
+        "the two columns must now agree exactly; if they diverge, something is "
+        "producing candidates the dense arm did not"
     )
-    # Satisfied but VACUOUS at this corpus size (both 1.000): kept because the
-    # approved AC names it, recorded as vacuous so it is never cited as evidence.
-    assert overall_hybrid_k >= overall_vector_k, (
-        f"hybrid recall@{K} {overall_hybrid_k:.3f} regressed against vector-only "
-        f"{overall_vector_k:.3f}"
+    assert overall_hybrid_k == overall_vector_k
+
+    # What IS asserted is the dense arm against its own recorded baseline: this
+    # set exists as a regression surface now, not as a comparison.
+    assert overall_hybrid_k >= 0.90, (
+        f"dense recall@{K} {overall_hybrid_k:.3f} regressed below the 0.9167 "
+        "recorded on the 120-question confirmatory set"
     )
-    # The paraphrase regression (Key decision 12) is deliberately RECORDED, not
-    # asserted: fixing it means changing the fusion rule, which amends approved
-    # decisions on the strength of 26 questions. SPEC-007 decides with data.
 
 
 async def test_latency_against_the_real_corpus(

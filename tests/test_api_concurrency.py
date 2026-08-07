@@ -12,6 +12,7 @@ from api_harness import READ_KEY, StubRetriever, build_app, client_for
 from conftest import DATABASE_URL, PROBE_QUERY, SeededCorpus, StubQueryEmbedder
 from rag_qa.api.concurrency import (
     CONNECTIONS_PER_QUERY,
+    DERIVED_MAX_CONCURRENT_QUERIES,
     MAX_CONCURRENT_QUERIES,
     QUERY_CONNECTIONS,
     RESERVED,
@@ -29,11 +30,16 @@ QUESTION = {"question": "What applies?"}
 
 def test_bound_is_derived_from_the_pool_constants() -> None:
     """Raising the pool without revisiting this fails here rather than silently
-    reintroducing the deadlock."""
-    assert MAX_CONCURRENT_QUERIES == (POOL_SIZE + POOL_MAX_OVERFLOW - RESERVED) // (
+    reintroducing the deadlock.
+
+    Asserted on the **derived** value, not the shipped one: the shipped value is
+    held below it pending KD-10's successor (2026-08-05), and folding the hold
+    into this assertion would make a temporary decision look like arithmetic.
+    """
+    assert DERIVED_MAX_CONCURRENT_QUERIES == (POOL_SIZE + POOL_MAX_OVERFLOW - RESERVED) // (
         CONNECTIONS_PER_QUERY
     )
-    assert MAX_CONCURRENT_QUERIES == 8  # (5 + 5 - 2) // 2, at today's constants
+    assert DERIVED_MAX_CONCURRENT_QUERIES == 8  # (5 + 5 - 2) // 1, at today's constants
 
 
 def test_reserved_is_an_enumeration_not_a_magic_margin() -> None:
@@ -215,3 +221,22 @@ async def test_semaphore_keeps_in_flight_retrievals_under_the_pool_bound() -> No
 
     assert peak <= MAX_CONCURRENT_QUERIES
     assert peak * CONNECTIONS_PER_QUERY <= POOL_SIZE + POOL_MAX_OVERFLOW - RESERVED
+
+
+def test_the_shipped_bound_is_held_below_the_derived_one() -> None:
+    """The derivation says 8; the service uses 4, and the gap is deliberate.
+
+    **Correct arithmetic with an absent reason is not a number to ship.** The
+    divisor went 2 -> 1 when the second branch was deleted (SPEC-004 KD-17),
+    which is exactly what the enumeration was built to make visible — and the
+    same deletion removed the deadlock the bound existed to prevent. What the
+    bound is *for* is now an open question (SPEC-006 KD-10 amendment 6,
+    Proposed), so the shipped value is pinned until it is answered.
+
+    Asserting both numbers keeps the hold honest: if the derivation changes,
+    this fails and the hold has to be re-examined rather than silently masking
+    it.
+    """
+    assert DERIVED_MAX_CONCURRENT_QUERIES == 8
+    assert MAX_CONCURRENT_QUERIES == 4
+    assert MAX_CONCURRENT_QUERIES <= DERIVED_MAX_CONCURRENT_QUERIES

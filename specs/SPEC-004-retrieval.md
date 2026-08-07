@@ -176,6 +176,30 @@ None. Query embedding reuses `openai` (SPEC-003); everything else is SQLAlchemy 
 
     **What is preserved and why.** `score` is still `1/(60 + rank)` rather than raw cosine similarity: SPEC-006's response contract and SPEC-009's ranking both read it, and neither should change meaning as a side effect of deleting a branch. With one arm it is a monotone function of rank, which is what it already was for any chunk only one arm returned.
 
+    **The upside, stated plainly, because "we removed a branch" and "we removed a branch and recovered a relevance signal" are different sentences.** RRF consumes only *ranks*, which is what made it safe across two incommensurable scales — and what made it discard the dense arm's actual cosine distance on every query. **With one arm there is nothing to reconcile, so a real relevance score is available for the first time.** It is not taken here: `score` remains `1/(60 + rank)` and the change is Key decision 18, Proposed.
+
+    **AC-6 is retired rather than re-armed** — it compared two arms that are now identical by construction, and re-arming it would install a test that cannot fail. Filed as CLAUDE.md rule 3's ninth instance, the first introduced by an architecture change rather than by how a test was written.
+
+18. **PROPOSED, NOT APPLIED — expose cosine similarity as `score`** *(2026-08-05, raised in the deletion's review)*.
+
+    **What is wrong with the current field.** `score` is `1/(60 + rank)`, preserved unchanged through the deletion because SPEC-006's response contract and SPEC-009's ranking both read it and a contract should not move as a side effect. But it is now a **monotone function of rank in a field clients read as confidence**: rank 1 always scores 0.0164, rank 8 always 0.0147, on every query, whether the top hit is a near-exact match or the least-bad chunk in a corpus that does not contain the answer. **It carries no information the ordering does not already carry.**
+
+    **What is available.** The dense arm computes a real cosine distance per candidate and throws it away. `score = 1 - cosine_distance` is a genuine relevance signal, comparable *across* queries, and it is exactly what RRF was discarding by design — rank-only fusion existed to avoid mixing cosine distance with `ts_rank_cd`, and there is no `ts_rank_cd` any more.
+
+    **Contract implications, spelled out because this is the part that makes it a decision rather than a patch:**
+
+    | Consumer | Today | Under this change |
+    |---|---|---|
+    | SPEC-006 `/query` response | `score` ∈ [0.0147, 0.0164]; ordering-derived | `score` ∈ [0, 1]; meaningful across queries. **A breaking change in meaning, not in type** — the field stays a float and every client silently reinterprets it. |
+    | SPEC-006 OpenAPI / `contracts/` | Schema unchanged (still `number`) | Schema still unchanged, which is the hazard: **no consumer would be forced to notice.** Needs an explicit `score_kind` discriminator, or a version bump, or both. |
+    | SPEC-009 ranking | Sorts by `score`; equivalent to sorting by rank | Same order (cosine order *is* the dense order), so **rendering is unaffected** — but a confidence bar or a "weak match" threshold becomes possible for the first time, and SPEC-009 has no such element specified. |
+    | SPEC-005 generation | Does not read `score` | Unaffected. **But a threshold on it is the cheapest refusal signal this system could have**, and refusal is currently the generator's judgement alone. |
+    | Eval baselines | `recall@k` and `MRR@k` are rank-based | Unaffected — no recorded figure moves. |
+
+    **The risk that decides it:** a float field whose meaning changes while its type and name do not is the quietest breaking change available. If this is applied, it should be applied *with* a discriminator, and the same commit should say what a "low" score means — because the moment a number is comparable across queries, somebody will threshold it.
+
+    ---
+
     **The embedder identity check moved** from the full-text session to the dense one, and now runs *before* the search rather than concurrently with it — so a mismatched corpus is refused without paying for a search first.
 
     ---

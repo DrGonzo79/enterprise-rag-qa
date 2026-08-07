@@ -5,7 +5,7 @@ the floor constant is precisely the drift this project's claim-sweeps keep
 finding, and the floor is the number every sizing decision hangs off.
 
 `mcnemar_exact_two_sided` takes the split and is called by the pilot only. The
-interim (`scripts/interim_r.py`) never calls it — see SPEC-007 AC-17. Nothing
+interim (`scripts/interim_r.py`) never calls it — see SPEC-007 AC-18. Nothing
 here is what makes the interim blinded; that property belongs to what the
 interim *emits*, not to what it can import.
 

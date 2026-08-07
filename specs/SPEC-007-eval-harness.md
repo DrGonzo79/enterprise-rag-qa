@@ -13,6 +13,14 @@ recall@3 and recall@8 are pinned at 1.000 for both methods, which makes this
 harness **unfalsifiable as scoped**. Corpus expansion is a prerequisite, not an
 enhancement (Key decision 7).
 
+> **WHEREABOUTS AND STATUS — recorded 2026-08-05 after the implementer asserted this spec had "never been written".** It was written on 2026-08-02, it is this file, it has the six sections in order, twelve Key decisions, and acceptance criteria AC-1 through AC-18. The claim was false and it was cheap to check: the file had been edited minutes earlier in the same session.
+>
+> **The real defect is the inverse of the one claimed, and it is worse.** The owner ratified this spec item by item — the KD-11 amendment is marked *"(added 2026-08-02, owner review)"* inside the spec itself, and KD-6 and AC-10 carry their amendments too. **The Status line still reads Draft.** Rule 4 forbids the author from moving it, so it could only ever have been moved by the owner, and it was not. Meanwhile eleven commits of KD-12 work — amendments 1 through 8, three added acceptance criteria, a 120-question confirmatory set, and a branch deletion in SPEC-004 — were implemented against a spec whose state field says nothing in it has been reviewed.
+>
+> **A ratified decision whose canonical home says "Draft" is a defect in its own right**: the record disagrees with itself, and the only place the agreement exists is a conversation. The content is canonical and correctly located; the state is stale.
+>
+> **Second defect, mine, found in the same check: AC-17 was used twice.** One AC-17 was added 2026-08-02 (*a report is reproducible from itself*); I added a second on 2026-08-04 (*the interim sizing look cannot see which arm won*) without checking the list. Renumbered to **AC-18** on 2026-08-05. It stood for three days across roughly a dozen commits, and every test and commit message referring to "AC-17" in the blinding sense was pointing at a number that already meant something else.
+
 **Both amendments this draft proposed are now approved and applied**
 *(2026-08-02)*: `query_log.source` (SPEC-002 migration 0005) and the
 source-scoped daily window (SPEC-006 Key decision 16, amendment 7). The spend
@@ -1556,7 +1564,7 @@ reader who has not opened the repository:
   reason: SPEC-009 binds to this shape, and a consumer reading a stale schema
   fails silently in the direction of rendering nothing.
 
-- **AC-17 (the interim sizing look cannot see which arm won — Key decision 12 amendment 5)** *(added 2026-08-04)* — `scripts/interim_r.py` reduces paired outcomes to `n`, `n_discordant`, `r` and the shape composition, and:
+- **AC-18 (the interim sizing look cannot see which arm won — Key decision 12 amendment 5)** *(added 2026-08-04; **renumbered from a duplicate AC-17 on 2026-08-05**)* — `scripts/interim_r.py` reduces paired outcomes to `n`, `n_discordant`, `r` and the shape composition, and:
   - **The discordance summary is invariant under swapping the arms.** For any input, `summarise(rows) == summarise(mirror(rows))`, asserted on a maximally lopsided case (9 hybrid-only vs 1 vector-only, mirrored to 1 vs 9) so that a leak has something to leak. A summariser that reveals direction through *any* channel — a field, a rounding, an ordering — fails this, which is why it is stated as invariance rather than as a list of forbidden fields.
   - **The published artifact does not determine the split** *(amended 2026-08-04, amendment 6)*. Arm-swap invariance covers `summarise` and **cannot** cover the artifact once it carries a single-arm difficulty proxy, since a single-arm quantity is not invariant under swapping the arms by construction. The artifact-level guarantee is the provable one: `n`, `n_discordant = b + c` and `vector_hits = both + c` are three equations in four unknowns, so `c` is free across its feasible range. Asserted on the instance `(b, c) = (7, 0)` versus `(4, 3)` — same `n`, same discordant case ids, same vector hits, byte-identical output — with a paired sensitivity check showing that adding the hybrid arm's recall separates them at once.
   - **Top-level and per-case keys match an allowlist**, not a denylist: a key the allowlist does not name fails the test whether or not anyone judges it to encode direction. Blinding fails closed or it does not hold.

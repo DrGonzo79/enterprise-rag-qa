@@ -160,6 +160,28 @@ None. Query embedding reuses `openai` (SPEC-003); everything else is SQLAlchemy 
 4. **Identity verified on every `retrieve()` call, not at startup.** **Flagged — arguing against the obvious choice:** a startup check is the obvious, cheaper design. But the ingestion CLI can rewrite the corpus while the API process is running (whole-document replace, SPEC-003 decision 6) — a startup check validates a corpus that may no longer exist. The per-call check is one `SELECT DISTINCT` on an indexed-scan-friendly small table, and it runs inside the `gather` alongside the searches (Branch B, before FTS), so it adds **zero wall-clock latency** in the common case. Mismatch is an exception, never a warning: a warning in a log nobody tails *is* the silent-degradation failure mode.
 5. **Two sessions per call, identity check sharing the FTS session.** `gather` needs ≥ 2 connections (one `AsyncSession` = one connection = sequential). Three parallel sessions would buy ~1 ms on the cheapest query while tripling per-request connection pressure against SPEC-002 decision 8's hard pool bound of 10 per replica; at 2 connections per in-flight retrieve, 5 concurrent retrievals saturate a replica's pool — acceptable for a demo service, and the answering spec inherits this math explicitly.
 6. **`websearch_to_tsquery`, not `to_tsquery`/`plainto_tsquery`.** It never raises on arbitrary user input (`to_tsquery` throws on unbalanced syntax — a user typing `6(2` must not 500), and it preserves quoted-phrase support that `plainto_tsquery` lacks — useful for exact citations.
+7a. **PROPOSED, NOT APPLIED — remove the `id` tie-break from the dense `ORDER BY`** *(2026-08-05, raised unprompted; CLAUDE.md rule 4 stops it at Proposed)*.
+
+    **The finding: no query in this repository has ever used the HNSW index.** `vector_search` orders by `(distance, Chunk.id)`; the statement this spec specifies at Key decision 7 and in the Interface is `ORDER BY c.embedding <=> :qvec LIMIT 50`, with **no tie-break**. An HNSW index can satisfy an ordering by the distance operator alone, so **a second sort key makes it unusable for ordering** and the planner falls back to scanning and sorting. Proved by EXPLAIN on the live corpus:
+
+    | Statement | `enable_seqscan` | Plan |
+    |---|---|---|
+    | with `, id` (what runs) | on | `Limit ← Sort ← Seq Scan` |
+    | with `, id` | **off** | `Limit ← Sort ← Seq Scan` |
+    | without `, id` | on | `Limit ← Sort ← Seq Scan` |
+    | without `, id` | **off** | **`Limit ← Index Scan[ix_chunks_embedding_hnsw]`** |
+
+    The tie-break is the binding cause: with it, the index is unreachable at any planner setting. Corpus size is the second, non-binding one.
+
+    **What this makes false, recorded rather than quietly fixed (rule 7):**
+    - **Key decision 7's justification for `ef_search = 50`** — "the default (40) would silently cap the dense list below the requested `LIMIT`" — is **inoperative**. The GUC is set on a plan that never reads it.
+    - **AC-11 passes and proves the GUC is in effect, not that anything consults it.** It asserts `SHOW hnsw.ef_search` reads 50 inside the branch transaction. That is true and it is a statement about a session variable, not about the index. **Rule 3's family: an assertion true for a reason unrelated to the behaviour it names.** The fix is not to delete AC-11 but to add the assertion nobody wrote — that the dense plan uses the index — and it cannot be added until the tie-break goes.
+    - **The Interface section's dense query and the implementation have diverged since the tie-break was added**, without the spec update rule 5 requires. Recorded here as the divergence it is.
+
+    **What it does *not* make false, stated because the temptation is to over-correct:** retrieval today is **exact**. Every candidate is scanned and ordered, so `recall@8` is not depressed by index approximation and results are a deterministic function of their input. The index is unused, not wrong.
+
+    **What removing the tie-break would change:** ordering ties between chunks at identical cosine distance become non-deterministic, and dense results become **approximate** — which is what an ANN index is for, and what every recall figure measured to date would then stop being comparable to. That is a retrieval-behaviour change with a measurement consequence, so it is Proposed and stops here.
+
 7. **`CANDIDATE_POOL = 50` per list, `ef_search` raised to match.** Deep enough that RRF can promote a chunk ranked ~40th in one list and unranked in the other; shallow enough that both queries stay ms-scale on a corpus of a few thousand chunks. `SET LOCAL hnsw.ef_search = 50` because the default (40) would silently cap the dense list below the requested `LIMIT`.
 8. **Retrieval constants are module constants, not `IngestConfig`-style config.** Chunking parameters went into a frozen config because they feed `content_hash`; retrieval parameters affect no stored state and have no idempotency interaction. They become tunable (and worth a config object) exactly when SPEC-007 can measure a change — promoting them earlier just multiplies untested code paths.
 9. **No relevance threshold in `retrieve()` — flagged, arguing against the obvious choice.** Refusal is a charter-level scored capability, so the obvious move is a min-score cutoff here ("if the best score is weak, return nothing"). Argued down: RRF scores are rank-derived and bounded (max ≈ 2/61) — they encode *agreement between lists*, not calibrated relevance, and any threshold picked now would be a guess that SPEC-007 immediately invalidates. `retrieve()` always returns its best k with scores and per-list ranks exposed; the refusal decision belongs to the generation/eval layer, made against measured score distributions.

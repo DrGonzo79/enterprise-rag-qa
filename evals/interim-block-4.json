@@ -1,5 +1,5 @@
 {
-  "interim_id": "confirmatory-block-1",
+  "interim_id": "confirmatory-block-4",
   "measured_at": "2026-08-07",
   "git_sha": "5acf3402d42f04da9ea0690c040276b51f41177d",
   "corpus_chunks": 358,
@@ -32,18 +32,18 @@
   },
   "difficulty": {
     "arm": "vector-only",
-    "recall_at_8": 0.9,
-    "mrr_at_8": 0.6511,
+    "recall_at_8": 0.8333,
+    "mrr_at_8": 0.5489,
     "gold_rank_histogram": {
-      "1": 15,
-      "2": 6,
-      "3": 3,
+      "1": 12,
+      "2": 5,
+      "3": 4,
       "4": 0,
       "5": 1,
-      "6": 2,
-      "7": 0,
-      "8": 0,
-      "miss": 3
+      "6": 1,
+      "7": 1,
+      "8": 1,
+      "miss": 5
     }
   },
   "difficulty_band": {
@@ -60,8 +60,8 @@
     "n_discordant": 7,
     "r": 0.2333,
     "shape_composition": {
-      "citation-anchored": 5,
-      "cross-section": 4,
+      "citation-anchored": 4,
+      "cross-section": 5,
       "natural-language": 21
     }
   },
@@ -93,157 +93,224 @@
       "power_0.8": 55
     }
   },
-  "cumulative": null,
+  "cumulative": {
+    "blocks": [
+      "confirmatory-block-1",
+      "confirmatory-block-2",
+      "confirmatory-block-3",
+      "confirmatory-block-4"
+    ],
+    "per_block_n": [
+      30,
+      30,
+      30,
+      30
+    ],
+    "per_block_n_discordant": [
+      7,
+      2,
+      7,
+      7
+    ],
+    "per_block_mrr_at_8": [
+      0.6511,
+      0.7434,
+      0.5879,
+      0.5489
+    ],
+    "n": 120,
+    "n_discordant": 23,
+    "r": 0.1917,
+    "sizing": {
+      "theta_assumed": 0.8,
+      "required_discordant": {
+        "floor": 6,
+        "power_0.5": 15,
+        "power_0.8": 23
+      },
+      "r_point": 0.1917,
+      "r_ci95": [
+        0.1256,
+        0.2736
+      ],
+      "N_at_r_point": {
+        "floor": 32,
+        "power_0.5": 79,
+        "power_0.8": 120
+      },
+      "N_at_r_ci_low": {
+        "floor": 48,
+        "power_0.5": 120,
+        "power_0.8": 184
+      },
+      "N_at_r_ci_high": {
+        "floor": 22,
+        "power_0.5": 55,
+        "power_0.8": 85
+      }
+    },
+    "stopping_rule": {
+      "target_discordant": 23,
+      "n_cap": 200,
+      "n_so_far": 120,
+      "n_discordant_so_far": 23,
+      "discordant_remaining": 0,
+      "expected_questions_remaining": 0,
+      "questions_remaining_to_cap": 80,
+      "verdict": "STOP: 23 >= 23 discordant pairs at N = 120"
+    },
+    "deviation": "Amendment 5 pre-committed ONE interim look, at 30. This is look 4, owner-asked. Recorded under AC-14. Blinding is unchanged and so is the Type I argument; what is spent is the negotiation risk the one-look rule was reserving."
+  },
   "per_case": [
     {
-      "id": "con-001",
+      "id": "con-091",
       "shape": "natural-language",
       "discordant": false
     },
     {
-      "id": "con-002",
+      "id": "con-092",
       "shape": "natural-language",
       "discordant": false
     },
     {
-      "id": "con-003",
-      "shape": "natural-language",
-      "discordant": false
-    },
-    {
-      "id": "con-004",
+      "id": "con-093",
       "shape": "natural-language",
       "discordant": true
     },
     {
-      "id": "con-005",
-      "shape": "natural-language",
-      "discordant": false
-    },
-    {
-      "id": "con-006",
+      "id": "con-094",
       "shape": "natural-language",
       "discordant": true
     },
     {
-      "id": "con-007",
+      "id": "con-095",
       "shape": "natural-language",
       "discordant": false
     },
     {
-      "id": "con-008",
-      "shape": "natural-language",
-      "discordant": false
-    },
-    {
-      "id": "con-009",
+      "id": "con-096",
       "shape": "natural-language",
       "discordant": true
     },
     {
-      "id": "con-010",
+      "id": "con-097",
+      "shape": "natural-language",
+      "discordant": false
+    },
+    {
+      "id": "con-098",
+      "shape": "natural-language",
+      "discordant": false
+    },
+    {
+      "id": "con-099",
+      "shape": "natural-language",
+      "discordant": false
+    },
+    {
+      "id": "con-100",
       "shape": "natural-language",
       "discordant": true
     },
     {
-      "id": "con-011",
+      "id": "con-101",
       "shape": "natural-language",
       "discordant": true
     },
     {
-      "id": "con-012",
+      "id": "con-102",
       "shape": "natural-language",
       "discordant": false
     },
     {
-      "id": "con-013",
+      "id": "con-103",
       "shape": "natural-language",
       "discordant": false
     },
     {
-      "id": "con-014",
+      "id": "con-104",
       "shape": "natural-language",
       "discordant": false
     },
     {
-      "id": "con-015",
+      "id": "con-105",
       "shape": "natural-language",
       "discordant": false
     },
     {
-      "id": "con-016",
-      "shape": "natural-language",
-      "discordant": false
-    },
-    {
-      "id": "con-017",
-      "shape": "natural-language",
-      "discordant": false
-    },
-    {
-      "id": "con-018",
-      "shape": "natural-language",
-      "discordant": false
-    },
-    {
-      "id": "con-019",
+      "id": "con-106",
       "shape": "natural-language",
       "discordant": true
     },
     {
-      "id": "con-020",
+      "id": "con-107",
       "shape": "natural-language",
       "discordant": false
     },
     {
-      "id": "con-021",
+      "id": "con-108",
       "shape": "natural-language",
       "discordant": false
     },
     {
-      "id": "con-022",
+      "id": "con-109",
+      "shape": "natural-language",
+      "discordant": false
+    },
+    {
+      "id": "con-110",
+      "shape": "natural-language",
+      "discordant": false
+    },
+    {
+      "id": "con-111",
+      "shape": "natural-language",
+      "discordant": false
+    },
+    {
+      "id": "con-112",
       "shape": "citation-anchored",
       "discordant": false
     },
     {
-      "id": "con-023",
+      "id": "con-113",
       "shape": "citation-anchored",
       "discordant": false
     },
     {
-      "id": "con-024",
-      "shape": "citation-anchored",
-      "discordant": true
-    },
-    {
-      "id": "con-025",
+      "id": "con-114",
       "shape": "citation-anchored",
       "discordant": false
     },
     {
-      "id": "con-026",
+      "id": "con-115",
       "shape": "citation-anchored",
       "discordant": false
     },
     {
-      "id": "con-027",
+      "id": "con-116",
       "shape": "cross-section",
       "discordant": false
     },
     {
-      "id": "con-028",
+      "id": "con-117",
       "shape": "cross-section",
       "discordant": false
     },
     {
-      "id": "con-029",
+      "id": "con-118",
       "shape": "cross-section",
       "discordant": false
     },
     {
-      "id": "con-030",
+      "id": "con-119",
       "shape": "cross-section",
       "discordant": false
+    },
+    {
+      "id": "con-120",
+      "shape": "cross-section",
+      "discordant": true
     }
   ],
   "blinding_note": "b and c are never computed on this path (SPEC-007 AC-17). Per-case records carry only id, shape and discordance, so the split cannot be reconstructed from this artifact; the measured ranks were discarded and the confirmatory run re-measures from scratch.",

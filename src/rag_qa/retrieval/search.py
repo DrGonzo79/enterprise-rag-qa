@@ -8,6 +8,7 @@ from typing import Any
 from sqlalchemy import (
     ColumnElement,
     Row,
+    Select,
     String,
     cast,
     func,
@@ -101,30 +102,63 @@ def _candidate(row: Row[Any], *, via_fallback: bool = False) -> CandidateRow:
     )
 
 
-async def vector_search(
-    session: AsyncSession,
+def vector_stmt(
     query_vector: list[float],
     filters: RetrievalFilters | None = None,
     pool: int = CANDIDATE_POOL,
-) -> list[CandidateRow]:
-    """Dense search over the HNSW index, cosine distance.
+) -> Select[Any]:
+    """The dense statement, exposed so it can be EXPLAINed rather than guessed at.
 
-    hnsw.ef_search is a session GUC and connections are pooled/recycled, so it
-    is applied with SET LOCAL in the same transaction as the search on every
-    call — it reverts at commit/rollback and can never leak across the pool
-    (review amendment 1). Raised from the default 40 to the pool size so the
-    index can actually return `pool` candidates.
+    Pure extraction from `vector_search` (2026-08-05), no behaviour change: the
+    eval scripts need to record *which plan actually ran*, and reconstructing the
+    query in a second place is a second chance to differ from it — which is how
+    the situation below went unnoticed for four specs.
+
+    **`.order_by(distance, Chunk.id)` is not the statement SPEC-004 specifies**,
+    which is `ORDER BY c.embedding <=> :qvec LIMIT 50` with no tie-break, and the
+    difference is load-bearing: an HNSW index can order by the distance operator
+    alone, so **adding a second sort key makes the index unusable for ordering**
+    and the planner falls back to a sequential scan and an explicit sort. Proved
+    by EXPLAIN — with the tie-break, `enable_seqscan = off` still yields
+    `Limit <- Sort <- Seq Scan`; without it, the same setting yields
+    `Limit <- Index Scan[ix_chunks_embedding_hnsw]`.
+
+    The tie-break is left in place. Removing it changes retrieval behaviour and
+    is **Proposed, not applied** (SPEC-004 KD-7 amendment 1, CLAUDE.md rule 4).
     """
-    await session.execute(text(f"SET LOCAL hnsw.ef_search = {int(pool)}"))
     distance = Chunk.embedding.cosine_distance(query_vector)
-    stmt = (
+    return (
         select(*_COLUMNS)
         .join(Document, Chunk.document_id == Document.id)
         .where(*_filter_conditions(filters))
         .order_by(distance, Chunk.id)
         .limit(pool)
     )
-    result = await session.execute(stmt)
+
+
+async def vector_search(
+    session: AsyncSession,
+    query_vector: list[float],
+    filters: RetrievalFilters | None = None,
+    pool: int = CANDIDATE_POOL,
+) -> list[CandidateRow]:
+    """Dense search, cosine distance. **Exact today, not approximate.**
+
+    hnsw.ef_search is a session GUC and connections are pooled/recycled, so it
+    is applied with SET LOCAL in the same transaction as the search on every
+    call — it reverts at commit/rollback and can never leak across the pool
+    (review amendment 1).
+
+    ~~Raised from the default 40 to the pool size so the index can actually
+    return `pool` candidates.~~ **That justification is inoperative and is struck
+    rather than deleted** (2026-08-05): the GUC is set on a plan that never
+    reads it, because no query here reaches the HNSW index — see `vector_stmt`.
+    The `SET LOCAL` stays because it costs nothing and becomes load-bearing the
+    moment the tie-break is removed; SPEC-004 AC-11, which asserts the GUC is in
+    effect, passes and says nothing about whether any index consults it.
+    """
+    await session.execute(text(f"SET LOCAL hnsw.ef_search = {int(pool)}"))
+    result = await session.execute(vector_stmt(query_vector, filters, pool))
     return [_candidate(row) for row in result.all()]
 
 

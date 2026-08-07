@@ -1235,6 +1235,64 @@ reader who has not opened the repository:
 
     ---
 
+    #### Block 4, the query plan finding, and the stopping rule firing — measured 2026-08-05, artifact `evals/interim-block-4.json`
+
+    ##### The 0.0011 discrepancy: my mechanism was wrong, and the check found something larger
+
+    The candidate mechanism on record was *HNSW is approximate, and the planner sometimes picks it*. **It is false.** EXPLAIN on the live corpus shows the HNSW index is in **no** plan and never has been, because `vector_search` orders by `(distance, id)` and an HNSW index can only order by the distance operator alone. Details and the four-way EXPLAIN table are in SPEC-004 Key decision 7a; what matters here is what it does to the three consequences drawn from the hypothesis:
+
+    | Consequence, as reasoned from the hypothesis | Status |
+    |---|---|
+    | "It worsens with corpus size, since plan choice depends on statistics and table size" | **Inverted.** While the tie-break stands the index is unreachable at *any* size or planner setting. The ladder would not have made it worse. |
+    | "Some fraction of any `recall@8` miss is an index artifact" | **Does not apply today.** Retrieval is exact — every candidate scanned and ordered — so no miss is an index artifact. It becomes live the moment the tie-break is removed. |
+    | "AC-17's discard-and-re-measure assumes re-measuring returns the same answer" | **Stands, and is now better supported.** An exact plan is a deterministic function of its input; embeddings were checked and are bit-identical. |
+
+    **The reasoning was right and the premise was mine and wrong.** Recording that in this direction rather than as "the concern was overstated": a false premise that survives because the inference from it is sound is exactly the shape rule 7's reviewer-side twin describes.
+
+    ##### The plan is now pinned, recorded per run, and asserted
+
+    `enable_seqscan = off` on eval connections, the observed plan written into every artifact, and `tests/test_scoring_invariants.py` asserts every committed artifact ran **exact** with the HNSW index unused — so a flip fails loudly instead of the numbers quietly changing meaning.
+
+    **What pinning actually did, since it is not what it was meant to do.** It cannot force the index while the tie-break stands. It *does* change the join plan: `Limit ← Sort ← Seq Scan` under defaults, `Limit ← Sort ← Nested Loop ← Index Scan[uq_chunks_document_id_ordinal]` pinned. **Both are exact, and both produce identical results** — blocks 1–3 re-measured under the pin reproduce to the digit, including block 2's `MRR@8`.
+
+    **So the exact answer is 0.7434, and 0.7423 was the anomaly.** It remains unexplained. Six runs of block 2 now agree; one did not; the mechanism proposed for it is ruled out and no replacement is offered.
+
+    **`methodology.limitations` entry, verbatim for the report:** *"Eval and interim runs pin `enable_seqscan = off`; the API does not. Today both settings yield an exact plan and identical results — verified by re-measuring three blocks under each — so the measured numbers characterise the configuration the demo runs in. This stops being true if the dense `ORDER BY` tie-break is ever removed (SPEC-004 KD-7a), at which point the pinned configuration would use an approximate index and the unpinned one might not."* **The limitation is currently non-binding and is recorded anyway, because the thing that makes it binding is a one-line change.**
+
+    ##### Block 4
+
+    30 questions, composition 21 / 4 / 5 as committed. **A third straddling gold label was caught before any embedding was billed** — `con-082`'s `Annex Xi` matching `Annex Xii`/`Annex Xiii` in block 3, and in block 4 the same trap for `Annex Ii` (matches `Annex Iii`) and `Annex V` (matches `Annex Vii`, `Annex Viii`), all written in their full form from the start. **Three instances in 120 questions.** The guard also found a live instance of the same bug in `tests/test_ingest_loaders.py`, where `startswith("Article 1")` selected Article 1 only because Article 1 happens to come first in document order.
+
+    | | b1 | b2 | b3 | **b4** | Cumulative |
+    |---|---:|---:|---:|---:|---:|
+    | `n_discordant` | 7 | 2 | 7 | **7** | **23 / 120** |
+    | vector-only `recall@8` | 0.9000 | 0.9667 | 0.9667 | **0.8333** | — |
+    | vector-only **`MRR@8`** | 0.6511 | 0.7434 | 0.5879 | **0.5489** | — |
+
+    **Block 4 is the hardest block on both single-arm measures**, and its `MRR@8` is −0.1022 from the reference — the largest deviation so far, still inside ±0.19.
+
+    **The drift direction is now worth flagging, and the band is not what flags it.** Excluding block 2, the proxy falls monotonically: 0.6511 → 0.5879 → 0.5489. Spearman on block index against `MRR@8` over all four blocks is **ρ = −0.8 (n = 4, p ≈ 0.33)** — descriptive, not significant, and unable to be significant at four points. **This is the direction amendment 6 predicted** (an author getting better at writing discriminating questions), and the band's failure to fire is not evidence against it: amendment 6 stated in advance that 30 per block catches a step change and is close to blind to a slope. **Two instruments, one of which was designed knowing it could not see this.** It goes to `methodology.limitations`, not to a deviation.
+
+    ##### The stopping rule has fired
+
+    | | Value |
+    |---|---:|
+    | Discordant pairs | **23 of 23** |
+    | `n` | **120** |
+    | `r` | 0.1917 |
+    | Questions remaining | **0** |
+    | Verdict | **STOP** |
+
+    **Exactly 23, with no overshoot** — block-boundary evaluation usually overshoots and here it did not. The rule fired at **N = 120 against an expected 165**, because `r` came in at 0.1917 rather than the 0.15 the projection used.
+
+    **The mix holds exactly at N = 120**: 84 natural-language, 18 citation-anchored, 18 cross-section — **70 / 15 / 15 with no residue**, which is the property the block alternation was built for and which would not have held at an arbitrary stopping point.
+
+    **Authoring is complete. Blocks 5–7 are not written.** The cap and the remaining block shapes stay in the pre-registration as the design that was committed, not as work outstanding.
+
+    **The split is still sealed, and unblinding is the owner's call.** Twenty-three pairs disagree across 120 questions; `b` and `c` have never been computed. Running the analysis is the single irreversible step in this arc and it is not taken here.
+
+    ---
+
     #### Pilot-2 results — measured 2026-08-02, artifact `evals/pilot-2.json`
 
     14 questions, unchanged 358-chunk corpus, identical measurement path to pilot-1 (the same script, parameterised — a second copy would have been a second chance to differ from it).

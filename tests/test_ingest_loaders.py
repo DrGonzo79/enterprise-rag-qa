@@ -2,6 +2,9 @@
 counterparts live in test_ingest_real_corpus.py)."""
 
 from pathlib import Path
+from typing import Any
+
+from scripts.section_match import matches_section
 
 from conftest import SYNTH_EDGAR_BYTES, SYNTH_EURLEX, build_synth_pdf
 from rag_qa.ingest.loaders import load_edgar_10k, load_eurlex_html, load_nist_pdf
@@ -52,9 +55,20 @@ def test_eurlex_sections_and_headings(tmp_path: Path) -> None:
     assert "OJ L 97" not in joined
 
 
+def _article_1(doc: ParsedDocument) -> Any:
+    """Article 1, not Article 1x.
+
+    `startswith("Article 1")` also selects `Article 10`, `Article 11` and the
+    rest — it worked here only because Article 1 happens to come first in
+    document order. Same class as the gold-label bug (SPEC-007 KD-12,
+    2026-08-04), found by the guard that was written for it.
+    """
+    return next(s for s in doc.sections if matches_section("Article 1", s.heading_path[-1]))
+
+
 def test_eurlex_layout_table_linearized_not_duplicated(tmp_path: Path) -> None:
     doc = _eurlex(tmp_path)
-    art1 = next(s for s in doc.sections if s.heading_path[-1].startswith("Article 1"))
+    art1 = _article_1(doc)
     # Point rows read as "(a) <text>" lines, present exactly once.
     assert art1.text.count("(a) rules amending Regulations") == 1
     assert "Article 6(2)" in art1.text
@@ -65,7 +79,7 @@ def test_eurlex_never_drops_tables(tmp_path: Path) -> None:
     threshold, yet the EUR-Lex loader must keep it and report zero drops."""
     doc = _eurlex(tmp_path)
     assert doc.dropped_tables == ()
-    art1 = next(s for s in doc.sections if s.heading_path[-1].startswith("Article 1"))
+    art1 = _article_1(doc)
     assert "No 300/2008" in art1.text
 
 

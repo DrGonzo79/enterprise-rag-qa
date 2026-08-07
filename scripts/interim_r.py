@@ -50,6 +50,7 @@ from scripts.mcnemar import (
     clopper_pearson,
     min_discordant_for_power,
 )
+from scripts.query_plan import EVAL_SERVER_SETTINGS, observed_vector_plan
 from scripts.section_match import matches_section, straddles_a_component
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -333,11 +334,20 @@ async def unresolvable_prefixes(session: Any, cases: list[dict[str, Any]]) -> li
 
 async def measure(
     cases: list[dict[str, Any]],
-) -> tuple[list[dict[str, Any]], int, int, dict[str, Any]]:
-    engine = create_async_engine(CORPUS_URL, pool_size=4, max_overflow=2)
+) -> tuple[list[dict[str, Any]], int, int, dict[str, Any], dict[str, Any]]:
+    engine = create_async_engine(
+        CORPUS_URL,
+        pool_size=4,
+        max_overflow=2,
+        connect_args={"server_settings": EVAL_SERVER_SETTINGS},
+    )
     factory = async_sessionmaker(engine, expire_on_commit=False)
     async with factory() as session:
         chunk_count = (await session.execute(text("SELECT count(*) FROM chunks"))).scalar_one()
+        plan = await observed_vector_plan(session)
+        # BEFORE the embedder is constructed and before any call is billed: a
+        # gold label that names no section, or names one mid-word, is refused
+        # while it is still free to refuse it.
         missing = await unresolvable_prefixes(session, cases)
     if missing:
         await engine.dispose()
@@ -392,7 +402,7 @@ async def measure(
             )
         )
     await engine.dispose()
-    return records, chunk_count, silent_branch, single_arm_difficulty(vector_ranks)
+    return records, chunk_count, silent_branch, single_arm_difficulty(vector_ranks), plan
 
 
 def _rank_of(chunks: list[RetrievedChunk], prefix: str) -> int | None:
@@ -479,7 +489,7 @@ async def run(block: int) -> int:
         print(f"refusing to run: {problem}", file=sys.stderr)
         return 3
 
-    records, chunk_count, silent_branch, difficulty = await measure(cases)
+    records, chunk_count, silent_branch, difficulty, query_plan = await measure(cases)
     summary = summarise(records)
     plan = sizing(int(summary["n_discordant"]), int(summary["n"]))
     breach = drift_breach(float(difficulty["mrr_at_8"]), block)
@@ -490,6 +500,9 @@ async def run(block: int) -> int:
     print(f"  r                            {summary['r']}")
     print(f"  r 95% CI                     {plan['r_ci95']}")
     print(f"  questions with silent FTS    {silent_branch}")
+    print("\n  query plan (recorded, not assumed):")
+    print(f"    nodes                      {' <- '.join(query_plan['nodes'])}")
+    print(f"    exact / HNSW used          {query_plan['exact']} / {query_plan['hnsw_index_used']}")
     print("\n  difficulty proxy (vector-only, single arm):")
     print(f"    recall@8                   {difficulty['recall_at_8']}")
     print(f"    MRR@8                      {difficulty['mrr_at_8']}")
@@ -528,6 +541,7 @@ async def run(block: int) -> int:
         "k": K,
         "blinded": True,
         "questions_with_no_fulltext_candidates": silent_branch,
+        "query_plan": query_plan,
         "difficulty": difficulty,
         "difficulty_band": {
             "reference_block": 1,

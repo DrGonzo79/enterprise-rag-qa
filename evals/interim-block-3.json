@@ -1,11 +1,35 @@
 {
   "interim_id": "confirmatory-block-3",
-  "measured_at": "2026-08-04",
-  "git_sha": "084672423241ea6504b5cb685cda8d9aa619993a",
+  "measured_at": "2026-08-07",
+  "git_sha": "5acf3402d42f04da9ea0690c040276b51f41177d",
   "corpus_chunks": 358,
   "k": 8,
   "blinded": true,
   "questions_with_no_fulltext_candidates": 0,
+  "query_plan": {
+    "nodes": [
+      "Limit",
+      "Sort",
+      "Nested Loop",
+      "Index Scan[uq_chunks_document_id_ordinal]",
+      "Memoize",
+      "Index Scan[documents_pkey]"
+    ],
+    "nodes_under_planner_defaults": [
+      "Limit",
+      "Sort",
+      "Nested Loop",
+      "Seq Scan",
+      "Memoize",
+      "Index Scan[documents_pkey]"
+    ],
+    "exact": true,
+    "hnsw_index_used": false,
+    "hnsw_index_used_under_planner_defaults": false,
+    "plan_differs_from_planner_default": true,
+    "enable_seqscan": "off",
+    "ef_search": "40"
+  },
   "difficulty": {
     "arm": "vector-only",
     "recall_at_8": 0.9667,

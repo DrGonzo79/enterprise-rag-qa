@@ -1,0 +1,1030 @@
+{
+  "measured_at": "2026-08-07",
+  "git_sha": "97a896a3902ddb2c2aa5a33aea19754d3dcc0e8b",
+  "preregistration": "evals/prereg-refusal-nearmiss.md",
+  "complete": true,
+  "generator_identity": "anthropic:claude-sonnet-5",
+  "prompt_version": "v1",
+  "k": 8,
+  "query_plan": {
+    "nodes": [
+      "Limit",
+      "Sort",
+      "Nested Loop",
+      "Index Scan[uq_chunks_document_id_ordinal]",
+      "Memoize",
+      "Index Scan[documents_pkey]"
+    ],
+    "nodes_under_planner_defaults": [
+      "Limit",
+      "Sort",
+      "Nested Loop",
+      "Seq Scan",
+      "Memoize",
+      "Index Scan[documents_pkey]"
+    ],
+    "exact": true,
+    "hnsw_index_used": false,
+    "hnsw_index_used_under_planner_defaults": false,
+    "plan_differs_from_planner_default": true,
+    "enable_seqscan": "off",
+    "ef_search": "40"
+  },
+  "cost_usd": "0.531006",
+  "records": [
+    {
+      "id": "A1a",
+      "arm": "near_miss",
+      "shape": "A1-unstated-threshold",
+      "document": "eu-ai-act",
+      "question": "How often must a provider of a high-risk AI system review and update the quality management system required by the AI Act?",
+      "what_is_absent": "Article 17 lists the QMS elements but fixes no review frequency or period",
+      "verdict": "answered",
+      "refused": false,
+      "answer": "The excerpts do not specify a fixed review frequency for the quality management system itself. Article 17 requires providers to establish a documented quality management system covering compliance strategy, design/development controls, testing, risk management, post-market monitoring, and related procedures [1], and its implementation must be proportionate to the size of the provider's organization while maintaining the required rigor and protection level [1]. However, the risk management system referenced within the quality management system (as one of its required aspects [1]) is explicitly described as \"a continuous iterative process planned and run throughout the entire lifecycle of a high-risk AI system, requiring regular systematic review and updating\" [3], and the preamble confirms this system \"should be regularly reviewed and updated to ensure its continuing effectiveness\" [8]. \n\nThe excerpts do not state a specific frequency (e.g., annually, quarterly) for reviewing the quality management system as a whole, only that its risk management component requires \"regular\" review without further quantification [3][8].",
+      "retrieved_section_paths": [
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 3 \u203a Article 17 \u2014 Quality management system",
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 3 \u203a Article 16 \u2014 Obligations of providers of high-risk AI systems",
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 2 \u203a Article 9 \u2014 Risk management system",
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 2 \u203a Article 8 \u2014 Compliance with the requirements",
+        "EU AI Act \u203a Annex Vii \u2014 ANNEX VII",
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 3 \u203a Article 18 \u2014 Documentation keeping \u2013 Article 20 \u2014 Corrective actions and duty of information",
+        "EU AI Act \u203a CHAPTER IX \u203a SECTION 1 \u203a Article 72 \u2014 Post-market monitoring by providers and post-market monitoring plan for high-risk AI systems",
+        "EU AI Act \u203a Preamble \u203a Recital (65) \u2013 Recital (66)"
+      ],
+      "cited_section_paths": [
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 3 \u203a Article 17 \u2014 Quality management system",
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 2 \u203a Article 9 \u2014 Risk management system",
+        "EU AI Act \u203a Preamble \u203a Recital (65) \u2013 Recital (66)"
+      ],
+      "prompt_tokens": 6971,
+      "completion_tokens": 326,
+      "cost_usd": "0.017202",
+      "recovered_from_query_log": true,
+      "adjudicated": "declined",
+      "adjudication_evidence": "\"The excerpts do not specify a fixed review frequency for the quality management system itself.\"",
+      "verdict_agrees_with_body": false
+    },
+    {
+      "id": "A1b",
+      "arm": "near_miss",
+      "shape": "A1-unstated-threshold",
+      "document": "eu-ai-act",
+      "question": "By what percentage are conformity assessment fees reduced for SMEs and start-ups under the AI Act?",
+      "what_is_absent": "Article 62 reduces fees proportionately to development stage and size but states no percentage",
+      "verdict": "answered",
+      "refused": false,
+      "answer": "The AI Act does not specify a fixed percentage reduction. Instead, it requires that fees for conformity assessment under Article 43 be reduced proportionately to the SME's size, market size, and other relevant indicators, with their specific interests and needs taken into account when the fees are set [1]. The preamble similarly states that the specific interests and needs of SME providers should be taken into account when notified bodies set conformity assessment fees, without indicating a set percentage [2].\n\nIf you need an exact percentage figure, the excerpts do not provide one \u2014 they only establish a proportionality principle rather than a fixed rate.",
+      "retrieved_section_paths": [
+        "EU AI Act \u203a CHAPTER VI \u203a Article 61 \u2014 Informed consent to participate in testing in real world conditions outside AI regulatory sandboxes \u2013 Article 62 \u2014 Measures for providers and deployers, in particular SMEs, including start-ups",
+        "EU AI Act \u203a Preamble \u203a Recital (142) \u2013 Recital (143)",
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 5 \u203a Article 43 \u2014 Conformity assessment",
+        "EU AI Act \u203a Preamble \u203a Recital (123) \u2013 Recital (127)",
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 5 \u203a Article 43 \u2014 Conformity assessment",
+        "EU AI Act \u203a CHAPTER XII \u203a Article 99 \u2014 Penalties",
+        "EU AI Act \u203a CHAPTER VI \u203a Article 63 \u2014 Derogations for specific operators",
+        "EU AI Act \u203a CHAPTER VI \u203a Article 58 \u2014 Detailed arrangements for, and functioning of, AI regulatory sandboxes"
+      ],
+      "cited_section_paths": [
+        "EU AI Act \u203a CHAPTER VI \u203a Article 61 \u2014 Informed consent to participate in testing in real world conditions outside AI regulatory sandboxes \u2013 Article 62 \u2014 Measures for providers and deployers, in particular SMEs, including start-ups",
+        "EU AI Act \u203a Preamble \u203a Recital (142) \u2013 Recital (143)"
+      ],
+      "prompt_tokens": 8552,
+      "completion_tokens": 203,
+      "cost_usd": "0.019134",
+      "recovered_from_query_log": true,
+      "adjudicated": "declined",
+      "adjudication_evidence": "\"The AI Act does not specify a fixed percentage reduction.\"",
+      "verdict_agrees_with_body": false
+    },
+    {
+      "id": "A2a",
+      "arm": "near_miss",
+      "shape": "A2-undisclosed-figure",
+      "document": "nvidia-10k",
+      "question": "How many of NVIDIA's employees were located in China at the end of fiscal year 2026?",
+      "what_is_absent": "Human Capital Management gives a total headcount and a country count, no per-country breakdown",
+      "verdict": "answered",
+      "refused": false,
+      "answer": "The excerpts do not break down NVIDIA's employee headcount by country. They report approximately 42,000 total employees across 38 countries [1], but do not specify how many were located in China.\n\nCorrection: Since the excerpts do not actually provide the number of employees in China specifically, the correct verdict is:\n\nINSUFFICIENT_EVIDENCE\nThe excerpts state NVIDIA had approximately 42,000 employees across 38 countries in fiscal year 2026 [1], but they do not provide a country-by-country breakdown, so the number of employees located specifically in China cannot be determined from the given material.",
+      "retrieved_section_paths": [
+        "NVIDIA 10-K FY2026 \u203a Item 1. Business \u203a Human Capital Management",
+        "NVIDIA 10-K FY2026 \u203a Item 15. Exhibits and Financial Statement Schedules \u203a Notes to the Consolidated Financial Statements",
+        "NVIDIA 10-K FY2026 \u203a Item 7. Management's Discussion and Analysis of Financial Condition and Results of Operations \u203a Recent Developments, Future Objectives and Challenges",
+        "NVIDIA 10-K FY2026 \u203a Item 15. Exhibits and Financial Statement Schedules \u203a Note 15 - Employee Retirement Plans \u2013 Notes to the Consolidated Financial Statements",
+        "NVIDIA 10-K FY2026 \u203a Item 1. Business \u203a Our Company",
+        "NVIDIA 10-K FY2026 \u203a Item 1. Business \u203a Data Center",
+        "NVIDIA 10-K FY2026 \u203a Item 7. Management's Discussion and Analysis of Financial Condition and Results of Operations \u203a Concentration of Revenue \u2013 Gross Profit and Gross Margin",
+        "NVIDIA 10-K FY2026 \u203a Item 1. Business \u203a Data Center"
+      ],
+      "cited_section_paths": [
+        "NVIDIA 10-K FY2026 \u203a Item 1. Business \u203a Human Capital Management"
+      ],
+      "prompt_tokens": 8252,
+      "completion_tokens": 205,
+      "cost_usd": "0.018554",
+      "recovered_from_query_log": true,
+      "adjudicated": "declined",
+      "adjudication_evidence": "\"the correct verdict is: INSUFFICIENT_EVIDENCE ... they do not provide a country-by-country breakdown\"",
+      "verdict_agrees_with_body": false
+    },
+    {
+      "id": "A2b",
+      "arm": "near_miss",
+      "shape": "A2-undisclosed-figure",
+      "document": "nvidia-10k",
+      "question": "How much of NVIDIA's fiscal year 2026 research and development expense was attributable to the Blackwell architecture?",
+      "what_is_absent": "R&D is disclosed in total; the filing attributes none of it to a named architecture",
+      "verdict": "answered",
+      "refused": false,
+      "answer": "INSUFFICIENT_EVIDENCE\n\nThe excerpts do not disclose research and development expense broken out by product architecture, nor do they identify any specific R&D amount attributable to Blackwell. Operating expenses for fiscal year 2026 are discussed only in aggregate, described as increasing due to compensation and infrastructure costs [4], and segment \"other segment items\" figures include engineering development costs but are not further attributed to Blackwell specifically [8].",
+      "retrieved_section_paths": [
+        "NVIDIA 10-K FY2026 \u203a Item 1. Business \u203a Data Center",
+        "NVIDIA 10-K FY2026 \u203a Item 7. Management's Discussion and Analysis of Financial Condition and Results of Operations \u203a Recent Developments, Future Objectives and Challenges",
+        "NVIDIA 10-K FY2026 \u203a Item 7. Management's Discussion and Analysis of Financial Condition and Results of Operations \u203a Concentration of Revenue \u2013 Gross Profit and Gross Margin",
+        "NVIDIA 10-K FY2026 \u203a Item 7. Management's Discussion and Analysis of Financial Condition and Results of Operations \u203a Fiscal Year 2026 Summary \u2013 Critical Accounting Estimates",
+        "NVIDIA 10-K FY2026 \u203a Item 7. Management's Discussion and Analysis of Financial Condition and Results of Operations \u203a Revenue by Reportable Segments \u2013 Operating Income by Reportable Segments",
+        "NVIDIA 10-K FY2026 \u203a Item 1. Business \u203a Data Center",
+        "NVIDIA 10-K FY2026 \u203a Item 15. Exhibits and Financial Statement Schedules \u203a Notes to the Consolidated Financial Statements",
+        "NVIDIA 10-K FY2026 \u203a Item 15. Exhibits and Financial Statement Schedules \u203a Note 15 - Employee Retirement Plans \u2013 Notes to the Consolidated Financial Statements"
+      ],
+      "cited_section_paths": [
+        "NVIDIA 10-K FY2026 \u203a Item 7. Management's Discussion and Analysis of Financial Condition and Results of Operations \u203a Fiscal Year 2026 Summary \u2013 Critical Accounting Estimates",
+        "NVIDIA 10-K FY2026 \u203a Item 15. Exhibits and Financial Statement Schedules \u203a Note 15 - Employee Retirement Plans \u2013 Notes to the Consolidated Financial Statements"
+      ],
+      "prompt_tokens": 9160,
+      "completion_tokens": 160,
+      "cost_usd": "0.019920",
+      "recovered_from_query_log": true,
+      "adjudicated": "declined",
+      "adjudication_evidence": "body opens with the literal token: \"INSUFFICIENT_EVIDENCE\\n\\nThe excerpts do not disclose research and development expense broken out by product architecture\"",
+      "verdict_agrees_with_body": false
+    },
+    {
+      "id": "A3a",
+      "arm": "near_miss",
+      "shape": "A3-unnamed-control",
+      "document": "eu-ai-act",
+      "question": "Which encryption standard does the AI Act require providers to use to protect the training data of high-risk AI systems?",
+      "what_is_absent": "Article 15 requires cybersecurity measures appropriate to the risks but names no standard or algorithm",
+      "verdict": "answered",
+      "refused": false,
+      "answer": "The excerpts do not specify any particular encryption standard for protecting training data of high-risk AI systems. Recital (69) mentions encryption only as one example of measures providers \"may\" take to comply with data minimisation and data protection by design principles, without naming or mandating a specific encryption standard [8]. No other excerpt addresses encryption requirements for training data.\n\nBecause no specific encryption standard is identified in the provided material, a definitive answer cannot be given.",
+      "retrieved_section_paths": [
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 2 \u203a Article 15 \u2014 Accuracy, robustness and cybersecurity",
+        "EU AI Act \u203a Annex Xi \u2014 ANNEX XI",
+        "EU AI Act \u203a Preamble \u203a Recital (121) \u2013 Recital (122)",
+        "EU AI Act \u203a CHAPTER V \u203a SECTION 3 \u203a Article 55 \u2014 Obligations of providers of general-purpose AI models with systemic risk",
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 2 \u203a Article 8 \u2014 Compliance with the requirements",
+        "EU AI Act \u203a Preamble \u203a Recital (74) \u2013 Recital (76)",
+        "EU AI Act \u203a Annex Iii \u2014 ANNEX III",
+        "EU AI Act \u203a Preamble \u203a Recital (69) \u2013 Recital (71)"
+      ],
+      "cited_section_paths": [
+        "EU AI Act \u203a Preamble \u203a Recital (69) \u2013 Recital (71)"
+      ],
+      "prompt_tokens": 7411,
+      "completion_tokens": 155,
+      "cost_usd": "0.016372",
+      "recovered_from_query_log": true,
+      "adjudicated": "declined",
+      "adjudication_evidence": "\"The excerpts do not specify any particular encryption standard\"",
+      "verdict_agrees_with_body": false
+    },
+    {
+      "id": "A3b",
+      "arm": "near_miss",
+      "shape": "A3-unnamed-control",
+      "document": "nist-ai-rmf",
+      "question": "Which fairness metric does the NIST AI RMF specify for measuring demographic disparity in model outputs?",
+      "what_is_absent": "the Measure function covers bias and fairness assessment but prescribes no specific metric",
+      "verdict": "answered",
+      "refused": false,
+      "answer": "The excerpts do not identify any specific fairness metric for measuring demographic disparity. They state that fairness is complex and not equivalent to demographic balance or data representativeness alone [1], and that systems with predictions \"somewhat balanced across demographic groups\" may still be unfair for other reasons [1], but no particular metric (e.g., demographic parity, equalized odds, etc.) is named or specified for measuring demographic disparity in model outputs.\n\nMissing: a section defining or naming a specific quantitative fairness metric for demographic disparity.",
+      "retrieved_section_paths": [
+        "NIST AI RMF 1.0 \u203a AI Risks and Trustworthiness \u203a Fair \u2013 with Harmful Bias Managed",
+        "NIST AI RMF 1.0 \u203a AI RMF Core \u203a Measure",
+        "NIST AI RMF 1.0 \u203a Effectiveness of the AI RMF",
+        "NIST AI RMF 1.0 \u203a AI RMF Profiles",
+        "NIST AI RMF 1.0 \u203a Appendix D: Attributes of the AI RMF",
+        "NIST AI RMF 1.0 \u203a Audience",
+        "NIST AI RMF 1.0 \u203a Appendix C: AI Risk Management and Human-AI Interaction",
+        "NIST AI RMF 1.0 \u203a AI Risks and Trustworthiness"
+      ],
+      "cited_section_paths": [
+        "NIST AI RMF 1.0 \u203a AI Risks and Trustworthiness \u203a Fair \u2013 with Harmful Bias Managed"
+      ],
+      "prompt_tokens": 4984,
+      "completion_tokens": 186,
+      "cost_usd": "0.011828",
+      "recovered_from_query_log": true,
+      "adjudicated": "declined",
+      "adjudication_evidence": "\"The excerpts do not identify any specific fairness metric\"",
+      "verdict_agrees_with_body": false
+    },
+    {
+      "id": "A4a",
+      "arm": "near_miss",
+      "shape": "A4-wrong-instrument",
+      "document": "eu-ai-act",
+      "question": "What does the AI Act require a company to disclose about board-level oversight of cybersecurity risk?",
+      "what_is_absent": "board-level cybersecurity oversight disclosure is an SEC Item 1C requirement; the Act imposes no such disclosure",
+      "verdict": "answered",
+      "refused": false,
+      "answer": "The excerpts on cybersecurity requirements for high-risk AI systems (accuracy, robustness, resilience against attacks, and the required instructions-for-use content) do not mention any obligation to disclose board-level oversight of cybersecurity risk [3][2][7]. The provisions on general-purpose AI models with systemic risk likewise require model evaluations, adversarial testing, risk-management policies, and technical documentation, but do not address board oversight disclosure [5][8]. The excerpts provided are from the EU AI Act, and none of them impose or describe a requirement to disclose how a company's board oversees cybersecurity risk \u2014 that type of board-oversight disclosure obligation appears instead in the NVIDIA 10-K excerpt, which is a separate document (an SEC filing, not the AI Act) [1].\n\nMissing: a provision within the EU AI Act excerpts specifically requiring disclosure of board-level cybersecurity oversight.",
+      "retrieved_section_paths": [
+        "NVIDIA 10-K FY2026 \u203a Item 1C. Cybersecurity \u203a Risk management and strategy \u2013 Governance",
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 2 \u203a Article 13 \u2014 Transparency and provision of information to deployers",
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 2 \u203a Article 15 \u2014 Accuracy, robustness and cybersecurity",
+        "EU AI Act \u203a Preamble \u203a Recital (77) \u2013 Recital (78)",
+        "EU AI Act \u203a Preamble \u203a Recital (112) \u2013 Recital (114)",
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 2 \u203a Article 8 \u2014 Compliance with the requirements",
+        "EU AI Act \u203a Preamble \u203a Recital (74) \u2013 Recital (76)",
+        "EU AI Act \u203a Annex Xi \u2014 ANNEX XI"
+      ],
+      "cited_section_paths": [
+        "NVIDIA 10-K FY2026 \u203a Item 1C. Cybersecurity \u203a Risk management and strategy \u2013 Governance",
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 2 \u203a Article 13 \u2014 Transparency and provision of information to deployers",
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 2 \u203a Article 15 \u2014 Accuracy, robustness and cybersecurity",
+        "EU AI Act \u203a Preamble \u203a Recital (112) \u2013 Recital (114)",
+        "EU AI Act \u203a Preamble \u203a Recital (74) \u2013 Recital (76)",
+        "EU AI Act \u203a Annex Xi \u2014 ANNEX XI"
+      ],
+      "prompt_tokens": 7909,
+      "completion_tokens": 321,
+      "cost_usd": "0.019028",
+      "recovered_from_query_log": true,
+      "adjudicated": "declined",
+      "adjudication_evidence": "\"none of them impose or describe a requirement ... that type of board-oversight disclosure obligation appears instead in the NVIDIA 10-K excerpt, which is a separate document\"",
+      "verdict_agrees_with_body": false
+    },
+    {
+      "id": "A4b",
+      "arm": "near_miss",
+      "shape": "A4-wrong-instrument",
+      "document": "nist-ai-rmf",
+      "question": "Under the NIST AI RMF, what is the maximum administrative fine for putting a prohibited AI practice into service?",
+      "what_is_absent": "administrative fines are the AI Act's Article 99; the RMF is voluntary and imposes none",
+      "verdict": "insufficient_evidence",
+      "refused": true,
+      "answer": "The excerpts about the NIST AI RMF do not mention administrative fines or penalties at all; the fine amounts for prohibited AI practices ([1], [3]) appear only in the EU AI Act excerpts, not the NIST AI RMF.",
+      "retrieved_section_paths": [
+        "EU AI Act \u203a CHAPTER XII \u203a Article 99 \u2014 Penalties",
+        "EU AI Act \u203a CHAPTER XII \u203a Article 101 \u2014 Fines for providers of general-purpose AI models",
+        "EU AI Act \u203a CHAPTER XII \u203a Article 100 \u2014 Administrative fines on Union institutions, bodies, offices and agencies",
+        "NIST AI RMF 1.0 \u203a Executive Summary \u2013 Framing Risk",
+        "NIST AI RMF 1.0 \u203a Framing Risk \u203a Challenges for AI Risk Management \u203a Risk Tolerance",
+        "NIST AI RMF 1.0 \u203a Framing Risk \u203a Challenges for AI Risk Management \u203a Organizational Integration and Management of Risk",
+        "NIST AI RMF 1.0 \u203a Framing Risk \u203a Challenges for AI Risk Management \u203a Risk Prioritization \u2013 Organizational Integration and Management of Risk",
+        "NIST AI RMF 1.0 \u203a Appendix D: Attributes of the AI RMF"
+      ],
+      "cited_section_paths": [
+        "EU AI Act \u203a CHAPTER XII \u203a Article 99 \u2014 Penalties",
+        "EU AI Act \u203a CHAPTER XII \u203a Article 100 \u2014 Administrative fines on Union institutions, bodies, offices and agencies"
+      ],
+      "prompt_tokens": 7491,
+      "completion_tokens": 101,
+      "cost_usd": "0.015992",
+      "recovered_from_query_log": true,
+      "adjudicated": "declined",
+      "adjudication_evidence": "verdict token correct; \"The excerpts about the NIST AI RMF do not mention administrative fines or penalties at all\"",
+      "verdict_agrees_with_body": true
+    },
+    {
+      "id": "A5a",
+      "arm": "near_miss",
+      "shape": "A5-out-of-scope",
+      "document": "eu-ai-act",
+      "question": "What does Annex XIV of the AI Act require providers to supply?",
+      "what_is_absent": "the Act's annexes run to XIII; there is no Annex XIV",
+      "verdict": "answered",
+      "refused": false,
+      "answer": "I don't have information about Annex XIV specifically\u2014no excerpt is provided from that annex.\n\nWait, let me correct this properly.\n\nINSUFFICIENT_EVIDENCE\nNone of the provided excerpts come from Annex XIV of the EU AI Act, so I cannot state what that Annex requires. The excerpts cover Annex IV, Annex VII, and Annex IX, along with several Articles, but do not include Annex XIV content.",
+      "retrieved_section_paths": [
+        "EU AI Act \u203a CHAPTER IX \u203a SECTION 5 \u203a Article 91 \u2014 Power to request documentation and information",
+        "EU AI Act \u203a Annex Ix \u2014 ANNEX IX",
+        "EU AI Act \u203a Annex Vii \u2014 ANNEX VII",
+        "EU AI Act \u203a Annex Iv \u2014 ANNEX IV",
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 3 \u203a Article 25 \u2014 Responsibilities along the AI value chain",
+        "EU AI Act \u203a Annex Iv \u2014 ANNEX IV",
+        "EU AI Act \u203a CHAPTER V \u203a SECTION 2 \u203a Article 53 \u2014 Obligations for providers of general-purpose AI models",
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 3 \u203a Article 16 \u2014 Obligations of providers of high-risk AI systems"
+      ],
+      "cited_section_paths": [],
+      "prompt_tokens": 6245,
+      "completion_tokens": 155,
+      "cost_usd": "0.014040",
+      "recovered_from_query_log": true,
+      "adjudicated": "declined",
+      "adjudication_evidence": "\"Wait, let me correct this properly.\\n\\nINSUFFICIENT_EVIDENCE\\nNone of the provided excerpts come from Annex XIV\"",
+      "verdict_agrees_with_body": false
+    },
+    {
+      "id": "A5b",
+      "arm": "near_miss",
+      "shape": "A5-out-of-scope",
+      "document": "nvidia-10k",
+      "question": "What was NVIDIA's total revenue in fiscal year 2021?",
+      "what_is_absent": "the FY2026 filing presents fiscal 2026, 2025 and 2024; fiscal 2021 is outside it",
+      "verdict": "answered",
+      "refused": false,
+      "answer": "The excerpts provided only report NVIDIA's total revenue for fiscal years 2024, 2025, and 2026 ($60,922 million, $130,497 million, and $215,938 million, respectively) [2][4]. They do not contain any figures for fiscal year 2021, so no answer can be given for that year based on the available excerpts.\n\nINSUFFICIENT_EVIDENCE \u2014 the excerpts do not include fiscal year 2021 revenue data.",
+      "retrieved_section_paths": [
+        "NVIDIA 10-K FY2026 \u203a Item 15. Exhibits and Financial Statement Schedules \u203a (In millions) \u2013 Revenue Recognition",
+        "NVIDIA 10-K FY2026 \u203a Item 15. Exhibits and Financial Statement Schedules \u203a Notes to the Consolidated Financial Statements",
+        "NVIDIA 10-K FY2026 \u203a Item 7. Management's Discussion and Analysis of Financial Condition and Results of Operations \u203a Concentration of Revenue \u2013 Gross Profit and Gross Margin",
+        "NVIDIA 10-K FY2026 \u203a Item 7. Management's Discussion and Analysis of Financial Condition and Results of Operations \u203a Revenue by Reportable Segments \u2013 Operating Income by Reportable Segments",
+        "NVIDIA 10-K FY2026 \u203a Item 15. Exhibits and Financial Statement Schedules \u203a Note 15 - Employee Retirement Plans \u2013 Notes to the Consolidated Financial Statements",
+        "NVIDIA 10-K FY2026 \u203a Item 1. Business \u203a Our Company",
+        "NVIDIA 10-K FY2026 \u203a Item 1. Business \u203a Our Company",
+        "NVIDIA 10-K FY2026 \u203a Item 7. Management's Discussion and Analysis of Financial Condition and Results of Operations \u203a Our Company and Our Businesses"
+      ],
+      "cited_section_paths": [
+        "NVIDIA 10-K FY2026 \u203a Item 15. Exhibits and Financial Statement Schedules \u203a Notes to the Consolidated Financial Statements",
+        "NVIDIA 10-K FY2026 \u203a Item 7. Management's Discussion and Analysis of Financial Condition and Results of Operations \u203a Revenue by Reportable Segments \u2013 Operating Income by Reportable Segments"
+      ],
+      "prompt_tokens": 8207,
+      "completion_tokens": 159,
+      "cost_usd": "0.018004",
+      "recovered_from_query_log": true,
+      "adjudicated": "declined",
+      "adjudication_evidence": "\"INSUFFICIENT_EVIDENCE - the excerpts do not include fiscal year 2021 revenue data.\"",
+      "verdict_agrees_with_body": false
+    },
+    {
+      "id": "B1a",
+      "arm": "absent_topic",
+      "shape": "A1-unstated-threshold",
+      "document": "none",
+      "question": "How often must a ballast water treatment system be recertified under the Ballast Water Management Convention?",
+      "what_is_absent": "the topic is in no document in the corpus",
+      "verdict": "insufficient_evidence",
+      "refused": true,
+      "answer": "\nThe provided excerpts are all from the EU AI Act and concern conformity assessment, notified bodies, and certification procedures for AI systems. They do not address the Ballast Water Management Convention or ballast water treatment system recertification requirements.",
+      "retrieved_section_paths": [
+        "EU AI Act \u203a Annex Vii \u2014 ANNEX VII",
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 4 \u203a Article 36 \u2014 Changes to notifications",
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 5 \u203a Article 44 \u2014 Certificates \u2013 Article 45 \u2014 Information obligations of notified bodies",
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 4 \u203a Article 36 \u2014 Changes to notifications",
+        "EU AI Act \u203a Annex Vii \u2014 ANNEX VII",
+        "EU AI Act \u203a Annex Vii \u2014 ANNEX VII",
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 4 \u203a Article 28 \u2014 Notifying authorities \u2013 Article 29 \u2014 Application of a conformity assessment body for notification",
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 4 \u203a Article 30 \u2014 Notification procedure"
+      ],
+      "cited_section_paths": [],
+      "prompt_tokens": 8075,
+      "completion_tokens": 97,
+      "cost_usd": "0.017120",
+      "recovered_from_query_log": true,
+      "adjudicated": "declined",
+      "adjudication_evidence": "verdict token correct",
+      "verdict_agrees_with_body": true
+    },
+    {
+      "id": "B1b",
+      "arm": "absent_topic",
+      "shape": "A1-unstated-threshold",
+      "document": "none",
+      "question": "By what percentage are compliance fees reduced for smallholder farmers under the EU Deforestation Regulation?",
+      "what_is_absent": "the topic is in no document in the corpus",
+      "verdict": "insufficient_evidence",
+      "refused": true,
+      "answer": "\nThe excerpts provided are all from the EU AI Act and do not mention the EU Deforestation Regulation, smallholder farmers, or any related compliance fee reductions.",
+      "retrieved_section_paths": [
+        "EU AI Act \u203a CHAPTER XII \u203a Article 99 \u2014 Penalties",
+        "EU AI Act \u203a Preamble \u203a Recital (142) \u2013 Recital (143)",
+        "EU AI Act \u203a CHAPTER VI \u203a Article 61 \u2014 Informed consent to participate in testing in real world conditions outside AI regulatory sandboxes \u2013 Article 62 \u2014 Measures for providers and deployers, in particular SMEs, including start-ups",
+        "EU AI Act \u203a CHAPTER VI \u203a Article 63 \u2014 Derogations for specific operators",
+        "EU AI Act \u203a CHAPTER XII \u203a Article 99 \u2014 Penalties",
+        "EU AI Act \u203a CHAPTER XII \u203a Article 100 \u2014 Administrative fines on Union institutions, bodies, offices and agencies",
+        "EU AI Act \u203a Preamble \u203a Recital (106) \u2013 Recital (109)",
+        "EU AI Act \u203a Annex I \u2014 ANNEX I"
+      ],
+      "cited_section_paths": [],
+      "prompt_tokens": 8179,
+      "completion_tokens": 75,
+      "cost_usd": "0.017108",
+      "recovered_from_query_log": true,
+      "adjudicated": "declined",
+      "adjudication_evidence": "verdict token correct",
+      "verdict_agrees_with_body": true
+    },
+    {
+      "id": "B2a",
+      "arm": "absent_topic",
+      "shape": "A2-undisclosed-figure",
+      "document": "none",
+      "question": "How many of Maersk's employees were located in Denmark at the end of fiscal year 2026?",
+      "what_is_absent": "the topic is in no document in the corpus",
+      "verdict": "answered",
+      "refused": false,
+      "answer": "INSUFFICIENT_EVIDENCE \u2014 the excerpts provided are from NVIDIA's FY2026 10-K and contain no information about Maersk or its employees' locations.",
+      "retrieved_section_paths": [
+        "NVIDIA 10-K FY2026 \u203a Item 1. Business \u203a Human Capital Management",
+        "NVIDIA 10-K FY2026 \u203a Item 15. Exhibits and Financial Statement Schedules \u203a Notes to the Consolidated Financial Statements",
+        "NVIDIA 10-K FY2026 \u203a Item 15. Exhibits and Financial Statement Schedules \u203a Notes to the Consolidated Financial Statements \u2013 Notes to the Consolidated Financial Statements",
+        "NVIDIA 10-K FY2026 \u203a Item 7. Management's Discussion and Analysis of Financial Condition and Results of Operations \u203a Fiscal Year 2026 Summary \u2013 Critical Accounting Estimates",
+        "NVIDIA 10-K FY2026 \u203a Item 9B. Other Information \u2013 Item 9C. Disclosure Regarding Foreign Jurisdictions that Prevent Inspections",
+        "NVIDIA 10-K FY2026 \u203a Item 7. Management's Discussion and Analysis of Financial Condition and Results of Operations \u203a Recent Developments, Future Objectives and Challenges",
+        "NVIDIA 10-K FY2026 \u203a Item 15. Exhibits and Financial Statement Schedules \u203a Note 15 - Employee Retirement Plans \u2013 Notes to the Consolidated Financial Statements",
+        "NVIDIA 10-K FY2026 \u203a Item 7. Management's Discussion and Analysis of Financial Condition and Results of Operations \u203a Recent Developments, Future Objectives and Challenges"
+      ],
+      "cited_section_paths": [],
+      "prompt_tokens": 7949,
+      "completion_tokens": 69,
+      "cost_usd": "0.016588",
+      "recovered_from_query_log": true,
+      "adjudicated": "declined",
+      "adjudication_evidence": "body opens with the literal token: \"INSUFFICIENT_EVIDENCE - the excerpts provided are from NVIDIA's FY2026 10-K and contain no information about Maersk\"",
+      "verdict_agrees_with_body": false
+    },
+    {
+      "id": "B2b",
+      "arm": "absent_topic",
+      "shape": "A2-undisclosed-figure",
+      "document": "none",
+      "question": "How much of Pfizer's fiscal year 2026 research and development expense was attributable to its oncology portfolio?",
+      "what_is_absent": "the topic is in no document in the corpus",
+      "verdict": "insufficient_evidence",
+      "refused": true,
+      "answer": "The excerpts contain no information about Pfizer or its oncology portfolio; they pertain to NVIDIA's financial disclosures only.",
+      "retrieved_section_paths": [
+        "NVIDIA 10-K FY2026 \u203a Item 7. Management's Discussion and Analysis of Financial Condition and Results of Operations \u203a Income Taxes \u2013 Liquidity and Capital Resources",
+        "NVIDIA 10-K FY2026 \u203a Item 5. Market for Registrant's Common Equity, Related Stockholder Matters and Issuer Purchases of Equity Securities \u203a Issuer Purchases of Equity Securities",
+        "NVIDIA 10-K FY2026 \u203a Item 7. Management's Discussion and Analysis of Financial Condition and Results of Operations \u203a Operating Expenses \u2013 Total Other Income, Net",
+        "NVIDIA 10-K FY2026 \u203a Item 15. Exhibits and Financial Statement Schedules \u203a Note 3 - Stock-Based Compensation \u2013 Notes to the Consolidated Financial Statements",
+        "NVIDIA 10-K FY2026 \u203a Item 7. Management's Discussion and Analysis of Financial Condition and Results of Operations \u203a Liquidity \u2013 Capital Return to Shareholders",
+        "NVIDIA 10-K FY2026 \u203a Item 15. Exhibits and Financial Statement Schedules \u203a Note 4 - Net Income Per Share \u2013 Note 6 - Amortizable Intangible Assets",
+        "NVIDIA 10-K FY2026 \u203a Item 7. Management's Discussion and Analysis of Financial Condition and Results of Operations \u203a Fiscal Year 2026 Summary \u2013 Critical Accounting Estimates",
+        "NVIDIA 10-K FY2026 \u203a Item 15. Exhibits and Financial Statement Schedules \u203a Notes to the Consolidated Financial Statements \u2013 Notes to the Consolidated Financial Statements"
+      ],
+      "cited_section_paths": [],
+      "prompt_tokens": 8710,
+      "completion_tokens": 65,
+      "cost_usd": "0.018070",
+      "recovered_from_query_log": true,
+      "adjudicated": "declined",
+      "adjudication_evidence": "verdict token correct",
+      "verdict_agrees_with_body": true
+    },
+    {
+      "id": "B3a",
+      "arm": "absent_topic",
+      "shape": "A3-unnamed-control",
+      "document": "none",
+      "question": "Which encryption standard does the Basel III framework require banks to use to protect counterparty credit exposure data?",
+      "what_is_absent": "the topic is in no document in the corpus",
+      "verdict": "answered",
+      "refused": false,
+      "answer": "The excerpts provided do not address Basel III or any encryption standard for counterparty credit exposure data \u2014 they concern the EU AI Act's provisions on general-purpose AI models, confidentiality, market surveillance, and quality management systems [1][3][4][5]. There is no information in these excerpts about Basel III or encryption requirements, so this question cannot be answered from the given material.\n\nINSUFFICIENT_EVIDENCE\nThe excerpts are entirely drawn from the EU AI Act and contain no mention of Basel III or any encryption standard for protecting counterparty credit exposure data.",
+      "retrieved_section_paths": [
+        "EU AI Act \u203a CHAPTER V \u203a SECTION 3 \u203a Article 55 \u2014 Obligations of providers of general-purpose AI models with systemic risk",
+        "EU AI Act \u203a Preamble \u203a Recital (121) \u2013 Recital (122)",
+        "EU AI Act \u203a CHAPTER IX \u203a SECTION 3 \u203a Article 78 \u2014 Confidentiality",
+        "EU AI Act \u203a CHAPTER IX \u203a SECTION 3 \u203a Article 74 \u2014 Market surveillance and control of AI systems in the Union market",
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 3 \u203a Article 17 \u2014 Quality management system",
+        "EU AI Act \u203a Preamble \u203a Recital (158)",
+        "EU AI Act \u203a CHAPTER IX \u203a SECTION 3 \u203a Article 74 \u2014 Market surveillance and control of AI systems in the Union market",
+        "EU AI Act \u203a Annex X \u2014 ANNEX X"
+      ],
+      "cited_section_paths": [
+        "EU AI Act \u203a CHAPTER V \u203a SECTION 3 \u203a Article 55 \u2014 Obligations of providers of general-purpose AI models with systemic risk",
+        "EU AI Act \u203a CHAPTER IX \u203a SECTION 3 \u203a Article 78 \u2014 Confidentiality",
+        "EU AI Act \u203a CHAPTER IX \u203a SECTION 3 \u203a Article 74 \u2014 Market surveillance and control of AI systems in the Union market",
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 3 \u203a Article 17 \u2014 Quality management system"
+      ],
+      "prompt_tokens": 8817,
+      "completion_tokens": 203,
+      "cost_usd": "0.019664",
+      "recovered_from_query_log": true,
+      "adjudicated": "declined",
+      "adjudication_evidence": "\"There is no information in these excerpts about Basel III\"; body also contains the literal token",
+      "verdict_agrees_with_body": false
+    },
+    {
+      "id": "B3b",
+      "arm": "absent_topic",
+      "shape": "A3-unnamed-control",
+      "document": "none",
+      "question": "Which supplier diversity metric does ISO 26000 specify for social responsibility reporting?",
+      "what_is_absent": "the topic is in no document in the corpus",
+      "verdict": "answered",
+      "refused": false,
+      "answer": "The excerpts do not identify any supplier diversity metric specified by ISO 26000. The only reference to ISO 26000 defines social responsibility as an organization's responsibility \"for the impacts of its decisions and activities on society and the environment through transparent and ethical behavior\" [1], but no supplier diversity metric or reporting requirement is mentioned in this or any other excerpt.",
+      "retrieved_section_paths": [
+        "NIST AI RMF 1.0 \u203a Executive Summary",
+        "EU AI Act \u203a Preamble \u203a Recital (142) \u2013 Recital (143)",
+        "NVIDIA 10-K FY2026 \u203a Item 1C. Cybersecurity \u203a Risk management and strategy \u2013 Governance",
+        "NVIDIA 10-K FY2026 \u203a Item 15. Exhibits and Financial Statement Schedules \u203a Critical Audit Matters",
+        "EU AI Act \u203a CHAPTER X \u203a Article 95 \u2014 Codes of conduct for voluntary application of specific requirements \u2013 Article 96 \u2014 Guidelines from the Commission on the implementation of this Regulation",
+        "NVIDIA 10-K FY2026 \u203a Item 15. Exhibits and Financial Statement Schedules \u203a Note 3 - Stock-Based Compensation \u2013 Notes to the Consolidated Financial Statements",
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 3 \u203a Article 25 \u2014 Responsibilities along the AI value chain",
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 5 \u203a Article 40 \u2014 Harmonised standards and standardisation deliverables"
+      ],
+      "cited_section_paths": [
+        "NIST AI RMF 1.0 \u203a Executive Summary"
+      ],
+      "prompt_tokens": 9712,
+      "completion_tokens": 132,
+      "cost_usd": "0.020744",
+      "recovered_from_query_log": true,
+      "adjudicated": "declined",
+      "adjudication_evidence": "\"The excerpts do not identify any supplier diversity metric specified by ISO 26000.\"",
+      "verdict_agrees_with_body": false
+    },
+    {
+      "id": "B4a",
+      "arm": "absent_topic",
+      "shape": "A4-wrong-instrument",
+      "document": "none",
+      "question": "What does the Montreal Protocol require a company to disclose about board-level oversight of refrigerant leakage?",
+      "what_is_absent": "the topic is in no document in the corpus",
+      "verdict": "insufficient_evidence",
+      "refused": true,
+      "answer": "The provided excerpts are from the EU AI Act and NVIDIA's 10-K filing; none of them mention the Montreal Protocol or any requirements regarding board-level oversight of refrigerant leakage.",
+      "retrieved_section_paths": [
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 3 \u203a Article 24 \u2014 Obligations of distributors",
+        "NVIDIA 10-K FY2026 \u203a Item 15. Exhibits and Financial Statement Schedules \u203a Critical Audit Matters",
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 3 \u203a Article 23 \u2014 Obligations of importers",
+        "NVIDIA 10-K FY2026 \u203a Item 1A. Risk Factors \u203a Risks Related to Regulatory, Legal, Our Stock and Other Matters",
+        "NVIDIA 10-K FY2026 \u203a Item 9B. Other Information \u2013 Item 9C. Disclosure Regarding Foreign Jurisdictions that Prevent Inspections",
+        "NVIDIA 10-K FY2026 \u203a Item 9A. Controls and Procedures \u203a Disclosure Controls and Procedures \u2013 Inherent Limitations on Effectiveness of Controls",
+        "NVIDIA 10-K FY2026 \u203a Item 15. Exhibits and Financial Statement Schedules \u203a Schedule II \u2013 Valuation and Qualifying Accounts",
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 3 \u203a Article 18 \u2014 Documentation keeping \u2013 Article 20 \u2014 Corrective actions and duty of information"
+      ],
+      "cited_section_paths": [],
+      "prompt_tokens": 8452,
+      "completion_tokens": 89,
+      "cost_usd": "0.017794",
+      "recovered_from_query_log": true,
+      "adjudicated": "declined",
+      "adjudication_evidence": "verdict token correct",
+      "verdict_agrees_with_body": true
+    },
+    {
+      "id": "B4b",
+      "arm": "absent_topic",
+      "shape": "A4-wrong-instrument",
+      "document": "none",
+      "question": "Under the OECD Guidelines for Multinational Enterprises, what is the maximum administrative fine for a breach of the labour chapter?",
+      "what_is_absent": "the topic is in no document in the corpus",
+      "verdict": "insufficient_evidence",
+      "refused": true,
+      "answer": "The provided excerpts are from the EU AI Act and do not address the OECD Guidelines for Multinational Enterprises or any labour chapter fines.",
+      "retrieved_section_paths": [
+        "EU AI Act \u203a CHAPTER XII \u203a Article 99 \u2014 Penalties",
+        "EU AI Act \u203a CHAPTER XII \u203a Article 99 \u2014 Penalties",
+        "EU AI Act \u203a CHAPTER XII \u203a Article 100 \u2014 Administrative fines on Union institutions, bodies, offices and agencies",
+        "EU AI Act \u203a CHAPTER XII \u203a Article 101 \u2014 Fines for providers of general-purpose AI models",
+        "EU AI Act \u203a CHAPTER X \u203a Article 95 \u2014 Codes of conduct for voluntary application of specific requirements \u2013 Article 96 \u2014 Guidelines from the Commission on the implementation of this Regulation",
+        "EU AI Act \u203a Preamble \u203a Recital (168) \u2013 Recital (171)",
+        "EU AI Act \u203a CHAPTER XIII \u203a Article 112 \u2014 Evaluation and review \u2013 Article 113 \u2014 Entry into force and application",
+        "EU AI Act \u203a Annex Ii \u2014 ANNEX II"
+      ],
+      "cited_section_paths": [],
+      "prompt_tokens": 7819,
+      "completion_tokens": 69,
+      "cost_usd": "0.016328",
+      "recovered_from_query_log": true,
+      "adjudicated": "declined",
+      "adjudication_evidence": "verdict token correct",
+      "verdict_agrees_with_body": true
+    },
+    {
+      "id": "B5a",
+      "arm": "absent_topic",
+      "shape": "A5-out-of-scope",
+      "document": "none",
+      "question": "What does Annex XIV of the Aarhus Convention require parties to supply?",
+      "what_is_absent": "the topic is in no document in the corpus",
+      "verdict": "answered",
+      "refused": false,
+      "answer": "INSUFFICIENT_EVIDENCE: The excerpts provided are from the EU AI Act (various Annexes and Articles), and none of them concern the Aarhus Convention or its Annex XIV. There is no information here about what that Annex requires parties to supply.",
+      "retrieved_section_paths": [
+        "EU AI Act \u203a Annex Iv \u2014 ANNEX IV",
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 5 \u203a Article 44 \u2014 Certificates \u2013 Article 45 \u2014 Information obligations of notified bodies",
+        "EU AI Act \u203a Annex V \u2014 ANNEX V \u2013 Annex Vi \u2014 ANNEX VI",
+        "EU AI Act \u203a Annex Viii \u2014 ANNEX VIII",
+        "EU AI Act \u203a Annex Iv \u2014 ANNEX IV",
+        "EU AI Act \u203a CHAPTER IX \u203a SECTION 5 \u203a Article 91 \u2014 Power to request documentation and information",
+        "EU AI Act \u203a Annex Ix \u2014 ANNEX IX",
+        "EU AI Act \u203a CHAPTER VI \u203a Article 61 \u2014 Informed consent to participate in testing in real world conditions outside AI regulatory sandboxes \u2013 Article 62 \u2014 Measures for providers and deployers, in particular SMEs, including start-ups"
+      ],
+      "cited_section_paths": [],
+      "prompt_tokens": 6921,
+      "completion_tokens": 97,
+      "cost_usd": "0.014812",
+      "recovered_from_query_log": true,
+      "adjudicated": "declined",
+      "adjudication_evidence": "body opens with the literal token: \"INSUFFICIENT_EVIDENCE: The excerpts provided are from the EU AI Act\"",
+      "verdict_agrees_with_body": false
+    },
+    {
+      "id": "B5b",
+      "arm": "absent_topic",
+      "shape": "A5-out-of-scope",
+      "document": "none",
+      "question": "What was Rio Tinto's total revenue in fiscal year 2021?",
+      "what_is_absent": "the topic is in no document in the corpus",
+      "verdict": "insufficient_evidence",
+      "refused": true,
+      "answer": "The excerpts provided are from NVIDIA's 10-K filing and contain no information about Rio Tinto.",
+      "retrieved_section_paths": [
+        "NVIDIA 10-K FY2026 \u203a Item 7. Management's Discussion and Analysis of Financial Condition and Results of Operations \u203a Income Taxes \u2013 Liquidity and Capital Resources",
+        "NVIDIA 10-K FY2026 \u203a Item 7. Management's Discussion and Analysis of Financial Condition and Results of Operations \u203a Operating Expenses \u2013 Total Other Income, Net",
+        "NVIDIA 10-K FY2026 \u203a Item 7. Management's Discussion and Analysis of Financial Condition and Results of Operations \u203a Revenue by Reportable Segments \u2013 Operating Income by Reportable Segments",
+        "NVIDIA 10-K FY2026 \u203a Item 15. Exhibits and Financial Statement Schedules \u203a Notes to the Consolidated Financial Statements",
+        "NVIDIA 10-K FY2026 \u203a Item 7. Management's Discussion and Analysis of Financial Condition and Results of Operations \u203a Fiscal Year 2026 Summary \u2013 Critical Accounting Estimates",
+        "NVIDIA 10-K FY2026 \u203a Item 7. Management's Discussion and Analysis of Financial Condition and Results of Operations \u203a Liquidity \u2013 Capital Return to Shareholders",
+        "NVIDIA 10-K FY2026 \u203a Item 7. Management's Discussion and Analysis of Financial Condition and Results of Operations \u203a Concentration of Revenue \u2013 Gross Profit and Gross Margin",
+        "NVIDIA 10-K FY2026 \u203a Item 15. Exhibits and Financial Statement Schedules \u203a Notes to the Consolidated Financial Statements"
+      ],
+      "cited_section_paths": [],
+      "prompt_tokens": 8674,
+      "completion_tokens": 56,
+      "cost_usd": "0.017908",
+      "recovered_from_query_log": true,
+      "adjudicated": "declined",
+      "adjudication_evidence": "verdict token correct",
+      "verdict_agrees_with_body": true
+    },
+    {
+      "id": "C1",
+      "arm": "answerable",
+      "shape": "A1-unstated-threshold",
+      "document": "eu-ai-act",
+      "question": "Within what period must a provider report a serious incident to the market surveillance authority under the AI Act?",
+      "what_is_absent": null,
+      "verdict": "answered",
+      "refused": false,
+      "answer": "Under the EU AI Act, a provider of a high-risk AI system must report a serious incident to the market surveillance authority of the Member State where it occurred [1], with the timing depending on the nature of the incident:\n\n- **General rule:** The report must be made immediately after the provider establishes a causal link (or reasonable likelihood of one) between the AI system and the incident, and in any event no later than **15 days** after the provider or deployer becomes aware of the serious incident, with the period adjusted according to the severity of the incident [1].\n- **Widespread infringement or serious incident as defined in Article 3, point (49)(b):** The report must be made immediately, and no later than **2 days** after becoming aware of the incident [1].\n- **Death of a person:** The report must be made immediately after establishing, or as soon as suspecting, a causal relationship, but no later than **10 days** after becoming aware of the incident [1].\n- **Incomplete initial reports:** Where necessary to ensure timely reporting, the provider may submit an initial incomplete report followed by a complete report [1].",
+      "retrieved_section_paths": [
+        "EU AI Act \u203a CHAPTER IX \u203a SECTION 2 \u203a Article 73 \u2014 Reporting of serious incidents",
+        "EU AI Act \u203a CHAPTER IX \u203a SECTION 2 \u203a Article 73 \u2014 Reporting of serious incidents",
+        "EU AI Act \u203a CHAPTER VI \u203a Article 60 \u2014 Testing of high-risk AI systems in real world conditions outside AI regulatory sandboxes",
+        "EU AI Act \u203a CHAPTER IX \u203a SECTION 3 \u203a Article 79 \u2014 Procedure at national level for dealing with AI systems presenting a risk",
+        "EU AI Act \u203a CHAPTER IX \u203a SECTION 3 \u203a Article 74 \u2014 Market surveillance and control of AI systems in the Union market",
+        "EU AI Act \u203a CHAPTER IX \u203a SECTION 3 \u203a Article 80 \u2014 Procedure for dealing with AI systems classified by the provider as non-high-risk in application of Annex III",
+        "EU AI Act \u203a CHAPTER IX \u203a SECTION 3 \u203a Article 81 \u2014 Union safeguard procedure \u2013 Article 82 \u2014 Compliant AI systems which present a risk",
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 3 \u203a Article 18 \u2014 Documentation keeping \u2013 Article 20 \u2014 Corrective actions and duty of information"
+      ],
+      "cited_section_paths": [
+        "EU AI Act \u203a CHAPTER IX \u203a SECTION 2 \u203a Article 73 \u2014 Reporting of serious incidents"
+      ],
+      "prompt_tokens": 7588,
+      "completion_tokens": 354,
+      "cost_usd": "0.018716",
+      "recovered_from_query_log": true,
+      "adjudicated": "answered_correctly",
+      "verdict_agrees_with_body": true
+    },
+    {
+      "id": "C2",
+      "arm": "answerable",
+      "shape": "A1-unstated-threshold",
+      "document": "eu-ai-act",
+      "question": "What is the maximum administrative fine under the AI Act for engaging in a prohibited AI practice?",
+      "what_is_absent": null,
+      "verdict": "answered",
+      "refused": false,
+      "answer": "The maximum administrative fine for non-compliance with the prohibition of AI practices referred to in Article 5 is up to EUR 35,000,000 or, if the offender is an undertaking, up to 7% of its total worldwide annual turnover for the preceding financial year, whichever is higher[1].\n\nNote: this figure applies to operators generally under Article 99[1]. A separate, lower cap applies specifically to Union institutions, bodies, offices and agencies, for which non-compliance with the Article 5 prohibition is subject to administrative fines of up to EUR 1,500,000[2].",
+      "retrieved_section_paths": [
+        "EU AI Act \u203a CHAPTER XII \u203a Article 99 \u2014 Penalties",
+        "EU AI Act \u203a CHAPTER XII \u203a Article 100 \u2014 Administrative fines on Union institutions, bodies, offices and agencies",
+        "EU AI Act \u203a CHAPTER XII \u203a Article 101 \u2014 Fines for providers of general-purpose AI models",
+        "EU AI Act \u203a CHAPTER XII \u203a Article 99 \u2014 Penalties",
+        "EU AI Act \u203a CHAPTER II \u203a Article 5 \u2014 Prohibited AI practices",
+        "EU AI Act \u203a CHAPTER IX \u203a SECTION 3 \u203a Article 80 \u2014 Procedure for dealing with AI systems classified by the provider as non-high-risk in application of Annex III",
+        "EU AI Act \u203a CHAPTER IX \u203a SECTION 3 \u203a Article 79 \u2014 Procedure at national level for dealing with AI systems presenting a risk",
+        "EU AI Act \u203a CHAPTER V \u203a SECTION 4 \u203a Article 56 \u2014 Codes of practice"
+      ],
+      "cited_section_paths": [
+        "EU AI Act \u203a CHAPTER XII \u203a Article 99 \u2014 Penalties",
+        "EU AI Act \u203a CHAPTER XII \u203a Article 100 \u2014 Administrative fines on Union institutions, bodies, offices and agencies"
+      ],
+      "prompt_tokens": 7563,
+      "completion_tokens": 201,
+      "cost_usd": "0.017136",
+      "recovered_from_query_log": true,
+      "adjudicated": "answered_correctly",
+      "verdict_agrees_with_body": true
+    },
+    {
+      "id": "C3",
+      "arm": "answerable",
+      "shape": "A2-undisclosed-figure",
+      "document": "nvidia-10k",
+      "question": "Approximately how many employees did NVIDIA have at the end of fiscal year 2026?",
+      "what_is_absent": null,
+      "verdict": "answered",
+      "refused": false,
+      "answer": "NVIDIA had approximately 42,000 employees in 38 countries as of the end of fiscal year 2026 [1].",
+      "retrieved_section_paths": [
+        "NVIDIA 10-K FY2026 \u203a Item 1. Business \u203a Human Capital Management",
+        "NVIDIA 10-K FY2026 \u203a Item 15. Exhibits and Financial Statement Schedules \u203a Notes to the Consolidated Financial Statements",
+        "NVIDIA 10-K FY2026 \u203a Item 1. Business \u203a Our Company",
+        "NVIDIA 10-K FY2026 \u203a Item 15. Exhibits and Financial Statement Schedules \u203a Note 15 - Employee Retirement Plans \u2013 Notes to the Consolidated Financial Statements",
+        "NVIDIA 10-K FY2026 \u203a Item 7. Management's Discussion and Analysis of Financial Condition and Results of Operations \u203a Recent Developments, Future Objectives and Challenges",
+        "NVIDIA 10-K FY2026 \u203a Item 15. Exhibits and Financial Statement Schedules \u203a (In millions) \u2013 Revenue Recognition",
+        "NVIDIA 10-K FY2026 \u203a Item 1. Business \u203a Data Center",
+        "NVIDIA 10-K FY2026 \u203a Item 1. Business \u203a Data Center"
+      ],
+      "cited_section_paths": [
+        "NVIDIA 10-K FY2026 \u203a Item 1. Business \u203a Human Capital Management"
+      ],
+      "prompt_tokens": 7897,
+      "completion_tokens": 49,
+      "cost_usd": "0.016284",
+      "recovered_from_query_log": true,
+      "adjudicated": "answered_correctly",
+      "verdict_agrees_with_body": true
+    },
+    {
+      "id": "C4",
+      "arm": "answerable",
+      "shape": "A3-unnamed-control",
+      "document": "eu-ai-act",
+      "question": "What marking must a provider affix to a high-risk AI system to indicate conformity under the AI Act?",
+      "what_is_absent": null,
+      "verdict": "answered",
+      "refused": false,
+      "answer": "A provider must affix the CE marking to the high-risk AI system or, where that is not possible, on its packaging or accompanying documentation, to indicate conformity with the Regulation [2]. The CE marking must be affixed visibly, legibly and indelibly for high-risk AI systems, or, where that is not possible or not warranted, to the packaging or accompanying documentation [1]. For high-risk AI systems provided digitally, a digital CE marking must be used, provided it can easily be accessed via the interface from which the system is accessed or via an easily accessible machine-readable code or other electronic means [1]. Where applicable, the CE marking must be followed by the identification number of the notified body responsible for the conformity assessment procedures [1].",
+      "retrieved_section_paths": [
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 5 \u203a Article 47 \u2014 EU declaration of conformity \u2013 Article 48 \u2014 CE marking",
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 3 \u203a Article 16 \u2014 Obligations of providers of high-risk AI systems",
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 5 \u203a Article 49 \u2014 Registration",
+        "EU AI Act \u203a Preamble \u203a Recital (128) \u2013 Recital (130)",
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 2 \u203a Article 8 \u2014 Compliance with the requirements",
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 5 \u203a Article 43 \u2014 Conformity assessment",
+        "EU AI Act \u203a Annex Viii \u2014 ANNEX VIII",
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 3 \u203a Article 24 \u2014 Obligations of distributors"
+      ],
+      "cited_section_paths": [
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 5 \u203a Article 47 \u2014 EU declaration of conformity \u2013 Article 48 \u2014 CE marking",
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 3 \u203a Article 16 \u2014 Obligations of providers of high-risk AI systems"
+      ],
+      "prompt_tokens": 6377,
+      "completion_tokens": 246,
+      "cost_usd": "0.015214",
+      "recovered_from_query_log": true,
+      "adjudicated": "answered_correctly",
+      "verdict_agrees_with_body": true
+    },
+    {
+      "id": "C5",
+      "arm": "answerable",
+      "shape": "A3-unnamed-control",
+      "document": "nist-ai-rmf",
+      "question": "What are the functions of the AI RMF Core?",
+      "what_is_absent": null,
+      "verdict": "answered",
+      "refused": false,
+      "answer": "The AI RMF Core is composed of four functions: GOVERN, MAP, MEASURE, and MANAGE [1]. GOVERN is designed to be a cross-cutting function that informs and is infused throughout the other three functions [1]. Each of these high-level functions is broken down into categories and subcategories, which are further subdivided into specific actions and outcomes [1]. GOVERN applies to all stages of organizations' AI risk management processes and procedures, while MAP, MEASURE, and MANAGE can be applied in AI system-specific contexts and at specific stages of the AI lifecycle [3][5]. Assuming a governance structure is in place, the functions may be performed in any order across the AI lifecycle as deemed to add value, though after instituting GOVERN outcomes, most users would start with MAP and continue to MEASURE or MANAGE [1].",
+      "retrieved_section_paths": [
+        "NIST AI RMF 1.0 \u203a AI RMF Core",
+        "NIST AI RMF 1.0 \u203a Appendix D: Attributes of the AI RMF",
+        "NIST AI RMF 1.0 \u203a Executive Summary",
+        "NIST AI RMF 1.0 \u203a AI RMF Core \u203a Manage",
+        "NIST AI RMF 1.0 \u203a Executive Summary \u2013 Framing Risk",
+        "NIST AI RMF 1.0 \u203a AI RMF Profiles",
+        "NIST AI RMF 1.0 \u203a Audience",
+        "NIST AI RMF 1.0 \u203a Appendix C: AI Risk Management and Human-AI Interaction"
+      ],
+      "cited_section_paths": [
+        "NIST AI RMF 1.0 \u203a AI RMF Core",
+        "NIST AI RMF 1.0 \u203a Executive Summary",
+        "NIST AI RMF 1.0 \u203a Executive Summary \u2013 Framing Risk"
+      ],
+      "prompt_tokens": 6049,
+      "completion_tokens": 292,
+      "cost_usd": "0.015018",
+      "adjudicated": "answered_correctly",
+      "verdict_agrees_with_body": true
+    },
+    {
+      "id": "C6",
+      "arm": "answerable",
+      "shape": "A4-wrong-instrument",
+      "document": "nist-ai-rmf",
+      "question": "Who is the intended audience of the NIST AI Risk Management Framework?",
+      "what_is_absent": null,
+      "verdict": "answered",
+      "refused": false,
+      "answer": "The intended audience of the AI RMF consists of \"AI actors\" \u2014 organizations and individuals who play an active role in the AI system lifecycle, including those who design, develop, deploy, or use AI systems [3]. More specifically, AI actors involved in the lifecycle dimensions of Application Context, Data and Input, AI Model, and Task and Output, who perform or manage the design, development, deployment, evaluation, and use of AI systems and drive AI risk management efforts, are described as the primary AI RMF audience [5]. AI actors with test, evaluation, verification, and validation (TEVV) expertise are integrated throughout the AI lifecycle and are especially likely to benefit from the Framework [5]. A separate but related audience is found in the \"People & Planet\" dimension, comprising actors such as trade associations, standards developing organizations, researchers, advocacy groups, environmental groups, civil society organizations, end users, and potentially impacted individuals and communities, who inform the primary audience [5]. Successful risk management depends on a sense of collective responsibility among these diverse AI actors across the AI lifecycle [2][5].",
+      "retrieved_section_paths": [
+        "NIST AI RMF 1.0 \u203a Executive Summary \u2013 Framing Risk",
+        "NIST AI RMF 1.0 \u203a Audience",
+        "NIST AI RMF 1.0 \u203a Executive Summary",
+        "NIST AI RMF 1.0 \u203a Appendix B: How AI Risks Differ from Traditional Software Risks",
+        "NIST AI RMF 1.0 \u203a Audience",
+        "NIST AI RMF 1.0 \u203a Appendix D: Attributes of the AI RMF",
+        "NIST AI RMF 1.0 \u203a Appendix B: How AI Risks Differ from Traditional Software Risks",
+        "NIST AI RMF 1.0 \u203a Framing Risk \u203a Challenges for AI Risk Management \u203a Risk Tolerance"
+      ],
+      "cited_section_paths": [
+        "NIST AI RMF 1.0 \u203a Executive Summary",
+        "NIST AI RMF 1.0 \u203a Audience",
+        "NIST AI RMF 1.0 \u203a Audience"
+      ],
+      "prompt_tokens": 7416,
+      "completion_tokens": 376,
+      "cost_usd": "0.018592",
+      "adjudicated": "answered_correctly",
+      "verdict_agrees_with_body": true
+    },
+    {
+      "id": "C7",
+      "arm": "answerable",
+      "shape": "A4-wrong-instrument",
+      "document": "eu-ai-act",
+      "question": "How does the AI Act define an AI system?",
+      "what_is_absent": null,
+      "verdict": "answered",
+      "refused": false,
+      "answer": "The Act's definition of an \"AI system\" is built around its capability to infer, meaning the AI system can obtain outputs such as predictions, content, recommendations, or decisions that can influence physical and virtual environments, and can derive models or algorithms from inputs or data [1]. This inference capability is achieved through techniques such as machine learning approaches that learn from data, or logic- and knowledge-based approaches that infer from encoded knowledge or symbolic representations, and it distinguishes AI systems from simpler traditional software or rule-based systems that merely execute operations defined solely by natural persons [1]. The term \"machine-based\" indicates that AI systems run on machines [1], and such systems may operate according to explicit or implicit objectives, which may differ from the system's intended purpose in a specific context [1]. AI systems are designed to operate with varying levels of autonomy, meaning they have some degree of independence from human involvement and can function without human intervention, and they may also exhibit adaptiveness after deployment through self-learning capabilities that allow the system to change while in use [1]. AI systems can be used on a stand-alone basis or as a component of a product, whether physically integrated into the product (embedded) or serving the product's functionality without being integrated into it (non-embedded) [1].",
+      "retrieved_section_paths": [
+        "EU AI Act \u203a Preamble \u203a Recital (12) \u2013 Recital (13)",
+        "EU AI Act \u203a CHAPTER I \u203a Article 3 \u2014 Definitions \u2013 Article 4 \u2014 AI literacy",
+        "NIST AI RMF 1.0 \u203a Appendix A: Descriptions of AI Actor Tasks from Figures 2 and 3",
+        "EU AI Act \u203a Annex Iii \u2014 ANNEX III",
+        "EU AI Act \u203a Annex Iii \u2014 ANNEX III",
+        "EU AI Act \u203a Preamble \u203a Recital (97) \u2013 Recital (98)",
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 2 \u203a Article 8 \u2014 Compliance with the requirements",
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 2 \u203a Article 15 \u2014 Accuracy, robustness and cybersecurity"
+      ],
+      "cited_section_paths": [
+        "EU AI Act \u203a Preamble \u203a Recital (12) \u2013 Recital (13)"
+      ],
+      "prompt_tokens": 6182,
+      "completion_tokens": 906,
+      "cost_usd": "0.021424",
+      "adjudicated": "answered_correctly",
+      "verdict_agrees_with_body": true
+    },
+    {
+      "id": "C8",
+      "arm": "answerable",
+      "shape": "A5-out-of-scope",
+      "document": "nvidia-10k",
+      "question": "Which reportable segments does NVIDIA use for its business results?",
+      "what_is_absent": null,
+      "verdict": "answered",
+      "refused": false,
+      "answer": "NVIDIA reports its business results in two segments: Compute & Networking and Graphics [1][2]. The Compute & Networking segment includes Data Center accelerated computing and networking platforms and AI solutions and software, as well as Automotive platforms and autonomous and electric vehicle solutions including software [1][3]. The Graphics segment includes GeForce GPUs for gaming and PCs, and Quadro/NVIDIA RTX GPUs for enterprise workstation graphics [1][3].",
+      "retrieved_section_paths": [
+        "NVIDIA 10-K FY2026 \u203a Item 1. Business \u203a Our Businesses \u2013 Our Markets",
+        "NVIDIA 10-K FY2026 \u203a Item 7. Management's Discussion and Analysis of Financial Condition and Results of Operations \u203a Our Company and Our Businesses",
+        "NVIDIA 10-K FY2026 \u203a Item 15. Exhibits and Financial Statement Schedules \u203a Note 15 - Employee Retirement Plans \u2013 Notes to the Consolidated Financial Statements",
+        "NVIDIA 10-K FY2026 \u203a Item 7. Management's Discussion and Analysis of Financial Condition and Results of Operations \u203a Revenue by Reportable Segments \u2013 Operating Income by Reportable Segments",
+        "NVIDIA 10-K FY2026 \u203a Item 15. Exhibits and Financial Statement Schedules \u203a Notes to the Consolidated Financial Statements",
+        "NVIDIA 10-K FY2026 \u203a Item 15. Exhibits and Financial Statement Schedules \u203a (In millions) \u2013 Revenue Recognition",
+        "NVIDIA 10-K FY2026 \u203a Item 7. Management's Discussion and Analysis of Financial Condition and Results of Operations \u203a Non-Marketable Equity Securities \u2013 Results of Operations",
+        "NVIDIA 10-K FY2026 \u203a Item 1. Business \u203a Gaming \u2013 Automotive"
+      ],
+      "cited_section_paths": [
+        "NVIDIA 10-K FY2026 \u203a Item 1. Business \u203a Our Businesses \u2013 Our Markets",
+        "NVIDIA 10-K FY2026 \u203a Item 7. Management's Discussion and Analysis of Financial Condition and Results of Operations \u203a Our Company and Our Businesses",
+        "NVIDIA 10-K FY2026 \u203a Item 15. Exhibits and Financial Statement Schedules \u203a Note 15 - Employee Retirement Plans \u2013 Notes to the Consolidated Financial Statements"
+      ],
+      "prompt_tokens": 7631,
+      "completion_tokens": 174,
+      "cost_usd": "0.017002",
+      "adjudicated": "answered_correctly",
+      "verdict_agrees_with_body": true
+    },
+    {
+      "id": "C9",
+      "arm": "answerable",
+      "shape": "A5-out-of-scope",
+      "document": "nvidia-10k",
+      "question": "What manufacturing strategy does NVIDIA use for its products?",
+      "what_is_absent": null,
+      "verdict": "answered",
+      "refused": false,
+      "answer": "NVIDIA employs a fabless and contract manufacturing strategy, partnering with key suppliers for all phases of manufacturing, including wafer fabrication, assembly, testing, and packaging [2]. It uses industry-leading, ISO-certified suppliers for fabrication, assembly, quality control and assurance, reliability, and testing [2]. While NVIDIA may directly procure certain raw materials such as memory, substrates, and various components, its suppliers are generally responsible for procuring most raw materials [2]. This approach allows NVIDIA to avoid many of the significant costs and risks associated with owning and operating manufacturing operations, and to focus its resources on product design, quality assurance, marketing, and customer support [2]. In periods of growth, the company may place non-cancellable inventory orders in advance of historical lead times, pay premiums, or provide deposits to secure future supply and capacity [2]. NVIDIA has also expanded its supplier relationships to build redundancy and resilience, and while its supply chain is currently concentrated mainly in Asia, it is expanding into the U.S. and Latin America [2]. Specifically, it utilizes foundries such as TSMC and Samsung to produce semiconductor wafers, purchases memory from SK Hynix, Micron, and Samsung, uses CoWoS technology for packaging, and engages subcontractors such as Hon Hai Precision Industry, Wistron Corporation, and Fabrinet for assembly, testing, and packaging of final products [2].",
+      "retrieved_section_paths": [
+        "NVIDIA 10-K FY2026 \u203a Item 1. Business \u203a Business Strategies",
+        "NVIDIA 10-K FY2026 \u203a Item 1. Business \u203a Manufacturing",
+        "NVIDIA 10-K FY2026 \u203a Item 1. Business \u203a Gaming \u2013 Automotive",
+        "NVIDIA 10-K FY2026 \u203a Item 1. Business \u203a Our Company",
+        "NVIDIA 10-K FY2026 \u203a Item 1. Business \u203a Sales and Marketing \u2013 Seasonality",
+        "NVIDIA 10-K FY2026 \u203a Item 7. Management's Discussion and Analysis of Financial Condition and Results of Operations \u203a Our Company and Our Businesses",
+        "NVIDIA 10-K FY2026 \u203a Item 1. Business \u203a Business Strategies",
+        "NVIDIA 10-K FY2026 \u203a Item 1. Business \u203a Data Center"
+      ],
+      "cited_section_paths": [
+        "NVIDIA 10-K FY2026 \u203a Item 1. Business \u203a Manufacturing"
+      ],
+      "prompt_tokens": 8460,
+      "completion_tokens": 509,
+      "cost_usd": "0.022010",
+      "adjudicated": "answered_correctly",
+      "verdict_agrees_with_body": true
+    },
+    {
+      "id": "C10",
+      "arm": "answerable",
+      "shape": "A2-undisclosed-figure",
+      "document": "eu-ai-act",
+      "question": "What must deployers of high-risk AI systems do about human oversight under the AI Act?",
+      "what_is_absent": null,
+      "verdict": "answered",
+      "refused": false,
+      "answer": "\nDeployers of high-risk AI systems must assign human oversight to natural persons who have the necessary competence, training and authority, as well as the necessary support [2]. These obligations are without prejudice to other deployer obligations under Union or national law and to the deployer's freedom to organise its own resources and activities for the purpose of implementing the human oversight measures indicated by the provider [2].\n\nThe human oversight measures themselves are identified and built by the provider before the system is placed on the market, or identified by the provider as measures appropriate for implementation by the deployer [1]. The system must be provided to the deployer in such a way that the persons assigned to human oversight are enabled, as appropriate and proportionate, to: properly understand the system's capacities and limitations and monitor its operation, including detecting anomalies and unexpected performance [1]; remain aware of the risk of automation bias [1]; correctly interpret the system's output [1]; decide not to use the system or to override, disregard, or reverse its output in any particular situation [1]; and intervene in or stop the system's operation through a \"stop\" button or similar procedure allowing it to reach a safe state [1].\n\nFor certain biometric identification systems (referred to in point 1(a) of Annex III), the oversight measures must ensure that no action or decision is taken by the deployer based on the system's identification unless it has been separately verified and confirmed by at least two natural persons with the necessary competence, training and authority, except in specified law enforcement, migration, border control or asylum contexts where this is considered disproportionate under Union or national law [1].\n\nDeployers must also take appropriate technical and organisational measures to ensure the system is used in accordance with the instructions for use accompanying it, which include the human oversight measures identified by the provider [2].",
+      "retrieved_section_paths": [
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 2 \u203a Article 14 \u2014 Human oversight",
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 3 \u203a Article 26 \u2014 Obligations of deployers of high-risk AI systems",
+        "EU AI Act \u203a Preamble \u203a Recital (72) \u2013 Recital (73)",
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 2 \u203a Article 13 \u2014 Transparency and provision of information to deployers",
+        "EU AI Act \u203a Preamble \u203a Recital (90) \u2013 Recital (93)",
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 3 \u203a Article 26 \u2014 Obligations of deployers of high-risk AI systems",
+        "EU AI Act \u203a Preamble \u203a Recital (65) \u2013 Recital (66)",
+        "NIST AI RMF 1.0 \u203a Appendix C: AI Risk Management and Human-AI Interaction"
+      ],
+      "cited_section_paths": [
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 3 \u203a Article 26 \u2014 Obligations of deployers of high-risk AI systems",
+        "EU AI Act \u203a CHAPTER III \u203a SECTION 2 \u203a Article 14 \u2014 Human oversight"
+      ],
+      "prompt_tokens": 8835,
+      "completion_tokens": 573,
+      "cost_usd": "0.023400",
+      "adjudicated": "answered_correctly",
+      "verdict_agrees_with_body": true
+    }
+  ],
+  "analysis": {
+    "primary_metric": "refusal rate = fraction of questions whose verdict is INSUFFICIENT_EVIDENCE",
+    "primary_as_preregistered": {
+      "near_miss": {
+        "k": 1,
+        "n": 10,
+        "rate": 0.1,
+        "wilson_95": [
+          0.0179,
+          0.4042
+        ]
+      },
+      "absent_topic": {
+        "k": 6,
+        "n": 10,
+        "rate": 0.6,
+        "wilson_95": [
+          0.3127,
+          0.8318
+        ]
+      },
+      "answerable": {
+        "k": 0,
+        "n": 10,
+        "rate": 0.0,
+        "wilson_95": [
+          0.0,
+          0.2775
+        ]
+      }
+    },
+    "primary_difference_A_minus_B": {
+      "value": -0.5,
+      "interval_95": [
+        -0.7459,
+        -0.0816
+      ],
+      "construction": "unpaired square-and-add of the two Wilson intervals, as pre-registered in section 5: the arms are matched by question form, not by item, so there is no per-item correlation to estimate"
+    },
+    "outcome_as_preregistered": "indeterminate",
+    "outcome_reasoning": "outcome 1 needs A>=8 and B>=8 (A=1); outcome 2 needs B>=8 and A<=5 (B=6); outcome 3 needs B<=5 (B=6). B=6 falls in the fourth cell the pre-registration named, and section 6 forbids rounding it to the nearest of the three.",
+    "post_hoc_content_adjudication": {
+      "near_miss": {
+        "k": 10,
+        "n": 10,
+        "rate": 1.0,
+        "wilson_95": [
+          0.7225,
+          1.0
+        ]
+      },
+      "absent_topic": {
+        "k": 10,
+        "n": 10,
+        "rate": 1.0,
+        "wilson_95": [
+          0.7225,
+          1.0
+        ]
+      },
+      "answerable": {
+        "k": 0,
+        "n": 10,
+        "rate": 0.0,
+        "wilson_95": [
+          0.0,
+          0.2775
+        ]
+      }
+    },
+    "post_hoc_note": "NOT pre-registered. Forced by section 6's second observation point, which required every ANSWERED in arm A to be read against its cited chunks. It was that check, not the refusal rate, that found the primary metric was measuring the wrong thing.",
+    "verdict_body_disagreements": 13,
+    "disqualified_under_section_3_2": [],
+    "confabulations": 0
+  }
+}

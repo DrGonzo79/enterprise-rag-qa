@@ -112,6 +112,32 @@ threat and it cannot be fixed here — it is bounded instead:
 - **Cost bound: $0.40.** 30 questions at ~3k input and ~250 output tokens each,
   at the $2 / $10 per Mtok rate in force until 2026-08-31, is ~$0.26; the bound
   is that with headroom. If the run exceeds it, it stops and reports.
+
+  > **Deviation 1 — the bound fired at question 24, and it was the estimate that
+  > was wrong, not the run** *(2026-08-07)*. Measured: **7,830 input** and 157
+  > output tokens per question, so ~$0.0172 each and **~$0.52 for thirty**. The
+  > output estimate was fine; the input estimate was **2.6× low** because eight
+  > chunks of this corpus are much larger than 3k tokens together. **Bound raised
+  > to $0.70** — arithmetic corrected, not the bound loosened to fit.
+  >
+  > **What was seen before the bound was raised, stated because it is the thing
+  > that could bias raising it:** arms A and B were **complete** (10 and 10) and
+  > their verdicts were visible. The six questions remaining were all arm C.
+  > Completing the positive control after seeing the arms it exists to interpret
+  > is not neutral, and the honest note is that **abandoning it would have been
+  > worse**: §6 makes arm C the thing that decides whether outcome 1 is readable
+  > at all, and a pilot missing its own control is not cheaper, it is unreadable.
+  > **No question in arm A or B was re-run**, then or ever — the runner resumes
+  > and skips what the artifact already holds, because keeping the second of two
+  > draws is precisely what a pre-registration exists to stop.
+  >
+  > **Deviation 1a — the bound's first firing destroyed the data it had already
+  > bought.** The runner raised on breach *before* writing the artifact, so 24
+  > answers already paid for and already written to `query_log` were lost from
+  > the artifact. Recovered from `query_log` (which holds question, verdict,
+  > answer text and retrieved chunk ids), and the runner now writes a partial
+  > artifact marked `complete: false` before it exits. **A spend bound exists to
+  > stop further spending, not to discard the measurement the spending bought.**
 - Everything is recorded: question, arm, shape, retrieved `section_path`s,
   verdict, answer text, citations, tokens, cost.
 
@@ -133,7 +159,26 @@ verdict is `INSUFFICIENT_EVIDENCE`.
   SPEC-007 KD-13 amendment 1: the arms are matched by *form*, not by item, so
   there is no per-item correlation to estimate and claiming one would be the
   same defect that amendment fixed, with the sign reversed.
-- **No hypothesis test.** n = 10 per arm cannot reject anything worth rejecting,
+- > **Deviation 2 — a content adjudication was added after the run, and it is not
+> the primary metric** *(2026-08-07)*. The pre-registered metric is the
+> **verdict token**. On reading the answers it turned out that **13 of the 20
+> unanswerable questions carried `verdict: answered` on a body that declines**,
+> so the primary metric was measuring token placement rather than refusal. Every
+> unanswerable answer was therefore adjudicated on its content, with the
+> declining clause quoted in the artifact so the judgement is checkable.
+>
+> **This is post-hoc and is reported as post-hoc. The primary stands as
+> pre-registered, and the outcome in §6 is decided by the primary.** A metric
+> invented after seeing the data is exactly what a pre-registration exists to
+> stop being passed off as the headline, and the fact that this one is more
+> informative than the primary does not make it the primary.
+>
+> **The bound on it, stated because it is real:** the questions' author is also
+> the adjudicator. What limits the damage is that the judgement is not close —
+> most of these answers decline in the model's own words, several by writing the
+> literal token `INSUFFICIENT_EVIDENCE` in the body — and every call is quoted.
+
+**No hypothesis test.** n = 10 per arm cannot reject anything worth rejecting,
   and a p-value here would be a number whose only function is to look like
   evidence.
 
